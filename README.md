@@ -11,11 +11,32 @@ ingeniería.
   blanco, acentos azules, badges de selección verde/ámbar.
 - **Premium Dark** — alto contraste, fondos profundos y acentos neón cian.
 
+## Marca
+
+La paleta se extrae del logo de Sonqollay (`logo.png`): **naranja `#F77000`** +
+**gris pizarra `#586878`**, definidos como `brand` y `steel` en
+`tailwind.config.js`. El logo se usa en el sidebar (`public/logo-mark.png`) y
+como favicon (`public/favicon.png`).
+
+## Funcionalidades
+
+- **Pestañas múltiples**: abre varias subcategorías a la vez en el espacio de
+  grillas (`GridWorkspace`), con cierre individual.
+- **Columnas redimensionables**: arrastra el borde derecho de cada encabezado.
+- **Virtualización de filas** (`@tanstack/react-virtual`): la grilla rinde miles
+  de TAGs sin degradar el rendimiento.
+- **Importación de datos**: carga Excel (.xlsx/.xls) o CSV (`SQY_*`) desde la UI;
+  se registra como nueva subcategoría y persiste en `localStorage`. `xlsx` se
+  importa de forma dinámica (chunk aparte) para no inflar el bundle inicial.
+- **Doble tema** claro/oscuro con toggle.
+
 ## Stack
 
-- **React 18** + **Vite** (build/dev server)
-- **Tailwind CSS 3** (tema oscuro personalizado en `tailwind.config.js`)
-- **lucide-react** (iconografía)
+- **React 18** + **Vite** (build/dev server, code-splitting)
+- **Tailwind CSS 3** (temas claro/oscuro, marca en `tailwind.config.js`)
+- **lucide-react** (iconografía, con registro explícito para tree-shaking)
+- **@tanstack/react-virtual** (virtualización de filas)
+- **xlsx** (parseo de Excel, carga dinámica)
 
 ## Puesta en marcha
 

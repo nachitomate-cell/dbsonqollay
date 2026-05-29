@@ -11,7 +11,7 @@ import { Bell, ChevronRight, Moon, Search, Settings, Sun } from 'lucide-react'
  */
 export default function Header({ crumbs = [], theme, onToggleTheme }) {
   const iconBtn =
-    'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-blue-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
+    'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
 
   return (
     <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-slate-200 bg-white/80 px-6 py-3.5 backdrop-blur-xl dark:border-white/5 dark:bg-ink-900/70">
@@ -25,7 +25,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme }) {
               {c.onClick && !last ? (
                 <button
                   onClick={c.onClick}
-                  className="truncate font-medium text-slate-500 transition hover:text-blue-600 dark:text-slate-400 dark:hover:text-accent"
+                  className="truncate font-medium text-slate-500 transition hover:text-brand-600 dark:text-slate-400 dark:hover:text-accent"
                 >
                   {c.label}
                 </button>
@@ -64,7 +64,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme }) {
         <button className={iconBtn} aria-label="Configuración">
           <Settings className="h-4 w-4" />
         </button>
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-blue-600 to-blue-500 text-xs font-bold text-white dark:from-accent dark:to-accent-600 dark:text-ink-900">
+        <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600 text-xs font-bold text-white">
           SQ
         </div>
       </div>

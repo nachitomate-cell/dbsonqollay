@@ -2,77 +2,136 @@ import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
-import DataTable from './components/DataTable.jsx'
-import { datasets, disciplines, getDiscipline, findSubcategory } from './data/disciplines.js'
+import GridWorkspace from './components/GridWorkspace.jsx'
+import { datasets as baseDatasets, disciplines as baseDisciplines } from './data/disciplines.js'
+import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 
 /**
- * Navegación simulada (sin router): el estado vive en App.
- *  - activeDiscipline: disciplina seleccionada en el sidebar (Vista A).
- *  - activeSub: subcategoría abierta (Vista B / Data Grid). Si es null, se
- *    muestra la grilla de tarjetas de la disciplina.
- *  - theme: 'light' | 'dark' (persistido en localStorage). Por defecto claro,
- *    para coincidir con la plataforma de referencia.
+ * Navegación simulada (sin router). El estado vive en App:
+ *  - activeDiscipline: disciplina seleccionada en el sidebar.
+ *  - openSubs: subcategorías abiertas como pestañas (multi-tab).
+ *  - activeSub: pestaña activa; si es null se muestra la Vista A (tarjetas).
+ *  - theme: 'light' | 'dark' (persistido).
  *
- * Flujo:
- *  Sidebar (disciplina) → DisciplineView (tarjetas) → DataTable (grilla).
+ * Los datasets importados (hook) se fusionan con los base, y sus subcategorías
+ * se inyectan dinámicamente en la disciplina correspondiente.
  */
 export default function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [activeDiscipline, setActiveDiscipline] = useState('electrico')
+  const [openSubs, setOpenSubs] = useState([])
   const [activeSub, setActiveSub] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('sqy-theme') || 'light')
 
-  // Aplica el tema al <html> y lo persiste.
+  const { datasets: importedDatasets, extraSubs, importFile, removeImported, importing, error } = useImportedDatasets()
+
   useEffect(() => {
     const root = document.documentElement
     root.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('sqy-theme', theme)
   }, [theme])
 
-  const discipline = getDiscipline(activeDiscipline)
-  const subInfo = activeSub ? findSubcategory(activeSub) : null
+  // Datasets y disciplinas fusionados (base + importados).
+  const allDatasets = useMemo(() => ({ ...baseDatasets, ...importedDatasets }), [importedDatasets])
+  const disciplines = useMemo(
+    () =>
+      baseDisciplines.map((d) =>
+        extraSubs[d.id]?.length ? { ...d, subcategories: [...d.subcategories, ...extraSubs[d.id]] } : d,
+      ),
+    [extraSubs],
+  )
+
+  const discipline = disciplines.find((d) => d.id === activeDiscipline) || disciplines[0]
+  const findSub = (subId) => {
+    for (const d of disciplines) {
+      const s = d.subcategories.find((sc) => sc.id === subId)
+      if (s) return { discipline: d, subcategory: s }
+    }
+    return null
+  }
+
+  // Poda pestañas que ya no existen (p. ej. dataset importado eliminado).
+  useEffect(() => {
+    setOpenSubs((prev) => {
+      const valid = prev.filter((id) => findSub(id))
+      if (valid.length !== prev.length) {
+        if (activeSub && !valid.includes(activeSub)) setActiveSub(valid[valid.length - 1] ?? null)
+        return valid
+      }
+      return prev
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disciplines])
+
+  const tabs = openSubs
+    .map((id) => {
+      const info = findSub(id)
+      if (!info) return null
+      return { ...info, dataset: allDatasets[info.subcategory.dataKey] }
+    })
+    .filter(Boolean)
 
   const crumbs = useMemo(() => {
     const list = [{ label: 'Sonqollay' }]
     if (discipline) list.push({ label: discipline.name, onClick: () => setActiveSub(null) })
-    if (subInfo) list.push({ label: subInfo.subcategory.name })
+    if (activeSub) {
+      const info = findSub(activeSub)
+      if (info) list.push({ label: info.subcategory.name })
+    }
     return list
-  }, [discipline, subInfo])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discipline, activeSub, disciplines])
 
   function selectDiscipline(id) {
     setActiveDiscipline(id)
     setActiveSub(null)
   }
+  function openSubcategory(subId) {
+    setOpenSubs((prev) => (prev.includes(subId) ? prev : [...prev, subId]))
+    setActiveSub(subId)
+  }
+  function closeTab(subId) {
+    setOpenSubs((prev) => {
+      const next = prev.filter((id) => id !== subId)
+      if (activeSub === subId) setActiveSub(next[next.length - 1] ?? null)
+      return next
+    })
+  }
 
-  const activeDataset = subInfo ? datasets[subInfo.subcategory.dataKey] : null
+  const showGrid = activeSub && tabs.some((t) => t.subcategory.id === activeSub)
 
   return (
     <div className="flex h-screen overflow-hidden bg-grid">
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
-        activeDiscipline={activeDiscipline}
+        activeDiscipline={discipline?.id}
         onSelect={selectDiscipline}
-        onSelectAll={() => {
-          setActiveDiscipline(disciplines[0].id)
-          setActiveSub(null)
-        }}
+        onSelectAll={() => selectDiscipline(disciplines[0].id)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header crumbs={crumbs} theme={theme} onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} />
 
         <main className="min-h-0 flex-1 overflow-hidden">
-          {subInfo && activeDataset ? (
-            <DataTable
-              dataset={activeDataset}
-              discipline={subInfo.discipline}
-              subcategory={subInfo.subcategory}
-              onBack={() => setActiveSub(null)}
+          {showGrid ? (
+            <GridWorkspace
+              tabs={tabs}
+              activeSub={activeSub}
+              onSwitch={setActiveSub}
+              onClose={closeTab}
+              onReturn={() => setActiveSub(null)}
             />
           ) : (
             <div className="h-full overflow-y-auto">
-              <DisciplineView discipline={discipline} onOpenSubcategory={setActiveSub} />
+              <DisciplineView
+                discipline={discipline}
+                onOpenSubcategory={openSubcategory}
+                onImport={importFile}
+                importing={importing}
+                importError={error}
+                onRemoveImported={removeImported}
+              />
             </div>
           )}
         </main>
