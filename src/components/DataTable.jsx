@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -74,6 +74,15 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [filterByCol, setFilterByCol] = useState('')
   const [filterByVal, setFilterByVal] = useState('')
   const [propertyChange, setPropertyChange] = useState(headers.includes('FACILITIES') ? 'FACILITIES' : headers[0] || '')
+
+  // Esc vuelve a la selección de elementos (cuando el foco no está en un input).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onBack])
 
   const distinctValues = (h) => {
     const s = new Set()

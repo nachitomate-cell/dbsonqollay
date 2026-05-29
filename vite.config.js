@@ -8,4 +8,14 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separa React de la app para mejor cacheo entre despliegues.
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
+  },
 })
