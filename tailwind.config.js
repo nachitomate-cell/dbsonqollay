@@ -27,13 +27,14 @@ export default {
           800: '#38454F',
           900: '#2A343C',
         },
-        // Superficies oscuras (dark mode), tono azul-grisáceo coherente con steel.
+        // Superficies "Premium Dark": negros profundos (menor fatiga visual en
+        // jornadas largas), con tono azul-grisáceo coherente con steel.
         ink: {
-          900: '#0c1116',
-          800: '#121922',
-          700: '#1a232e',
-          600: '#22303d',
-          500: '#2c3c4c',
+          900: '#05080c', // fondo de página (casi negro)
+          800: '#0a0f15', // paneles / tarjetas
+          700: '#111823', // superficies elevadas (encabezados, pestaña activa)
+          600: '#18212e',
+          500: '#222d3c',
         },
         // En dark mode el acento interactivo es el naranja de marca.
         accent: {

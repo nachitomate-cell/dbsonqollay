@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowUpDown,
+  Box,
   ChevronDown,
   ChevronUp,
   Columns3,
@@ -12,6 +13,7 @@ import {
   LayoutGrid,
   Link2,
   List,
+  Loader2,
   Pencil,
   PieChart,
   Plus,
@@ -23,6 +25,9 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+
+// El visor BIM 3D (y three.js) se cargan en un chunk aparte, solo al abrir la vista 3D.
+const BimViewer = lazy(() => import('./BimViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
 
@@ -82,7 +87,13 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [filterByCol, setFilterByCol] = useState('')
   const [filterByVal, setFilterByVal] = useState('')
   const [propertyChange, setPropertyChange] = useState('')
-  const [colWidths, setColWidths] = useState({})
+  const [colWidths, setColWidths] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`sqy-w-${subcategory.dataKey}`)) || {}
+    } catch {
+      return {}
+    }
+  })
   const [showColumns, setShowColumns] = useState(false)
   const [newField, setNewField] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -96,6 +107,44 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onBack, editingId])
+
+  // Persiste el ancho de columnas por dataset.
+  useEffect(() => {
+    try {
+      localStorage.setItem(`sqy-w-${subcategory.dataKey}`, JSON.stringify(colWidths))
+    } catch {
+      /* ignore */
+    }
+  }, [colWidths, subcategory.dataKey])
+
+  // Exporta la vista actual (columnas visibles + filas filtradas) a CSV o Excel.
+  async function handleExport(format) {
+    const cols = headers
+    const data = filtered
+    const base = (subcategory.code || subcategory.name || 'export').replace(/\W+/g, '_')
+    if (format === 'csv') {
+      const esc = (v) => {
+        const s = v == null ? '' : String(v)
+        return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const lines = [cols.map(esc).join(',')]
+      for (const r of data) lines.push(cols.map((c) => esc(r[c])).join(','))
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${base}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      const XLSX = await import('xlsx')
+      const aoa = [cols, ...data.map((r) => cols.map((c) => r[c] ?? ''))]
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Datos')
+      XLSX.writeFile(wb, `${base}.xlsx`)
+    }
+  }
 
   const distinctValues = (h) => {
     const s = new Set()
@@ -248,7 +297,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ToolIcon icon={Plus} title="Nuevo registro" onClick={newRecord} />
               <ToolIcon icon={Copy} title="Copiar" />
               <ToolIcon icon={Pencil} title="Editar (clic en una fila)" />
-              <ToolIcon icon={Download} title="Exportar" />
+              <ExportMenu onExport={handleExport} />
               <ToolIcon icon={Upload} title="Importar" />
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" />
@@ -259,6 +308,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ViewToggle active={viewMode === 'grid'} icon={List} label="Planilla" onClick={() => setViewMode('grid')} />
               <ViewToggle active={viewMode === 'cards'} icon={LayoutGrid} label="Fichas" onClick={() => setViewMode('cards')} />
+              <ViewToggle active={viewMode === 'bim'} icon={Box} label="3D" onClick={() => setViewMode('bim')} />
             </div>
 
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
@@ -462,8 +512,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : viewMode === 'cards' ? (
             <CardsView rows={filtered} headers={headers} selected={selected} onToggle={toggleRow} onOpen={setEditingId} />
+          ) : (
+            <div className="mx-4 mb-4 min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
+              <Suspense fallback={<ViewerLoading />}>
+                <BimViewer rows={filtered} headers={headers} selectedId={editingId} onSelect={setEditingId} />
+              </Suspense>
+            </div>
           )}
         </div>
       )}
@@ -590,6 +646,45 @@ function ToolIcon({ icon: IconCmp, title, onClick, active }) {
     >
       <IconCmp className="h-4 w-4" />
     </button>
+  )
+}
+
+function ExportMenu({ onExport }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <ToolIcon icon={Download} title="Exportar" active={open} onClick={() => setOpen((o) => !o)} />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-9 z-40 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-ink-800">
+            {[
+              { f: 'csv', label: 'Exportar CSV' },
+              { f: 'xlsx', label: 'Exportar Excel (.xlsx)' },
+            ].map((o) => (
+              <button
+                key={o.f}
+                onClick={() => { onExport(o.f); setOpen(false) }}
+                className="block w-full px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-100 hover:text-brand-600 dark:text-slate-200 dark:hover:bg-white/5 dark:hover:text-accent"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ViewerLoading() {
+  return (
+    <div className="grid h-full place-items-center text-slate-400 dark:text-slate-500">
+      <div className="flex flex-col items-center gap-2">
+        <Loader2 className="h-6 w-6 animate-spin text-brand-500" />
+        <span className="text-sm">Cargando visor 3D…</span>
+      </div>
+    </div>
   )
 }
 

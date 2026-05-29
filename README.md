@@ -38,7 +38,15 @@ como favicon (`public/favicon.png`).
 - **Edición persistente**: los cambios de datos, columnas y registros se guardan
   en `localStorage` por dataset (`useEditableDataset`), con opción de
   "Restablecer datos".
-- **Doble tema** claro/oscuro con toggle.
+- **Exportación**: descarga la vista actual (columnas visibles + filas
+  filtradas) a **CSV** o **Excel (.xlsx)** desde el botón de exportar.
+- **Visor BIM 3D** (three.js, chunk cargado on-demand): vista "3D" con un
+  volumen por elemento y **bidireccionalidad** — clic en un TAG de la lista
+  vuela la cámara y resalta el elemento; clic en el volumen lo selecciona y
+  permite abrir su ficha.
+- **Premium Dark** consolidado: negros profundos y alto contraste con acentos
+  naranja sutiles, pensado para jornadas largas en centros de control.
+- **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.
 
 ## Stack
 
