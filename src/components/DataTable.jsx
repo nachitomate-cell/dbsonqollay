@@ -4,11 +4,21 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
-  Code2,
+  Columns3,
+  Copy,
   Download,
   Filter,
+  History,
   Link2,
+  List,
+  Pencil,
+  PieChart,
+  Plus,
+  RotateCw,
   Search,
+  Tag,
+  Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 import Icon from './Icon.jsx'
@@ -17,7 +27,7 @@ import Icon from './Icon.jsx'
 
 const isCostHeader = (h) => /COSTO/i.test(h)
 const isWeightHeader = (h) => /PESO/i.test(h)
-const isStatusHeader = (h) => /(ESTADO|APROB)/i.test(h)
+const isStatusHeader = (h) => /(ESTADO|APROB|AVANCE)/i.test(h)
 
 const fmtCost = (v) =>
   v === '' || v == null
@@ -27,9 +37,11 @@ const fmtCost = (v) =>
 const fmtWeight = (v) =>
   v === '' || v == null ? '—' : `${new Intl.NumberFormat('es-CL').format(Number(v))} kg`
 
-// Color de la píldora según estado de aprobación/avance (E1..E4).
+// Color de la píldora según estado de aprobación/avance.
 const statusStyles = (val) => {
   const v = String(val).toUpperCase()
+  if (v.includes('NO APROB') || v.includes('RECHAZ')) return 'bg-rose-500/15 text-rose-600 ring-rose-500/30 dark:text-rose-300'
+  if (v.includes('APROB')) return 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-300'
   if (v.startsWith('E4')) return 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-300'
   if (v.startsWith('E3')) return 'bg-blue-500/15 text-blue-600 ring-blue-500/30 dark:bg-accent/15 dark:text-accent dark:ring-accent/30'
   if (v.startsWith('E2')) return 'bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-300'
@@ -40,45 +52,35 @@ const statusStyles = (val) => {
 /* --------------------------- component ----------------------------- */
 
 /**
- * Vista B — Grilla de datos de ingeniería.
- * Tabla dinámica que se adapta a las columnas del dataset activo, con:
- *  - búsqueda global
- *  - filtros por columna (auto-detectados sobre columnas categóricas)
- *  - ordenamiento por columna
- *  - selección con checkbox + acciones AWP / Commodity
- *  - scroll horizontal y vertical, encabezado y primera columna fijos (sticky)
- *
- * props:
- *  - dataset: { headers: string[], rows: object[] }
- *  - discipline, subcategory
- *  - onBack()
+ * Vista B — Grilla de datos de ingeniería (réplica de la plataforma de
+ * referencia). Incluye:
+ *  - enlace "Return To Engineering Element Selection" + chip del elemento
+ *  - pestañas Elements / AWP / Commodity Code
+ *  - barra de herramientas con búsqueda, Order By y Sort
+ *  - fila Filter By / Value / Search + Property Change
+ *  - botones Update AWP / Update Commodity Code Relationship
+ *  - barra de totales (elementos / seleccionados / eliminados)
+ *  - tabla dinámica con orden y filtro por columna, scroll y paneles fijos
  */
 export default function DataTable({ dataset, subcategory, onBack }) {
   const headers = dataset?.headers ?? []
   const rows = dataset?.rows ?? []
 
+  const [activeTab, setActiveTab] = useState('elements')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
-  const [showFilters, setShowFilters] = useState(false)
-  const [colFilters, setColFilters] = useState({}) // header -> value
+  const [colFilters, setColFilters] = useState({})
+  const [filterByCol, setFilterByCol] = useState('')
+  const [filterByVal, setFilterByVal] = useState('')
+  const [propertyChange, setPropertyChange] = useState(headers.includes('FACILITIES') ? 'FACILITIES' : headers[0] || '')
 
-  // Columnas categóricas: pocas opciones distintas → buen candidato para filtro.
-  const categorical = useMemo(() => {
-    const out = []
-    for (const h of headers) {
-      const distinct = new Set()
-      for (const r of rows) {
-        const v = r[h]
-        if (v !== '' && v != null) distinct.add(String(v))
-        if (distinct.size > 18) break
-      }
-      if (distinct.size > 1 && distinct.size <= 18) {
-        out.push({ header: h, options: Array.from(distinct).sort() })
-      }
-    }
-    return out.slice(0, 4)
-  }, [headers, rows])
+  const distinctValues = (h) => {
+    const s = new Set()
+    for (const r of rows) if (r[h] !== '' && r[h] != null) s.add(String(r[h]))
+    return Array.from(s).sort()
+  }
+  const filterValues = useMemo(() => (filterByCol ? distinctValues(filterByCol) : []), [filterByCol, rows])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -89,7 +91,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       if (!q) return true
       return headers.some((h) => String(r[h] ?? '').toLowerCase().includes(q))
     })
-
     if (sort.key) {
       const dir = sort.dir === 'asc' ? 1 : -1
       data = [...data].sort((a, b) => {
@@ -98,242 +99,394 @@ export default function DataTable({ dataset, subcategory, onBack }) {
         const an = Number(av)
         const bn = Number(bv)
         const numeric = !Number.isNaN(an) && !Number.isNaN(bn) && av !== '' && bv !== ''
-        if (numeric) return (an - bn) * dir
-        return String(av ?? '').localeCompare(String(bv ?? ''), 'es') * dir
+        return numeric ? (an - bn) * dir : String(av ?? '').localeCompare(String(bv ?? ''), 'es') * dir
       })
     }
     return data
   }, [rows, headers, query, colFilters, sort])
 
-  const activeFilterCount = Object.values(colFilters).filter(Boolean).length + (query.trim() ? 1 : 0)
-
   function rowKey(i) {
-    const r = filtered[i]
-    return r?.[headers[0]] ?? `row-${i}`
+    return filtered[i]?.[headers[0]] ?? `row-${i}`
   }
   const allVisibleSelected = filtered.length > 0 && filtered.every((_, i) => selected.has(rowKey(i)))
 
-  function toggleRow(key) {
+  const toggleRow = (key) =>
     setSelected((prev) => {
       const next = new Set(prev)
       next.has(key) ? next.delete(key) : next.add(key)
       return next
     })
-  }
-  function toggleAll() {
+  const toggleAll = () =>
     setSelected((prev) => {
       if (allVisibleSelected) return new Set()
       const next = new Set(prev)
       filtered.forEach((_, i) => next.add(rowKey(i)))
       return next
     })
-  }
-  function setSortKey(h) {
+  const setSortKey = (h) =>
     setSort((s) => (s.key === h ? { key: h, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: h, dir: 'asc' }))
+
+  function applyFilter() {
+    if (filterByCol && filterByVal) setColFilters((p) => ({ ...p, [filterByCol]: filterByVal }))
   }
-  function clearFilters() {
-    setColFilters({})
+  function removeFilter(h) {
+    setColFilters((p) => {
+      const n = { ...p }
+      delete n[h]
+      return n
+    })
+  }
+  function resetAll() {
     setQuery('')
+    setColFilters({})
+    setSort({ key: null, dir: 'asc' })
+    setFilterByCol('')
+    setFilterByVal('')
   }
 
+  const activeFilters = Object.entries(colFilters).filter(([, v]) => v)
   const headBg = 'bg-slate-100 dark:bg-ink-700'
   const cellStickyBg = (isSel) =>
     isSel ? 'bg-blue-50 dark:bg-ink-700' : 'bg-white group-hover:bg-slate-50 dark:bg-ink-800 dark:group-hover:bg-ink-700'
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Top bar: back + title */}
-      <div className="flex items-center gap-3 px-6 pt-6">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-blue-400 hover:text-blue-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Atrás
-        </button>
-        <div className="flex items-center gap-2">
-          <Icon name={subcategory.icon} className="h-5 w-5 text-blue-600 dark:text-accent" />
-          <h2 className="text-lg font-bold text-slate-900 dark:text-white">{subcategory.name}</h2>
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-white/5 dark:text-slate-400">
-            {filtered.length} / {rows.length}
-          </span>
+    <div className="flex h-full flex-col overflow-hidden px-6 pt-4">
+      {/* Return link */}
+      <button
+        onClick={onBack}
+        className="mx-auto mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 transition hover:underline dark:text-accent"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Return To Engineering Element Selection.
+      </button>
+
+      {/* Element tab chip */}
+      <div className="flex items-end gap-1">
+        <div className="flex items-center gap-2 rounded-t-lg border border-b-0 border-slate-200 bg-white px-4 py-2.5 dark:border-white/10 dark:bg-ink-800">
+          <Icon name={subcategory.icon} className="h-4 w-4 text-blue-600 dark:text-accent" />
+          <span className="text-sm font-semibold text-slate-800 dark:text-white">{subcategory.name}</span>
+          <button onClick={onBack} className="ml-1 grid h-4 w-4 place-items-center rounded-sm bg-rose-500 text-white transition hover:bg-rose-600" title="Cerrar">
+            <X className="h-3 w-3" strokeWidth={3} />
+          </button>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 px-6 py-4">
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-ink-800">
-          <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar en todos los campos…"
-            className="w-56 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
-          />
-          {query && (
-            <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-              <X className="h-3.5 w-3.5" />
+      {/* Card wrapper */}
+      <div className="flex min-h-0 flex-1 flex-col rounded-lg rounded-tl-none border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/40">
+        {/* Sub-tabs */}
+        <div className="flex gap-1 border-b border-slate-200 px-3 pt-2 dark:border-white/10">
+          {[
+            { id: 'elements', label: 'Elements' },
+            { id: 'awp', label: 'AWP' },
+            { id: 'commodity', label: 'Commodity Code' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={[
+                'rounded-t-md px-4 py-2 text-sm font-medium transition',
+                activeTab === t.id
+                  ? 'border-b-2 border-blue-600 text-blue-600 dark:border-accent dark:text-accent'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+              ].join(' ')}
+            >
+              {t.label}
             </button>
-          )}
-        </div>
-
-        {categorical.length > 0 && (
-          <button
-            onClick={() => setShowFilters((v) => !v)}
-            className={[
-              'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
-              showFilters || activeFilterCount
-                ? 'border-blue-400 bg-blue-50 text-blue-600 dark:border-accent/40 dark:bg-accent/10 dark:text-accent'
-                : 'border-slate-200 bg-white text-slate-600 hover:text-blue-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:text-accent',
-            ].join(' ')}
-          >
-            <Filter className="h-4 w-4" />
-            Filter by
-            {activeFilterCount > 0 && (
-              <span className="rounded bg-blue-200 px-1.5 text-[10px] font-bold text-blue-700 dark:bg-accent/20 dark:text-accent">
-                {activeFilterCount}
-              </span>
-            )}
-            {showFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
-        )}
-
-        {activeFilterCount > 0 && (
-          <button onClick={clearFilters} className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
-            Limpiar
-          </button>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="hidden text-xs text-slate-400 dark:text-slate-500 sm:inline">
-            {selected.size} seleccionado{selected.size === 1 ? '' : 's'}
-          </span>
-          <ActionButton icon={Link2} disabled={selected.size === 0}>Update AWP Relationship</ActionButton>
-          <ActionButton icon={Code2} disabled={selected.size === 0}>Update Commodity Code</ActionButton>
-          <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-blue-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:text-accent">
-            <Download className="h-4 w-4" />
-            <span className="hidden md:inline">Exportar</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Column filter panel */}
-      {showFilters && categorical.length > 0 && (
-        <div className="mx-6 mb-3 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-ink-800/60">
-          {categorical.map(({ header, options }) => (
-            <label key={header} className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {header.replace(/_/g, ' ')}
-              </span>
-              <select
-                value={colFilters[header] ?? ''}
-                onChange={(e) => setColFilters((p) => ({ ...p, [header]: e.target.value }))}
-                className="min-w-[160px] rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-blue-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200 dark:focus:border-accent/50"
-              >
-                <option value="">Todos</option>
-                {options.map((o) => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
-              </select>
-            </label>
           ))}
         </div>
-      )}
 
-      {/* Data grid */}
-      <div className="mx-6 mb-6 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-ink-800/40 dark:shadow-card">
-        <table className="min-w-full border-separate border-spacing-0 text-sm">
-          <thead>
-            <tr>
-              <th className={`sticky left-0 top-0 z-30 w-12 border-b border-slate-200 px-3 py-3 dark:border-white/10 ${headBg}`}>
-                <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-blue-600 dark:accent-accent" />
-              </th>
-              {headers.map((h, idx) => (
-                <th
-                  key={h}
-                  className={[
-                    `top-0 z-20 whitespace-nowrap border-b border-slate-200 px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
-                    idx === 0 ? 'sticky left-12 z-30' : '',
-                  ].join(' ')}
-                >
-                  <button onClick={() => setSortKey(h)} className="inline-flex items-center gap-1.5 transition hover:text-blue-600 dark:hover:text-accent">
-                    {h.replace(/_/g, ' ')}
-                    {sort.key === h ? (
-                      sort.dir === 'asc' ? <ChevronUp className="h-3 w-3 text-blue-600 dark:text-accent" /> : <ChevronDown className="h-3 w-3 text-blue-600 dark:text-accent" />
-                    ) : (
-                      <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" />
-                    )}
+        {activeTab !== 'elements' ? (
+          <RelationshipPlaceholder kind={activeTab} count={selected.size} />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
+                <ToolIcon icon={RotateCw} title="Refrescar / Reset" onClick={resetAll} />
+                <ToolIcon icon={Plus} title="Agregar" />
+                <ToolIcon icon={Tag} title="Etiquetar" />
+                <ToolIcon icon={Copy} title="Copiar" />
+                <ToolIcon icon={Pencil} title="Editar" />
+                <ToolIcon icon={Trash2} title="Eliminar" />
+                <ToolIcon icon={Download} title="Exportar" />
+                <ToolIcon icon={Upload} title="Importar" />
+                <ToolIcon icon={Columns3} title="Columnas" />
+                <ToolIcon icon={PieChart} title="Estadísticas" />
+                <ToolIcon icon={History} title="Historial" />
+                <ToolIcon icon={List} title="Vista lista" />
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
+                <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search..."
+                  className="w-44 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
+                />
+                {query && (
+                  <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-3.5 w-3.5" />
                   </button>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((row, i) => {
-              const key = rowKey(i)
-              const isSel = selected.has(key)
-              return (
-                <tr key={key} className={['group transition-colors', isSel ? 'bg-blue-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
-                  <td className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
-                    <input type="checkbox" checked={isSel} onChange={() => toggleRow(key)} className="h-4 w-4 cursor-pointer accent-blue-600 dark:accent-accent" />
-                  </td>
-                  {headers.map((h, idx) => (
-                    <td
-                      key={h}
-                      className={[
-                        'whitespace-nowrap border-b border-slate-100 px-4 py-2.5 dark:border-white/5',
-                        idx === 0
-                          ? `sticky left-12 z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
-                          : 'text-slate-600 dark:text-slate-300',
-                      ].join(' ')}
-                    >
-                      {renderCell(h, row[h])}
-                    </td>
+                )}
+              </div>
+
+              <Labeled label="Order By">
+                <Select value={sort.key ?? ''} onChange={(v) => setSort((s) => ({ key: v || null, dir: s.dir }))}>
+                  <option value="">—</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
                   ))}
-                </tr>
-              )
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">
-                  No se encontraron elementos con los filtros actuales.
-                </td>
-              </tr>
+                </Select>
+              </Labeled>
+              <Labeled label="Sort">
+                <Select value={sort.dir} onChange={(v) => setSort((s) => ({ ...s, dir: v }))}>
+                  <option value="asc">Ascendente</option>
+                  <option value="desc">Descendente</option>
+                </Select>
+              </Labeled>
+            </div>
+
+            {/* Filter row */}
+            <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
+              <Labeled label="Filter By">
+                <Select
+                  value={filterByCol}
+                  onChange={(v) => {
+                    setFilterByCol(v)
+                    setFilterByVal('')
+                  }}
+                >
+                  <option value="">—</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
+                  ))}
+                </Select>
+              </Labeled>
+              <Labeled label="Value">
+                <Select value={filterByVal} onChange={setFilterByVal} disabled={!filterByCol}>
+                  <option value="">—</option>
+                  {filterValues.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </Select>
+              </Labeled>
+              <button
+                onClick={applyFilter}
+                disabled={!filterByCol || !filterByVal}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-accent dark:text-ink-900 dark:hover:bg-accent-400"
+              >
+                <Search className="h-4 w-4" />
+                Search
+              </button>
+
+              <div className="ml-auto">
+                <Labeled label="Property Change">
+                  <Select value={propertyChange} onChange={setPropertyChange}>
+                    {headers.map((h) => (
+                      <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
+                    ))}
+                  </Select>
+                </Labeled>
+              </div>
+            </div>
+
+            {/* Update buttons */}
+            <div className="flex flex-wrap gap-2 px-4 pb-3">
+              <UpdateButton icon={Link2} disabled={selected.size === 0}>Update AWP Relationship</UpdateButton>
+              <UpdateButton icon={Tag} disabled={selected.size === 0}>Update Commodity Code Relationship</UpdateButton>
+            </div>
+
+            {/* Active filter chips */}
+            {activeFilters.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
+                {activeFilters.map(([h, v]) => (
+                  <span key={h} className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-accent/15 dark:text-accent">
+                    {h.replace(/_/g, ' ')}: {v}
+                    <button onClick={() => removeFilter(h)} className="hover:text-blue-900 dark:hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
             )}
-          </tbody>
-        </table>
+
+            {/* Stats bar */}
+            <div className="mx-4 mb-3 flex flex-wrap gap-x-8 gap-y-1 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-900 dark:border-accent/30 dark:bg-accent/[0.07] dark:text-slate-200">
+              <span>Total Elements : <b className="tabular-nums">{rows.length}</b></span>
+              <span>Total Elements Selected : <b className="tabular-nums">{selected.size}</b></span>
+              <span>Total Elements Deleted : <b className="tabular-nums">0</b></span>
+              {filtered.length !== rows.length && (
+                <span className="text-blue-700/70 dark:text-slate-400">Mostrando : <b className="tabular-nums">{filtered.length}</b></span>
+              )}
+            </div>
+
+            {/* Data grid */}
+            <div className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr>
+                    <th className={`sticky left-0 top-0 z-30 w-12 border-b border-slate-200 px-3 py-2.5 dark:border-white/10 ${headBg}`}>
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-blue-600 dark:accent-accent" />
+                    </th>
+                    {headers.map((h, idx) => {
+                      const filterActive = !!colFilters[h]
+                      return (
+                        <th
+                          key={h}
+                          className={[
+                            `top-0 z-20 whitespace-nowrap border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
+                            idx === 0 ? 'sticky left-12 z-30' : '',
+                          ].join(' ')}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setSortKey(h)} className="inline-flex items-center gap-1 transition hover:text-blue-600 dark:hover:text-accent">
+                              {h.replace(/_/g, ' ')}
+                              {sort.key === h ? (
+                                sort.dir === 'asc' ? <ChevronUp className="h-3 w-3 text-blue-600 dark:text-accent" /> : <ChevronDown className="h-3 w-3 text-blue-600 dark:text-accent" />
+                              ) : (
+                                <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setFilterByCol(h)
+                                setFilterByVal('')
+                              }}
+                              title="Filtrar por esta columna"
+                              className={filterActive ? 'text-blue-600 dark:text-accent' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'}
+                            >
+                              <Filter className="h-3 w-3" fill={filterActive ? 'currentColor' : 'none'} />
+                            </button>
+                          </div>
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((rowData, i) => {
+                    const key = rowKey(i)
+                    const isSel = selected.has(key)
+                    return (
+                      <tr key={key} className={['group transition-colors', isSel ? 'bg-blue-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
+                        <td className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
+                          <input type="checkbox" checked={isSel} onChange={() => toggleRow(key)} className="h-4 w-4 cursor-pointer accent-blue-600 dark:accent-accent" />
+                        </td>
+                        {headers.map((h, idx) => (
+                          <td
+                            key={h}
+                            className={[
+                              'whitespace-nowrap border-b border-slate-100 px-3 py-2.5 dark:border-white/5',
+                              idx === 0
+                                ? `sticky left-12 z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
+                                : 'text-slate-600 dark:text-slate-300',
+                            ].join(' ')}
+                          >
+                            {renderCell(h, rowData[h])}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">
+                        No se encontraron elementos con los filtros actuales.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+/* ---------------------------- subcomponentes ---------------------------- */
+
 function renderCell(header, value) {
   if (value === '' || value == null) return <span className="text-slate-300 dark:text-slate-600">—</span>
   if (isStatusHeader(header)) {
-    return (
-      <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ${statusStyles(value)}`}>
-        {value}
-      </span>
-    )
+    return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ${statusStyles(value)}`}>{value}</span>
   }
   if (isCostHeader(header)) return <span className="tabular-nums text-emerald-600 dark:text-emerald-300">{fmtCost(value)}</span>
   if (isWeightHeader(header)) return <span className="tabular-nums">{fmtWeight(value)}</span>
   return String(value)
 }
 
-function ActionButton({ icon: IconCmp, children, disabled }) {
+function ToolIcon({ icon: IconCmp, title, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-blue-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-ink-700 dark:hover:text-accent"
+    >
+      <IconCmp className="h-4 w-4" />
+    </button>
+  )
+}
+
+function Labeled({ label, children }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function Select({ value, onChange, children, disabled }) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className="min-w-[150px] rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-blue-400 focus:outline-none disabled:opacity-50 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200 dark:focus:border-accent/50"
+    >
+      {children}
+    </select>
+  )
+}
+
+function UpdateButton({ icon: IconCmp, children, disabled }) {
   return (
     <button
       disabled={disabled}
       className={[
-        'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition',
+        'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition',
         disabled
           ? 'cursor-not-allowed border border-slate-200 bg-white text-slate-300 dark:border-white/10 dark:bg-ink-800 dark:text-slate-600'
           : 'bg-blue-600 text-white shadow-sm hover:bg-blue-500 dark:bg-accent dark:text-ink-900 dark:shadow-glow dark:hover:bg-accent-400',
       ].join(' ')}
     >
       <IconCmp className="h-4 w-4" />
-      <span className="hidden lg:inline">{children}</span>
+      {children}
     </button>
+  )
+}
+
+function RelationshipPlaceholder({ kind, count }) {
+  const title = kind === 'awp' ? 'Relación AWP (CWA / CWP / EWP / IWP)' : 'Relación de Commodity Code'
+  const desc =
+    kind === 'awp'
+      ? 'Gestiona el empaquetamiento de trabajo (Advanced Work Packaging) de los elementos seleccionados: asignación a CWA, CWP, EWP e IWP.'
+      : 'Asigna y normaliza el código de commodity de los elementos seleccionados según el catálogo de materiales del proyecto.'
+  return (
+    <div className="grid flex-1 place-items-center p-10 text-center">
+      <div className="max-w-md">
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-xl bg-blue-50 text-blue-600 dark:bg-accent/10 dark:text-accent">
+          {kind === 'awp' ? <Link2 className="h-7 w-7" /> : <Tag className="h-7 w-7" />}
+        </div>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h3>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{desc}</p>
+        <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-300">
+          {count > 0 ? `${count} elemento(s) seleccionado(s).` : 'Selecciona elementos en la pestaña Elements para comenzar.'}
+        </p>
+      </div>
+    </div>
   )
 }

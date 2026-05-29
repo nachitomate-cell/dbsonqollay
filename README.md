@@ -48,11 +48,14 @@ Sidebar (disciplina)  →  DisciplineView (tarjetas)  →  DataTable (grilla)
      subcategorías seleccionadas (o "La disciplina seleccionada no tiene
      datos"), más las acciones **Nuevo espacio · Agregar a espacio existente ·
      Limpiar espacio**.
-3. **DataTable** (`components/DataTable.jsx`) — _Vista B_. Grilla de datos de
-   ingeniería con búsqueda global, filtros por columna, ordenamiento,
-   selección con checkbox, acciones `Update AWP Relationship` /
-   `Update Commodity Code`, y scroll horizontal/vertical con encabezado y
-   primera columna fijos (sticky).
+3. **DataTable** (`components/DataTable.jsx`) — _Vista B_, réplica del data grid
+   de la plataforma de referencia: enlace "Return To Engineering Element
+   Selection", chip del elemento abierto, pestañas **Elements / AWP / Commodity
+   Code**, barra de herramientas, búsqueda global, **Order By + Sort**, fila
+   **Filter By / Value / Search** con chips de filtros activos, **Property
+   Change**, botones **Update AWP / Update Commodity Code Relationship**, barra
+   de totales (elementos / seleccionados / eliminados) y tabla dinámica con
+   orden y filtro por columna, scroll y encabezado/primera columna fijos.
 
 `Header.jsx` muestra breadcrumbs clicables, búsqueda global y acciones rápidas.
 

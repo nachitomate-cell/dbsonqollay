@@ -204,22 +204,40 @@ export const disciplines = [
     name: 'General',
     icon: 'Box',
     description:
-      'Disciplina transversal que agrupa elementos generales, control documental y empaquetamiento de trabajo (AWP) del proyecto.',
+      'Concepto asociado a los elementos que no pertenecen a una disciplina en particular, pero que son requeridos para el diseño del proyecto.',
     subcategories: [
       {
-        id: 'gen-documentos',
-        code: 'DOC',
-        name: 'Control Documental (DOC)',
-        icon: 'FileText',
-        description: 'Planos, especificaciones y entregables del proyecto.',
+        id: 'gen-topografia',
+        code: 'TOP',
+        name: 'Topografía (TOP)',
+        icon: 'Map',
+        description: 'Base topográfica del proyecto, incluidas sus posibles particiones o versiones.',
         count: 0,
       },
       {
-        id: 'gen-awp',
-        code: 'AWP',
-        name: 'Paquetes AWP (AWP)',
-        icon: 'PackageCheck',
-        description: 'CWA / CWP / EWP / IWP — empaquetamiento de trabajo (Advanced Work Packaging).',
+        id: 'gen-iex',
+        code: 'IEX',
+        name: 'Referencial e instalaciones existentes (IEX)',
+        icon: 'Boxes',
+        description:
+          'Elementos referenciales necesarios para el diseño, como pueden ser maquinarias, espacios reservados u otros, e instalaciones existentes en terreno, en los cuales se incluyen modelos, nubes de punto y vectorizaciones de levantamientos en terreno.',
+        count: 0,
+      },
+      {
+        id: 'gen-erm',
+        code: 'ERM',
+        name: 'Espacios reservados para mantención (ERM)',
+        icon: 'Box',
+        description:
+          'Reservas de espacio relacionados con la estimación requerida para la mantención de equipos y componentes.',
+        count: 0,
+      },
+      {
+        id: 'gen-ere',
+        code: 'ERE',
+        name: 'Espacios reservados para equipos móviles (ERE)',
+        icon: 'Truck',
+        description: 'Reservas de espacio relacionadas con el tránsito o movimientos de equipos.',
         count: 0,
       },
     ],
@@ -228,22 +246,42 @@ export const disciplines = [
     id: 'instrumentacion',
     name: 'Instrumentación',
     icon: 'Gauge',
-    description: 'Disciplina encargada del diseño del sistema de instrumentación y control del proyecto.',
+    description:
+      'Disciplina encargada de los diseños asociados con la instrumentación, control, automatización y telecomunicaciones del proyecto.',
     subcategories: [
       {
-        id: 'ins-campo',
+        id: 'ins-instrumentos',
         code: 'INS',
         name: 'Instrumentos (INS)',
         icon: 'Gauge',
-        description: 'Transmisores, sensores y elementos de campo.',
+        description: 'Elementos relacionados con los instrumentos y sus componentes.',
         count: 0,
       },
       {
-        id: 'ins-control',
-        code: 'CTL',
-        name: 'Control (CTL)',
+        id: 'ins-equipos',
+        code: 'AUT',
+        name: 'Equipos (AUT)',
         icon: 'Cpu',
-        description: 'Lazos de control y arquitectura de automatización.',
+        description:
+          'Modelos y elementos relacionados con los equipos de suministro de instrumentación y automatización industrial.',
+        count: 0,
+      },
+      {
+        id: 'ins-escalerillas',
+        code: 'ESI',
+        name: 'Escalerillas (ESI)',
+        icon: 'Cable',
+        description:
+          'Modelos y elementos asociados con el diseño de escalerillas de suministro de instrumentación, control, automatización y telecomunicaciones, se incluyen soportes de estos elementos.',
+        count: 0,
+      },
+      {
+        id: 'ins-cables',
+        code: 'CII',
+        name: 'Cables (CII)',
+        icon: 'Spline',
+        description:
+          'Elementos relacionados con los cables de suministro de instrumentación, control, automatización y telecomunicaciones.',
         count: 0,
       },
     ],
@@ -252,23 +290,26 @@ export const disciplines = [
     id: 'mecanica',
     name: 'Mecánica',
     icon: 'Settings',
-    description: 'Disciplina encargada del diseño de equipos mecánicos del proyecto.',
+    description:
+      'Disciplina encargada de los diseños asociados con los equipos mecánicos, distribución de elementos en la planta y consideraciones generales del proyecto.',
     subcategories: [
       {
         id: 'mec-equipos',
         code: 'MEC',
-        name: 'Equipos Mecánicos (MEC)',
+        name: 'Equipos (MEC)',
         icon: 'Cog',
-        description: 'Bombas, acumuladores y equipos rotativos/estáticos.',
+        description:
+          'Modelos y elementos asociados con el diseño de equipos mecánicos, incluyendo equipos rotativos, estáticos, de almacenamiento y todos los elementos relacionados.',
         count: realCount('mec'),
         dataKey: 'mec',
       },
       {
-        id: 'mec-fijos',
-        code: 'FIJ',
-        name: 'Equipos Fijos (FIJ)',
-        icon: 'Container',
-        description: 'Estanques, recipientes a presión e intercambiadores.',
+        id: 'mec-hvac',
+        code: 'HVC',
+        name: 'HVAC (HVC)',
+        icon: 'Fan',
+        description:
+          'Elementos y modelos relacionados con el diseño de sistemas de Calefacción, ventilación y aire acondicionado; se incluyen los soportes del sistema.',
         count: 0,
       },
     ],
@@ -277,14 +318,60 @@ export const disciplines = [
     id: 'sustentabilidad',
     name: 'Sustentabilidad',
     icon: 'Recycle',
-    description: 'Disciplina encargada de las medidas ambientales y de sustentabilidad del proyecto.',
+    description: 'Disciplina encargada del diseño que tiene en cuenta los aspectos ambientales del proyecto.',
     subcategories: [
       {
-        id: 'sus-ambiental',
-        code: 'AMB',
-        name: 'Ambiental (AMB)',
-        icon: 'Leaf',
-        description: 'Medidas ambientales y permisos sectoriales.',
+        id: 'sus-rca',
+        code: 'RCA',
+        name: 'Resolución de calificación ambiental (RCA)',
+        icon: 'FileCheck2',
+        description:
+          'Representación volumétrica del área aprobada (o en desarrollo) de la Resolución de Calificación Ambiental o RCA.',
+        count: 0,
+      },
+      {
+        id: 'sus-lbs',
+        code: 'LBS',
+        name: 'Línea base (LBS)',
+        icon: 'Map',
+        description:
+          'Representación volumétrica del (las) área(s) que son utilizadas como línea base para los diseños de sustentabilidad.',
+        count: 0,
+      },
+      {
+        id: 'sus-pmf',
+        code: 'PMF',
+        name: 'Plan de manejo forestal (PMF)',
+        icon: 'Sprout',
+        description:
+          'Representación gráfica de las áreas que son asociadas con el Plan de Manejo Forestal desarrollado para el proyecto.',
+        count: 0,
+      },
+      {
+        id: 'sus-csa',
+        code: 'CSA',
+        name: 'Caminos sancionatorios (CSA)',
+        icon: 'Route',
+        description:
+          'Representación volumétrica de los caminos, senderos o plataformas que se encuentran en terreno (existentes) o que han sido aprobados por instancias anteriores.',
+        count: 0,
+      },
+      {
+        id: 'sus-bnp',
+        code: 'BNP',
+        name: 'Bosque nativo de preservación (BNP)',
+        icon: 'TreePine',
+        description:
+          'Reserva de espacio relacionada con la individualización de especies forestales (y su entorno) que no pueden ser modificadas.',
+        count: 0,
+      },
+      {
+        id: 'sus-adi',
+        code: 'ADI',
+        name: 'Áreas y curvas de inundación (ADI)',
+        icon: 'Waves',
+        description:
+          'Representación gráfica de las estimaciones de inundación para diferentes condiciones, se pueden incluir los comportamientos esperados/futuros de la cuenca.',
         count: 0,
       },
     ],
