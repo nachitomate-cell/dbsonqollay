@@ -1,0 +1,102 @@
+import { useEffect, useMemo, useState } from 'react'
+
+/**
+ * Capa editable sobre un dataset (headers + rows). Permite editar valores,
+ * agregar/quitar/ocultar columnas y agregar/eliminar registros. Cada fila
+ * recibe un `_id` estable para identificarla pese a orden/filtros. El estado se
+ * persiste en localStorage por `dataKey` para sobrevivir recargas.
+ *
+ * Retorna: { columns, rows, addColumn, removeColumn, toggleColumn,
+ *            updateRecord, addRecord, deleteRecord, reset, dirty }
+ *   - columns: [{ key, visible }]
+ */
+const lsKey = (dataKey) => `sqy-ds-${dataKey}`
+
+let _seq = 0
+const genId = () => `r${Date.now().toString(36)}_${(_seq++).toString(36)}`
+
+function build(dataset) {
+  const columns = (dataset?.headers ?? []).map((h) => ({ key: h, visible: true }))
+  const rows = (dataset?.rows ?? []).map((r) => ({ ...r, _id: genId() }))
+  return { columns, rows, dirty: false }
+}
+
+function init(dataKey, dataset) {
+  try {
+    const raw = localStorage.getItem(lsKey(dataKey))
+    if (raw) {
+      const p = JSON.parse(raw)
+      if (p?.columns && p?.rows) return { ...p, dirty: true }
+    }
+  } catch {
+    /* ignore */
+  }
+  return build(dataset)
+}
+
+export function useEditableDataset(dataKey, dataset) {
+  const [state, setState] = useState(() => init(dataKey, dataset))
+
+  useEffect(() => {
+    try {
+      if (state.dirty) localStorage.setItem(lsKey(dataKey), JSON.stringify(state))
+    } catch {
+      /* cuota excedida */
+    }
+  }, [dataKey, state])
+
+  const mutate = (fn) => setState((s) => ({ ...fn(s), dirty: true }))
+
+  const api = useMemo(
+    () => ({
+      addColumn(name) {
+        const key = String(name || '').trim()
+        if (!key) return
+        mutate((s) =>
+          s.columns.some((c) => c.key === key)
+            ? s
+            : {
+                ...s,
+                columns: [...s.columns, { key, visible: true }],
+                rows: s.rows.map((r) => ({ ...r, [key]: r[key] ?? '' })),
+              },
+        )
+      },
+      removeColumn(key) {
+        mutate((s) => ({ ...s, columns: s.columns.filter((c) => c.key !== key) }))
+      },
+      toggleColumn(key) {
+        mutate((s) => ({
+          ...s,
+          columns: s.columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)),
+        }))
+      },
+      updateRecord(id, patch) {
+        mutate((s) => ({ ...s, rows: s.rows.map((r) => (r._id === id ? { ...r, ...patch } : r)) }))
+      },
+      addRecord() {
+        const blank = { _id: genId() }
+        mutate((s) => {
+          s.columns.forEach((c) => (blank[c.key] = ''))
+          return { ...s, rows: [blank, ...s.rows] }
+        })
+        return blank._id
+      },
+      deleteRecord(id) {
+        mutate((s) => ({ ...s, rows: s.rows.filter((r) => r._id !== id) }))
+      },
+      reset() {
+        try {
+          localStorage.removeItem(lsKey(dataKey))
+        } catch {
+          /* ignore */
+        }
+        setState(build(dataset))
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dataKey, dataset],
+  )
+
+  return { columns: state.columns, rows: state.rows, dirty: state.dirty, ...api }
+}

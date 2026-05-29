@@ -9,11 +9,13 @@ import {
   Download,
   Filter,
   History,
+  LayoutGrid,
   Link2,
   List,
   Pencil,
   PieChart,
   Plus,
+  RotateCcw,
   RotateCw,
   Search,
   Tag,
@@ -21,6 +23,8 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { useEditableDataset } from '../hooks/useEditableDataset.js'
+import RecordDrawer from './RecordDrawer.jsx'
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -32,9 +36,7 @@ const fmtCost = (v) =>
   v === '' || v == null
     ? '—'
     : new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(v))
-
-const fmtWeight = (v) =>
-  v === '' || v == null ? '—' : `${new Intl.NumberFormat('es-CL').format(Number(v))} kg`
+const fmtWeight = (v) => (v === '' || v == null ? '—' : `${new Intl.NumberFormat('es-CL').format(Number(v))} kg`)
 
 const statusStyles = (val) => {
   const v = String(val).toUpperCase()
@@ -55,41 +57,45 @@ const defaultWidth = (h) => {
   return 170
 }
 
+function formatValue(header, value) {
+  if (value === '' || value == null) return null
+  if (isCostHeader(header)) return fmtCost(value)
+  if (isWeightHeader(header)) return fmtWeight(value)
+  return String(value)
+}
+
 /* --------------------------- component ----------------------------- */
 
-/**
- * Grilla de datos de ingeniería: pestañas Elements/AWP/Commodity Code, barra de
- * herramientas, Order By + Sort, Filter By/Value/Search, Property Change,
- * botones de relación, barra de totales y tabla dinámica con:
- *  - orden y filtro por columna
- *  - columnas redimensionables (arrastrar el borde derecho del encabezado)
- *  - virtualización de filas (TanStack Virtual) para miles de registros
- *  - encabezado y primera columna fijos (sticky)
- */
 export default function DataTable({ dataset, subcategory, onBack }) {
-  const headers = dataset?.headers ?? []
-  const rows = dataset?.rows ?? []
+  const { columns, rows, addColumn, removeColumn, toggleColumn, updateRecord, addRecord, deleteRecord, reset, dirty } =
+    useEditableDataset(subcategory.dataKey, dataset)
+
+  const visibleCols = columns.filter((c) => c.visible)
+  const headers = visibleCols.map((c) => c.key)
 
   const [activeTab, setActiveTab] = useState('elements')
+  const [viewMode, setViewMode] = useState('grid') // 'grid' (planilla) | 'cards' (fichas)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
   const [colFilters, setColFilters] = useState({})
   const [filterByCol, setFilterByCol] = useState('')
   const [filterByVal, setFilterByVal] = useState('')
-  const [propertyChange, setPropertyChange] = useState(headers.includes('FACILITIES') ? 'FACILITIES' : headers[0] || '')
-  const [colWidths, setColWidths] = useState(() => Object.fromEntries(headers.map((h) => [h, defaultWidth(h)])))
+  const [propertyChange, setPropertyChange] = useState('')
+  const [colWidths, setColWidths] = useState({})
+  const [showColumns, setShowColumns] = useState(false)
+  const [newField, setNewField] = useState('')
+  const [editingId, setEditingId] = useState(null)
 
   const scrollRef = useRef(null)
 
-  // Esc vuelve a la selección de elementos (cuando el foco no está en un input).
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onBack()
+      if (e.key === 'Escape' && !editingId && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onBack()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack])
+  }, [onBack, editingId])
 
   const distinctValues = (h) => {
     const s = new Set()
@@ -117,7 +123,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       })
     }
     return data
-  }, [rows, headers, query, colFilters, sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, query, colFilters, sort, headers.join('|')])
 
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
@@ -130,35 +137,31 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const padTop = virtualItems.length ? virtualItems[0].start : 0
   const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0
 
-  const rowKey = (r, i) => r?.[headers[0]] ?? `row-${i}`
-  const allVisibleSelected = filtered.length > 0 && filtered.every((r, i) => selected.has(rowKey(r, i)))
-
-  const toggleRow = (key) =>
+  const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r._id))
+  const toggleRow = (id) =>
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
   const toggleAll = () =>
     setSelected((prev) => {
       if (allVisibleSelected) return new Set()
       const next = new Set(prev)
-      filtered.forEach((r, i) => next.add(rowKey(r, i)))
+      filtered.forEach((r) => next.add(r._id))
       return next
     })
   const setSortKey = (h) =>
     setSort((s) => (s.key === h ? { key: h, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: h, dir: 'asc' }))
 
-  function applyFilter() {
-    if (filterByCol && filterByVal) setColFilters((p) => ({ ...p, [filterByCol]: filterByVal }))
-  }
+  const applyFilter = () => filterByCol && filterByVal && setColFilters((p) => ({ ...p, [filterByCol]: filterByVal }))
   const removeFilter = (h) =>
     setColFilters((p) => {
       const n = { ...p }
       delete n[h]
       return n
     })
-  function resetAll() {
+  function resetView() {
     setQuery('')
     setColFilters({})
     setSort({ key: null, dir: 'asc' })
@@ -166,7 +169,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     setFilterByVal('')
   }
 
-  // Redimensionamiento de columnas arrastrando el borde derecho del encabezado.
   function startResize(e, header) {
     e.preventDefault()
     e.stopPropagation()
@@ -183,7 +185,30 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     window.addEventListener('mouseup', onUp)
   }
 
+  function newRecord() {
+    const id = addRecord()
+    setEditingId(id)
+  }
+  function saveRecord(patch) {
+    updateRecord(editingId, patch)
+    setEditingId(null)
+  }
+  function removeRecord() {
+    deleteRecord(editingId)
+    setSelected((prev) => {
+      const n = new Set(prev)
+      n.delete(editingId)
+      return n
+    })
+    setEditingId(null)
+  }
+  function addField() {
+    addColumn(newField)
+    setNewField('')
+  }
+
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v)
+  const editingRecord = editingId ? rows.find((r) => r._id === editingId) : null
   const headBg = 'bg-slate-100 dark:bg-ink-700'
   const cellStickyBg = (isSel) =>
     isSel ? 'bg-brand-50 dark:bg-ink-700' : 'bg-white group-hover:bg-slate-50 dark:bg-ink-800 dark:group-hover:bg-ink-700'
@@ -219,18 +244,21 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2 px-4 py-3">
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
-              <ToolIcon icon={RotateCw} title="Refrescar / Reset" onClick={resetAll} />
-              <ToolIcon icon={Plus} title="Agregar" />
-              <ToolIcon icon={Tag} title="Etiquetar" />
+              <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
+              <ToolIcon icon={Plus} title="Nuevo registro" onClick={newRecord} />
               <ToolIcon icon={Copy} title="Copiar" />
-              <ToolIcon icon={Pencil} title="Editar" />
-              <ToolIcon icon={Trash2} title="Eliminar" />
+              <ToolIcon icon={Pencil} title="Editar (clic en una fila)" />
               <ToolIcon icon={Download} title="Exportar" />
               <ToolIcon icon={Upload} title="Importar" />
-              <ToolIcon icon={Columns3} title="Columnas" />
+              <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" />
               <ToolIcon icon={History} title="Historial" />
-              <ToolIcon icon={List} title="Vista lista" />
+            </div>
+
+            {/* View mode toggle */}
+            <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
+              <ViewToggle active={viewMode === 'grid'} icon={List} label="Planilla" onClick={() => setViewMode('grid')} />
+              <ViewToggle active={viewMode === 'cards'} icon={LayoutGrid} label="Fichas" onClick={() => setViewMode('cards')} />
             </div>
 
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
@@ -239,7 +267,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search..."
-                className="w-44 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
+                className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
               />
               {query && (
                 <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
@@ -263,6 +291,21 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               </Select>
             </Labeled>
           </div>
+
+          {/* Column manager */}
+          {showColumns && (
+            <ColumnManager
+              columns={columns}
+              onToggle={toggleColumn}
+              onRemove={removeColumn}
+              newField={newField}
+              setNewField={setNewField}
+              onAdd={addField}
+              dirty={dirty}
+              onReset={reset}
+              onClose={() => setShowColumns(false)}
+            />
+          )}
 
           {/* Filter row */}
           <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
@@ -293,6 +336,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             <div className="ml-auto">
               <Labeled label="Property Change">
                 <Select value={propertyChange} onChange={setPropertyChange}>
+                  <option value="">—</option>
                   {headers.map((h) => (
                     <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
                   ))}
@@ -331,106 +375,108 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             )}
           </div>
 
-          {/* Data grid */}
-          <div ref={scrollRef} className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
-            <table className="w-max table-fixed border-separate border-spacing-0 text-sm">
-              <colgroup>
-                <col style={{ width: CHECK_W }} />
-                {headers.map((h) => (
-                  <col key={h} style={{ width: colWidths[h] ?? defaultWidth(h) }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className={`sticky left-0 top-0 z-30 border-b border-slate-200 px-3 py-2.5 dark:border-white/10 ${headBg}`}>
-                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
-                  </th>
-                  {headers.map((h, idx) => {
-                    const filterActive = !!colFilters[h]
-                    return (
-                      <th
-                        key={h}
-                        style={{ left: idx === 0 ? CHECK_W : undefined }}
-                        className={[
-                          `top-0 z-20 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
-                          idx === 0 ? 'sticky z-30' : '',
-                        ].join(' ')}
-                      >
-                        <div className="flex items-center gap-1.5 pr-2">
-                          <button onClick={() => setSortKey(h)} className="inline-flex min-w-0 items-center gap-1 truncate transition hover:text-brand-600 dark:hover:text-accent" title={h.replace(/_/g, ' ')}>
-                            <span className="truncate">{h.replace(/_/g, ' ')}</span>
-                            {sort.key === h ? (
-                              sort.dir === 'asc' ? <ChevronUp className="h-3 w-3 shrink-0 text-brand-600 dark:text-accent" /> : <ChevronDown className="h-3 w-3 shrink-0 text-brand-600 dark:text-accent" />
-                            ) : (
-                              <ArrowUpDown className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => { setFilterByCol(h); setFilterByVal('') }}
-                            title="Filtrar por esta columna"
-                            className={`shrink-0 ${filterActive ? 'text-brand-600 dark:text-accent' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'}`}
-                          >
-                            <Filter className="h-3 w-3" fill={filterActive ? 'currentColor' : 'none'} />
-                          </button>
-                        </div>
-                        {/* resize handle */}
-                        <span
-                          onMouseDown={(e) => startResize(e, h)}
-                          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-brand-400/60"
-                        />
-                      </th>
-                    )
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {padTop > 0 && (
-                  <tr aria-hidden>
-                    <td colSpan={headers.length + 1} style={{ height: padTop }} className="p-0" />
-                  </tr>
-                )}
-                {virtualItems.map((vi) => {
-                  const rowData = filtered[vi.index]
-                  const key = rowKey(rowData, vi.index)
-                  const isSel = selected.has(key)
-                  return (
-                    <tr key={key} className={['group transition-colors', isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
-                      <td className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleRow(key)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
-                      </td>
-                      {headers.map((h, idx) => (
-                        <td
+          {/* Content: planilla o fichas */}
+          {viewMode === 'grid' ? (
+            <div ref={scrollRef} className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
+              <table className="w-max table-fixed border-separate border-spacing-0 text-sm">
+                <colgroup>
+                  <col style={{ width: CHECK_W }} />
+                  {headers.map((h) => (
+                    <col key={h} style={{ width: colWidths[h] ?? defaultWidth(h) }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className={`sticky left-0 top-0 z-30 border-b border-slate-200 px-3 py-2.5 dark:border-white/10 ${headBg}`}>
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
+                    </th>
+                    {headers.map((h, idx) => {
+                      const filterActive = !!colFilters[h]
+                      return (
+                        <th
                           key={h}
                           style={{ left: idx === 0 ? CHECK_W : undefined }}
                           className={[
-                            'overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-3 py-2.5 dark:border-white/5',
-                            idx === 0
-                              ? `sticky z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
-                              : 'text-slate-600 dark:text-slate-300',
+                            `top-0 z-20 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
+                            idx === 0 ? 'sticky z-30' : 'relative',
                           ].join(' ')}
                         >
-                          {renderCell(h, rowData[h])}
+                          <div className="flex items-center gap-1.5 pr-2">
+                            <button onClick={() => setSortKey(h)} className="inline-flex min-w-0 items-center gap-1 truncate transition hover:text-brand-600 dark:hover:text-accent" title={h.replace(/_/g, ' ')}>
+                              <span className="truncate">{h.replace(/_/g, ' ')}</span>
+                              {sort.key === h ? (
+                                sort.dir === 'asc' ? <ChevronUp className="h-3 w-3 shrink-0 text-brand-600 dark:text-accent" /> : <ChevronDown className="h-3 w-3 shrink-0 text-brand-600 dark:text-accent" />
+                              ) : (
+                                <ArrowUpDown className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => { setFilterByCol(h); setFilterByVal('') }}
+                              title="Filtrar por esta columna"
+                              className={`shrink-0 ${filterActive ? 'text-brand-600 dark:text-accent' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'}`}
+                            >
+                              <Filter className="h-3 w-3" fill={filterActive ? 'currentColor' : 'none'} />
+                            </button>
+                          </div>
+                          <span onMouseDown={(e) => startResize(e, h)} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-brand-400/60" />
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {padTop > 0 && (
+                    <tr aria-hidden><td colSpan={headers.length + 1} style={{ height: padTop }} className="p-0" /></tr>
+                  )}
+                  {virtualItems.map((vi) => {
+                    const r = filtered[vi.index]
+                    const isSel = selected.has(r._id)
+                    return (
+                      <tr key={r._id} onClick={() => setEditingId(r._id)} className={['group cursor-pointer transition-colors', isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
+                        <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
+                          <input type="checkbox" checked={isSel} onChange={() => toggleRow(r._id)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                         </td>
-                      ))}
-                    </tr>
-                  )
-                })}
-                {padBottom > 0 && (
-                  <tr aria-hidden>
-                    <td colSpan={headers.length + 1} style={{ height: padBottom }} className="p-0" />
-                  </tr>
-                )}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">
-                      No se encontraron elementos con los filtros actuales.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                        {headers.map((h, idx) => (
+                          <td
+                            key={h}
+                            style={{ left: idx === 0 ? CHECK_W : undefined }}
+                            className={[
+                              'overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-3 py-2.5 dark:border-white/5',
+                              idx === 0
+                                ? `sticky z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
+                                : 'text-slate-600 dark:text-slate-300',
+                            ].join(' ')}
+                          >
+                            {renderCell(h, r[h])}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })}
+                  {padBottom > 0 && (
+                    <tr aria-hidden><td colSpan={headers.length + 1} style={{ height: padBottom }} className="p-0" /></tr>
+                  )}
+                  {filtered.length === 0 && (
+                    <tr><td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">No se encontraron elementos con los filtros actuales.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <CardsView rows={filtered} headers={headers} selected={selected} onToggle={toggleRow} onOpen={setEditingId} />
+          )}
         </div>
+      )}
+
+      {editingRecord && (
+        <RecordDrawer
+          record={editingRecord}
+          columns={columns}
+          title={editingRecord[headers[0]]}
+          onSave={saveRecord}
+          onDelete={removeRecord}
+          onClose={() => setEditingId(null)}
+        />
       )}
     </div>
   )
@@ -440,22 +486,124 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
 function renderCell(header, value) {
   if (value === '' || value == null) return <span className="text-slate-300 dark:text-slate-600">—</span>
-  if (isStatusHeader(header)) {
-    return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ${statusStyles(value)}`}>{value}</span>
-  }
+  if (isStatusHeader(header)) return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ${statusStyles(value)}`}>{value}</span>
   if (isCostHeader(header)) return <span className="tabular-nums text-emerald-600 dark:text-emerald-300">{fmtCost(value)}</span>
   if (isWeightHeader(header)) return <span className="tabular-nums">{fmtWeight(value)}</span>
   return String(value)
 }
 
-function ToolIcon({ icon: IconCmp, title, onClick }) {
+function CardsView({ rows, headers, selected, onToggle, onOpen }) {
+  const cap = 300
+  const shown = rows.slice(0, cap)
+  const titleKey = headers[0]
+  const fieldKeys = headers.slice(1, 6)
+  return (
+    <div className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-white/10">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {shown.map((r) => {
+          const isSel = selected.has(r._id)
+          return (
+            <button
+              key={r._id}
+              onClick={() => onOpen(r._id)}
+              className={[
+                'group relative rounded-xl border p-4 text-left transition hover:shadow-md',
+                isSel ? 'border-brand-300 bg-brand-50/50 dark:border-accent/40 dark:bg-accent/5' : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/60',
+              ].join(' ')}
+            >
+              <span onClick={(e) => { e.stopPropagation(); onToggle(r._id) }} className="absolute right-3 top-3">
+                <input type="checkbox" checked={isSel} readOnly className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
+              </span>
+              <p className="mb-2 truncate pr-6 font-mono text-sm font-bold text-slate-900 dark:text-white">{r[titleKey] || '—'}</p>
+              <dl className="space-y-1.5">
+                {fieldKeys.map((k) => (
+                  <div key={k} className="flex items-baseline justify-between gap-3 text-xs">
+                    <dt className="shrink-0 font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{k.replace(/_/g, ' ')}</dt>
+                    <dd className="min-w-0 truncate text-right text-slate-600 dark:text-slate-300">{formatValue(k, r[k]) ?? '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-600 opacity-0 transition group-hover:opacity-100 dark:text-accent">
+                <Pencil className="h-3 w-3" /> Editar ficha
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      {rows.length > cap && (
+        <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
+          Mostrando {cap} de {rows.length}. Usa la búsqueda o filtros para acotar.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ColumnManager({ columns, onToggle, onRemove, newField, setNewField, onAdd, dirty, onReset, onClose }) {
+  return (
+    <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-ink-800">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Campos / columnas</h4>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
+        {columns.map((c) => (
+          <div key={c.key} className="flex items-center gap-2">
+            <input type="checkbox" checked={c.visible} onChange={() => onToggle(c.key)} className="h-3.5 w-3.5 cursor-pointer accent-brand-500 dark:accent-accent" />
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300" title={c.key}>{c.key.replace(/_/g, ' ')}</span>
+            <button onClick={() => onRemove(c.key)} title="Quitar campo" className="text-slate-300 transition hover:text-rose-500 dark:text-slate-600"><Trash2 className="h-3.5 w-3.5" /></button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-white/10">
+        <input
+          value={newField}
+          onChange={(e) => setNewField(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+          placeholder="Nuevo campo…"
+          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200"
+        />
+        <button onClick={onAdd} disabled={!newField.trim()} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
+          <Plus className="h-4 w-4" /> Agregar campo
+        </button>
+        {dirty && (
+          <button onClick={onReset} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-rose-500 dark:border-white/15 dark:text-slate-300" title="Descartar cambios y restaurar datos originales">
+            <RotateCcw className="h-4 w-4" /> Restablecer datos
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ToolIcon({ icon: IconCmp, title, onClick, active }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className="grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-ink-700 dark:hover:text-accent"
+      className={[
+        'grid h-8 w-8 place-items-center rounded-md transition',
+        active
+          ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900'
+          : 'text-slate-500 hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-ink-700 dark:hover:text-accent',
+      ].join(' ')}
     >
       <IconCmp className="h-4 w-4" />
+    </button>
+  )
+}
+
+function ViewToggle({ active, icon: IconCmp, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition',
+        active ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+      ].join(' ')}
+    >
+      <IconCmp className="h-4 w-4" />
+      {label}
     </button>
   )
 }
@@ -514,7 +662,7 @@ function RelationshipPlaceholder({ kind, count }) {
         <h3 className="text-lg font-bold text-slate-800 dark:text-white">{title}</h3>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{desc}</p>
         <p className="mt-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-          {count > 0 ? `${count} elemento(s) seleccionado(s).` : 'Selecciona elementos en la pestaña Elements para comenzar.'}
+          {count > 0 ? `${count} elemento(s) seleccionado(s).` : 'Selecciona elementos para comenzar.'}
         </p>
       </div>
     </div>

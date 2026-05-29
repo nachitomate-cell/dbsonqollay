@@ -20,14 +20,24 @@ como favicon (`public/favicon.png`).
 
 ## Funcionalidades
 
+- **Dos modos de edición** por subcategoría: **Planilla** (tabla) o **Fichas**
+  (tarjetas), conmutables desde la barra de herramientas.
+- **Ficha editable**: clic en cualquier registro (fila o tarjeta) abre un panel
+  lateral con un campo por columna para editar y guardar; permite crear y
+  eliminar registros.
+- **Gestor de campos**: agrega, quita u oculta columnas desde la UI.
 - **Pestañas múltiples**: abre varias subcategorías a la vez en el espacio de
   grillas (`GridWorkspace`), con cierre individual.
-- **Columnas redimensionables**: arrastra el borde derecho de cada encabezado.
+- **Columnas redimensionables**: arrastra el borde derecho de cada encabezado
+  (ancho independiente por columna).
 - **Virtualización de filas** (`@tanstack/react-virtual`): la grilla rinde miles
   de TAGs sin degradar el rendimiento.
 - **Importación de datos**: carga Excel (.xlsx/.xls) o CSV (`SQY_*`) desde la UI;
   se registra como nueva subcategoría y persiste en `localStorage`. `xlsx` se
   importa de forma dinámica (chunk aparte) para no inflar el bundle inicial.
+- **Edición persistente**: los cambios de datos, columnas y registros se guardan
+  en `localStorage` por dataset (`useEditableDataset`), con opción de
+  "Restablecer datos".
 - **Doble tema** claro/oscuro con toggle.
 
 ## Stack
