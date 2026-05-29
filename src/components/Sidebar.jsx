@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Layers3 } from 'lucide-react'
+import { ArrowRight, ChevronLeft, ChevronRight, Globe, Layers3 } from 'lucide-react'
 import Icon from './Icon.jsx'
 import { disciplines } from '../data/disciplines.js'
 
@@ -6,54 +6,54 @@ import { disciplines } from '../data/disciplines.js'
  * Menú lateral colapsable con las disciplinas de Sonqollay.
  *
  * props:
- *  - collapsed: boolean
- *  - onToggle(): colapsa/expande
- *  - activeDiscipline: id de disciplina activa
- *  - onSelect(id): selecciona una disciplina
+ *  - collapsed, onToggle()
+ *  - activeDiscipline, onSelect(id)
+ *  - onSelectAll(): item "Todas las disciplinas"
  */
-export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelect }) {
-  const totalElements = disciplines.reduce(
-    (acc, d) => acc + d.subcategories.reduce((s, sc) => s + (sc.count || 0), 0),
-    0,
-  )
-
+export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelect, onSelectAll }) {
   return (
     <aside
       className={[
-        'relative flex h-full flex-col border-r border-white/5 bg-ink-800/80 backdrop-blur',
-        'transition-[width] duration-300 ease-in-out',
+        'relative flex h-full flex-col border-r border-slate-200 bg-white transition-[width] duration-300 ease-in-out',
+        'dark:border-white/5 dark:bg-ink-800/80 dark:backdrop-blur',
         collapsed ? 'w-[76px]' : 'w-72',
       ].join(' ')}
     >
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5">
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-600 shadow-glow">
-          <Layers3 className="h-5 w-5 text-ink-900" strokeWidth={2.5} />
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-500 shadow-md dark:from-accent dark:to-accent-600 dark:shadow-glow">
+          <Layers3 className="h-5 w-5 text-white dark:text-ink-900" strokeWidth={2.5} />
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold tracking-tight text-white">
+            <p className="truncate text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">
               Sonqollay
             </p>
-            <p className="truncate text-[11px] font-medium text-slate-400">
+            <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
               Todas las disciplinas
             </p>
           </div>
         )}
       </div>
 
-      {!collapsed && (
-        <div className="mx-3 mb-2 rounded-lg border border-white/5 bg-ink-700/60 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">Elementos totales</p>
-          <p className="text-lg font-bold text-accent text-glow">{totalElements.toLocaleString('es-CL')}</p>
-        </div>
-      )}
+      {/* "Todas las disciplinas" */}
+      <div className="px-3">
+        <button
+          onClick={onSelectAll}
+          title={collapsed ? 'Todas las disciplinas' : undefined}
+          className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+        >
+          <Globe className="h-[18px] w-[18px] shrink-0 text-slate-500 dark:text-slate-400" />
+          {!collapsed && <span className="flex-1 truncate">Todas las disciplinas</span>}
+        </button>
+      </div>
+
+      <div className="mx-3 my-2 border-t border-slate-200 dark:border-white/5" />
 
       {/* Nav */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-2">
         {disciplines.map((d) => {
           const active = d.id === activeDiscipline
-          const count = d.subcategories.reduce((s, sc) => s + (sc.count || 0), 0)
           return (
             <button
               key={d.id}
@@ -62,30 +62,30 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
               className={[
                 'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors',
                 active
-                  ? 'bg-accent/10 text-white ring-1 ring-accent/40'
-                  : 'text-slate-400 hover:bg-white/5 hover:text-slate-100',
+                  ? 'bg-blue-600 text-white shadow-sm dark:bg-accent/10 dark:text-white dark:ring-1 dark:ring-accent/40'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-slate-100',
               ].join(' ')}
             >
               <Icon
                 name={d.icon}
                 className={[
                   'h-[18px] w-[18px] shrink-0 transition-colors',
-                  active ? 'text-accent' : 'text-slate-500 group-hover:text-slate-300',
+                  active ? 'text-white dark:text-accent' : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-300',
                 ].join(' ')}
               />
               {!collapsed && (
                 <>
                   <span className="flex-1 truncate font-medium">{d.name}</span>
-                  {count > 0 && (
-                    <span
-                      className={[
-                        'rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-                        active ? 'bg-accent/20 text-accent' : 'bg-white/5 text-slate-400',
-                      ].join(' ')}
-                    >
-                      {count}
-                    </span>
-                  )}
+                  <span
+                    className={[
+                      'grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors',
+                      active
+                        ? 'border-white/40 text-white dark:border-accent/40 dark:text-accent'
+                        : 'border-slate-300 text-slate-400 group-hover:border-blue-400 group-hover:text-blue-500 dark:border-white/15 dark:text-slate-500 dark:group-hover:border-accent/40 dark:group-hover:text-accent',
+                    ].join(' ')}
+                  >
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
                 </>
               )}
             </button>
@@ -96,21 +96,21 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-7 grid h-6 w-6 place-items-center rounded-full border border-white/10 bg-ink-700 text-slate-300 shadow-card transition hover:text-accent"
+        className="absolute -right-3 top-7 grid h-6 w-6 place-items-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-md transition hover:text-blue-600 dark:border-white/10 dark:bg-ink-700 dark:text-slate-300 dark:hover:text-accent"
         aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
       >
         {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </button>
 
-      <div className="border-t border-white/5 px-4 py-3">
+      <div className="border-t border-slate-200 px-4 py-3 dark:border-white/5">
         {!collapsed ? (
-          <p className="text-[10px] leading-relaxed text-slate-500">
+          <p className="text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
             AWP · BIM · Control Documental
             <br />
-            <span className="text-slate-600">v0.1 · Premium Dark</span>
+            <span className="text-slate-300 dark:text-slate-600">v0.2 · Sonqollay</span>
           </p>
         ) : (
-          <div className="mx-auto h-1.5 w-1.5 rounded-full bg-accent/60" />
+          <div className="mx-auto h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-accent/60" />
         )}
       </div>
     </aside>

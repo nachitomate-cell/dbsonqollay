@@ -1,8 +1,15 @@
 # Sonqollay
 
 Plataforma web (SaaS) para la **gestión de proyectos de ingeniería, control
-documental y empaquetamiento de trabajo (AWP/BIM)**. Estética _Premium Dark_,
-alto contraste y acentos neón cian, orientada a equipos de ingeniería.
+documental y empaquetamiento de trabajo (AWP/BIM)**, orientada a equipos de
+ingeniería.
+
+**Doble tema con toggle** (botón sol/luna en el header, persistido en
+`localStorage`):
+
+- **Claro** (por defecto) — réplica de la plataforma de referencia: fondo
+  blanco, acentos azules, badges de selección verde/ámbar.
+- **Premium Dark** — alto contraste, fondos profundos y acentos neón cian.
 
 ## Stack
 
@@ -30,9 +37,17 @@ Sidebar (disciplina)  →  DisciplineView (tarjetas)  →  DataTable (grilla)
 
 1. **Sidebar** (`components/Sidebar.jsx`) — menú lateral colapsable con las 9
    disciplinas. Al seleccionar una, se actualiza `activeDiscipline`.
-2. **DisciplineView** (`components/DisciplineView.jsx`) — _Vista A_. Tarjetas de
-   subcategorías (ícono, título, descripción y badge "Total de elementos").
-   Las subcategorías sin datos quedan deshabilitadas.
+2. **DisciplineView** (`components/DisciplineView.jsx`) — _Vista A_, en dos
+   columnas:
+   - **Izquierda:** banner con la descripción de la disciplina, tarjeta
+     "Seleccionar todos los elementos de ingeniería" y las tarjetas de cada
+     subcategoría con badge de selección (✓ verde / ⚠ ámbar). El badge actúa
+     como checkbox para armar un "espacio"; el cuerpo de la tarjeta abre la
+     grilla de datos (si hay datos).
+   - **Derecha:** panel resumen con "Total de elementos" y el desglose de las
+     subcategorías seleccionadas (o "La disciplina seleccionada no tiene
+     datos"), más las acciones **Nuevo espacio · Agregar a espacio existente ·
+     Limpiar espacio**.
 3. **DataTable** (`components/DataTable.jsx`) — _Vista B_. Grilla de datos de
    ingeniería con búsqueda global, filtros por columna, ordenamiento,
    selección con checkbox, acciones `Update AWP Relationship` /

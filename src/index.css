@@ -3,35 +3,42 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    color-scheme: dark;
-  }
   html,
   body,
   #root {
     height: 100%;
   }
   body {
-    @apply bg-ink-900 text-slate-200 antialiased;
+    @apply bg-slate-100 text-slate-800 antialiased dark:bg-ink-900 dark:text-slate-200;
     font-feature-settings: 'cv11', 'ss01';
   }
 }
 
 @layer utilities {
-  /* Subtle neon-ish background grid for that technical feel */
+  /* Subtle background grid for that technical feel (both themes). */
   .bg-grid {
     background-image:
-      radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.07) 1px, transparent 0);
+      radial-gradient(circle at 1px 1px, rgba(100, 116, 139, 0.12) 1px, transparent 0);
     background-size: 28px 28px;
   }
+  .dark .bg-grid {
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.07) 1px, transparent 0);
+  }
   .text-glow {
+    text-shadow: none;
+  }
+  .dark .text-glow {
     text-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
   }
 }
 
-/* Slim, dark scrollbars to match the premium aesthetic */
+/* Slim scrollbars that adapt to the theme. */
 * {
   scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.dark * {
   scrollbar-color: #1d2a47 transparent;
 }
 *::-webkit-scrollbar {
@@ -42,12 +49,20 @@
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #1d2a47;
+  background-color: #cbd5e1;
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
+.dark *::-webkit-scrollbar-thumb {
+  background-color: #1d2a47;
+  background-clip: content-box;
+}
 *::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+  background-clip: content-box;
+}
+.dark *::-webkit-scrollbar-thumb:hover {
   background-color: #2a3a5e;
   background-clip: content-box;
 }
