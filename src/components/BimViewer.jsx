@@ -4,14 +4,18 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import {
   Box,
+  CalendarRange,
   ChevronDown,
   ChevronRight,
   Eye,
   EyeOff,
+  Layers,
   ListTree,
   Loader2,
   MapPin,
   Palette,
+  Pause,
+  Play,
   Ruler,
   Scissors,
   Search,
@@ -22,15 +26,12 @@ import {
 } from 'lucide-react'
 
 /**
- * Visor BIM 3D (three.js) — Nivel 1 + Nivel 2.
+ * Visor BIM 3D (three.js) — Niveles 1, 2 y 3.
  *
- * Nivel 1: selección cruzada bidireccional, color por estado, vistas
- *          predefinidas, medición, carga glTF/GLB con vínculo configurable.
- * Nivel 2:
- *   - Árbol de modelo / escena con visibilidad por grupo (apagar disciplinas).
- *   - Planos de corte/sección X, Y, Z (clipping) con deslizadores.
- *   - Anotaciones / redlining: notas con texto + estado ancladas a un punto,
- *     persistidas (localStorage; preparado para backend/notificaciones).
+ * N1: selección cruzada, color por estado, vistas, medición, carga glTF/GLB.
+ * N2: árbol de modelo (visibilidad por grupo/nodo), planos de corte, notas 3D.
+ * N3: filtros visuales AWP (aislar por CWA/CWP/…) y simulación 4D (timeline
+ *     que revela elementos según su fecha de instalación planificada).
  *
  * props: rows, headers, selectedId, onFocus(id), onSelect(id), dataKey
  */
@@ -46,6 +47,14 @@ function statusColor(text) {
 }
 const NOTE_STATES = ['Abierta', 'En revisión', 'Resuelta']
 const notesKey = (dk) => `sqy-notes-${dk}`
+const parseDate = (v) => {
+  if (v == null || v === '') return null
+  const s = String(v)
+  if (!/\d{4}-\d{1,2}|\d{1,2}\/\d{1,2}\/\d{2,4}/.test(s)) return null
+  const t = Date.parse(s)
+  return Number.isNaN(t) ? null : t
+}
+const fmtDate = (ms) => new Date(ms).toLocaleDateString('es-CL', { year: 'numeric', month: 'short', day: '2-digit' })
 
 export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect, dataKey }) {
   const mountRef = useRef(null)
@@ -62,10 +71,15 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
   const [measuring, setMeasuring] = useState(false)
   const [measureDist, setMeasureDist] = useState(null)
   const [annotating, setAnnotating] = useState(false)
-  const [panel, setPanel] = useState('list') // list | tree | notes
+  const [panel, setPanel] = useState('list')
   const [showSections, setShowSections] = useState(false)
   const [sections, setSections] = useState({ x: { on: false, t: 0.5 }, y: { on: false, t: 0.5 }, z: { on: false, t: 0.5 } })
-  const [hidden, setHidden] = useState(() => new Set()) // grupos ocultos (esquemático)
+  const [hidden, setHidden] = useState(() => new Set())
+  const [showAwp, setShowAwp] = useState(false)
+  const [awp, setAwp] = useState({ field: '', value: '' })
+  const [fourD, setFourD] = useState({ on: false, field: '', t: 1 })
+  const [playing, setPlaying] = useState(false)
+  const [editingNote, setEditingNote] = useState(null)
   const [notes, setNotes] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(notesKey(dataKey))) || []
@@ -73,7 +87,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       return []
     }
   })
-  const [tick, setTick] = useState(0) // fuerza re-render del árbol glTF
+  const [tick, setTick] = useState(0)
 
   const tagKey = headers[0]
   const statusKeys = useMemo(() => headers.filter((h) => /APROB|AVANCE|ESTADO/i.test(h)), [headers])
@@ -95,7 +109,55 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
 
   const rowColor = (r) => (colorByStatus ? statusColor(statusKeys.map((k) => r[k]).join(' ')) : COLORS.gray)
 
-  // persistir notas
+  const awpFields = useMemo(() => headers.filter((h) => /CWA|CWP|EWP|PWP|IWP|SWP|WBS|AWP/i.test(h)), [headers])
+  const dateFields = useMemo(() => {
+    return headers.filter((h) => {
+      let ok = 0
+      let n = 0
+      for (const r of items) {
+        const v = r[h]
+        if (v === '' || v == null) continue
+        n++
+        if (parseDate(v) != null) ok++
+        if (n > 25) break
+      }
+      return n > 0 && ok / n > 0.5
+    })
+  }, [items, headers])
+  const awpValues = useMemo(() => {
+    if (!awp.field) return []
+    const s = new Set()
+    items.forEach((r) => r[awp.field] !== '' && r[awp.field] != null && s.add(String(r[awp.field])))
+    return Array.from(s).sort()
+  }, [items, awp.field])
+  const dateRange = useMemo(() => {
+    if (!fourD.field) return null
+    let min = Infinity
+    let max = -Infinity
+    items.forEach((r) => {
+      const d = parseDate(r[fourD.field])
+      if (d != null) {
+        if (d < min) min = d
+        if (d > max) max = d
+      }
+    })
+    return min <= max ? { min, max } : null
+  }, [items, fourD.field])
+  const currentDate = dateRange ? dateRange.min + (dateRange.max - dateRange.min) * fourD.t : null
+
+  useEffect(() => { if (!awp.field && awpFields.length) setAwp((a) => ({ ...a, field: awpFields[0] })) }, [awpFields, awp.field])
+  useEffect(() => { if (!fourD.field && dateFields.length) setFourD((f) => ({ ...f, field: dateFields[0] })) }, [dateFields, fourD.field])
+
+  const rowVisible = (r) => {
+    if (hidden.has(String(r[groupKey] ?? '—') || '—')) return false
+    if (awp.field && awp.value && String(r[awp.field] ?? '') !== awp.value) return false
+    if (fourD.on && fourD.field && currentDate != null) {
+      const d = parseDate(r[fourD.field])
+      if (d != null && d > currentDate) return false
+    }
+    return true
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem(notesKey(dataKey), JSON.stringify(notes))
@@ -125,9 +187,9 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     controls.dampingFactor = 0.08
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.75))
-    const dir = new THREE.DirectionalLight(0xffffff, 1.1)
-    dir.position.set(40, 60, 30)
-    scene.add(dir)
+    const dirL = new THREE.DirectionalLight(0xffffff, 1.1)
+    dirL.position.set(40, 60, 30)
+    scene.add(dirL)
 
     const schematicGroup = new THREE.Group()
     const measureGroup = new THREE.Group()
@@ -189,7 +251,6 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         if (hit) ctx.current.addNote(hit.point.clone(), resolveId(hit.object))
         return
       }
-      // primero notas, luego geometría
       const noteHit = intersect(e, [noteGroup])[0]
       if (noteHit) {
         ctx.current.onNotePick?.(noteHit.object.userData.noteId)
@@ -214,7 +275,6 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         controls.target.lerp(target, 0.09)
         if (camera.position.distanceTo(camTarget) < 0.4) flying = false
       }
-      // marcadores de nota encaran la cámara y mantienen tamaño relativo
       noteGroup.children.forEach((m) => m.lookAt(camera.position))
       controls.update()
       renderer.render(scene, camera)
@@ -264,8 +324,8 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         const pts = ctx.current.measurePts
         if (pts.length === 2) { measureGroup.clear(); pts.length = 0; setMeasureDist(null) }
         pts.push(p)
-        const r = getBounds().getSize(new THREE.Vector3()).length() * 0.004
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.15, r), 12, 12), new THREE.MeshBasicMaterial({ color: 0xf77000 }))
+        const rr = getBounds().getSize(new THREE.Vector3()).length() * 0.004
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.15, rr), 12, 12), new THREE.MeshBasicMaterial({ color: 0xf77000 }))
         dot.position.copy(p); measureGroup.add(dot)
         if (pts.length === 2) {
           measureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xf77000 })))
@@ -293,7 +353,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
   useEffect(() => { ctx.current.measuring = measuring; if (!measuring) ctx.current.clearMeasure?.() }, [measuring])
   useEffect(() => { ctx.current.annotating = annotating }, [annotating])
 
-  // --- volúmenes esquemáticos ---
+  // volúmenes esquemáticos
   useEffect(() => {
     const c = ctx.current
     if (!c.scene) return
@@ -309,7 +369,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       mesh.position.set((i % cols) * 2.4 - (cols * 2.4) / 2, 0, Math.floor(i / cols) * 2.4 - (cols * 2.4) / 2)
       mesh.userData.id = r._id
       mesh.userData.group = String(r[groupKey] ?? '—') || '—'
-      mesh.visible = !hidden.has(mesh.userData.group)
+      mesh.visible = rowVisible(r)
       c.schematicGroup.add(mesh); meshes.push(mesh); meshById.set(r._id, mesh)
     })
     c.schematicMeshes = meshes; c.meshById = meshById
@@ -317,12 +377,24 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, headers.join('|'), colorByStatus, groupKey])
 
-  // aplica visibilidad de grupos (esquemático)
+  // visibilidad combinada (grupo + AWP + 4D)
   useEffect(() => {
     const c = ctx.current
-    if (!c.schematicMeshes) return
-    c.schematicMeshes.forEach((m) => (m.visible = !hidden.has(m.userData.group)))
-  }, [hidden, items, groupKey])
+    if (!c.scene) return
+    const byId = new Map(items.map((r) => [r._id, r]))
+    c.schematicMeshes?.forEach((m) => { const r = byId.get(m.userData.id); m.visible = r ? rowVisible(r) : true })
+    if (c.modelGroup && c.modelMeshes) {
+      c.modelMeshes.forEach((m) => { const id = resolveModelId(c, m); const r = id && byId.get(id); m.visible = r ? rowVisible(r) : true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hidden, awp, fourD, currentDate, items, groupKey, tick])
+
+  useEffect(() => {
+    if (!playing || !fourD.on || !dateRange) return
+    const id = setInterval(() => setFourD((f) => ({ ...f, t: Math.min(1, f.t + 0.012) })), 90)
+    return () => clearInterval(id)
+  }, [playing, fourD.on, dateRange])
+  useEffect(() => { if (playing && fourD.t >= 1) setPlaying(false) }, [fourD.t, playing])
 
   useEffect(() => {
     const map = new Map()
@@ -330,7 +402,6 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     ctx.current.nameToId = map
   }, [items, matchKey])
 
-  // color por estado sobre el modelo
   useEffect(() => {
     const c = ctx.current
     if (!c.modelGroup || !c.modelMeshes) return
@@ -343,7 +414,6 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colorByStatus, items, matchKey])
 
-  // resaltado + vuelo
   useEffect(() => {
     const c = ctx.current
     if (!c.scene) return
@@ -374,35 +444,34 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
 
   useEffect(() => { if (selectedId) setFocusId(selectedId) }, [selectedId])
 
-  // --- planos de corte ---
+  // planos de corte
   useEffect(() => {
     const c = ctx.current
     if (!c.setClipping) return
     const b = c.getBounds()
-    const planes = []
     const lerp = (a, z, t) => a + (z - a) * t
+    const planes = []
     if (sections.x.on) planes.push(new THREE.Plane(new THREE.Vector3(-1, 0, 0), lerp(b.min.x, b.max.x, sections.x.t)))
     if (sections.y.on) planes.push(new THREE.Plane(new THREE.Vector3(0, -1, 0), lerp(b.min.y, b.max.y, sections.y.t)))
     if (sections.z.on) planes.push(new THREE.Plane(new THREE.Vector3(0, 0, -1), lerp(b.min.z, b.max.z, sections.z.t)))
     c.setClipping(planes)
   }, [sections, modelName, items])
 
-  // --- marcadores de notas ---
+  // marcadores de notas
   useEffect(() => {
     const c = ctx.current
     if (!c.noteGroup) return
     c.noteGroup.clear()
-    const r = (c.getBounds().getSize(new THREE.Vector3()).length() || 40) * 0.012
+    const rr = (c.getBounds().getSize(new THREE.Vector3()).length() || 40) * 0.012
     notes.forEach((n) => {
       const color = n.status === 'Resuelta' ? 0x10b981 : n.status === 'En revisión' ? 0xf59e0b : 0xef4444
-      const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.4, r), 14, 14), new THREE.MeshBasicMaterial({ color }))
+      const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.4, rr), 14, 14), new THREE.MeshBasicMaterial({ color }))
       m.position.set(n.x, n.y, n.z)
       m.userData.noteId = n.id
       c.noteGroup.add(m)
     })
   }, [notes])
 
-  // acciones de notas expuestas al ctx
   useEffect(() => {
     ctx.current.addNote = (point, elementId) => {
       const n = { id: `n${Date.now().toString(36)}`, x: point.x, y: point.y, z: point.z, text: '', status: 'Abierta', elementId: elementId || null, createdAt: new Date().toISOString() }
@@ -411,10 +480,12 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       setAnnotating(false)
       setEditingNote(n.id)
     }
-    ctx.current.onNotePick = (id) => { setPanel('notes'); setEditingNote(id); const n = notes.find((x) => x.id === id); if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z)) }
+    ctx.current.onNotePick = (id) => {
+      setPanel('notes'); setEditingNote(id)
+      const n = notes.find((x) => x.id === id)
+      if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z))
+    }
   }, [notes])
-
-  const [editingNote, setEditingNote] = useState(null)
 
   // --- carga glTF/GLB ---
   function addModel(root, name) {
@@ -440,11 +511,10 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     c.schematicGroup.visible = true; c.frame(c.schematicGroup); setModelName(null); setModelError(null); setTick((t) => t + 1)
   }
 
-  function toggleGroup(g) {
-    setHidden((prev) => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
-  }
+  function toggleGroup(g) { setHidden((prev) => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n }) }
   function updateNote(id, patch) { setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n))) }
   function deleteNote(id) { setNotes((prev) => prev.filter((n) => n.id !== id)); if (editingNote === id) setEditingNote(null) }
+  function gotoNote(id) { setEditingNote(id); const n = notes.find((x) => x.id === id); if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z)) }
 
   const focusRow = focusId ? items.find((r) => r._id === focusId) : null
   const views = [['top', 'Planta'], ['iso', 'Iso'], ['north', 'N'], ['south', 'S'], ['east', 'E'], ['west', 'O']]
@@ -484,30 +554,11 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         )}
 
         {panel === 'tree' && (
-          <ModelTree
-            modelGroup={ctx.current.modelGroup}
-            tick={tick}
-            groups={groups}
-            groupKey={groupKey}
-            setGroupKey={setGroupKey}
-            headers={headers}
-            hidden={hidden}
-            toggleGroup={toggleGroup}
-            onFocusRow={(id) => { setFocusId(id); onFocus?.(id) }}
-            focusId={focusId}
-          />
+          <ModelTree modelGroup={ctx.current.modelGroup} tick={tick} groups={groups} groupKey={groupKey} setGroupKey={setGroupKey} headers={headers} hidden={hidden} toggleGroup={toggleGroup} onFocusRow={(id) => { setFocusId(id); onFocus?.(id) }} focusId={focusId} />
         )}
 
         {panel === 'notes' && (
-          <NotesPanel
-            notes={notes}
-            editingNote={editingNote}
-            setEditingNote={(id) => { setEditingNote(id); const n = notes.find((x) => x.id === id); if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z)) }}
-            updateNote={updateNote}
-            deleteNote={deleteNote}
-            startAnnotate={() => { setAnnotating(true) }}
-            annotating={annotating}
-          />
+          <NotesPanel notes={notes} editingNote={editingNote} setEditingNote={gotoNote} updateNote={updateNote} deleteNote={deleteNote} startAnnotate={() => setAnnotating(true)} annotating={annotating} />
         )}
       </div>
 
@@ -541,8 +592,32 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
             <ToolBtn active={showSections} onClick={() => setShowSections((v) => !v)} title="Planos de corte"><Scissors className="h-4 w-4" /></ToolBtn>
             <ToolBtn active={measuring} onClick={() => { setMeasuring((v) => !v); setAnnotating(false) }} title="Medir distancia"><Ruler className="h-4 w-4" /></ToolBtn>
             <ToolBtn active={annotating} onClick={() => { setAnnotating((v) => !v); setMeasuring(false) }} title="Anotar (clic en el modelo)"><MapPin className="h-4 w-4" /></ToolBtn>
+            <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-white/10" />
+            <ToolBtn active={showAwp} onClick={() => setShowAwp((v) => !v)} title="Filtro visual AWP (aislar CWA/CWP…)"><Layers className="h-4 w-4" /></ToolBtn>
+            <ToolBtn active={fourD.on} onClick={() => setFourD((f) => ({ ...f, on: !f.on }))} title="Simulación de construcción 4D"><CalendarRange className="h-4 w-4" /></ToolBtn>
           </div>
         </div>
+
+        {/* Panel filtro AWP */}
+        {showAwp && (
+          <div className="absolute left-3 top-16 w-60 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-white"><Layers className="h-4 w-4 text-brand-500" /> Filtro visual AWP</p>
+            <label className="mb-2 block">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Campo</span>
+              <select value={awp.field} onChange={(e) => setAwp({ field: e.target.value, value: '' })} className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+                {(awpFields.length ? awpFields : headers).map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Aislar valor</span>
+              <select value={awp.value} onChange={(e) => setAwp((a) => ({ ...a, value: e.target.value }))} className="mt-0.5 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+                <option value="">— Mostrar todo —</option>
+                {awpValues.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </label>
+            {awp.value && <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Mostrando solo <b className="text-brand-600 dark:text-accent">{awp.value}</b>; el resto se oculta.</p>}
+          </div>
+        )}
 
         {/* Panel de secciones */}
         {showSections && (
@@ -567,7 +642,33 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
           </div>
         )}
 
-        {focusRow && (
+        {/* Timeline 4D */}
+        {fourD.on && (
+          <div className="absolute bottom-4 left-1/2 w-[min(680px,72%)] -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-4 py-2.5 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+            {dateRange ? (
+              <div className="flex items-center gap-3">
+                <button onClick={() => { if (fourD.t >= 1) setFourD((f) => ({ ...f, t: 0 })); setPlaying((p) => !p) }} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+                  {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    <span>{fmtDate(dateRange.min)}</span>
+                    <span className="font-bold text-brand-600 dark:text-accent">{currentDate != null ? fmtDate(currentDate) : ''}</span>
+                    <span>{fmtDate(dateRange.max)}</span>
+                  </div>
+                  <input type="range" min="0" max="1" step="0.005" value={fourD.t} onChange={(e) => setFourD((f) => ({ ...f, t: parseFloat(e.target.value) }))} className="w-full accent-brand-500 dark:accent-accent" />
+                </div>
+                <select value={fourD.field} onChange={(e) => setFourD((f) => ({ ...f, field: e.target.value, t: 1 }))} title="Campo de fecha planificada" className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+                  {(dateFields.length ? dateFields : headers).map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+            ) : (
+              <p className="text-center text-xs text-slate-500 dark:text-slate-400">Sin campo de fecha detectado. Elige uno en la base de datos (p. ej. ETA) para la simulación 4D.</p>
+            )}
+          </div>
+        )}
+
+        {focusRow && !fourD.on && (
           <div className="absolute bottom-4 left-4 max-w-xs rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
             <p className="font-mono text-sm font-bold text-slate-900 dark:text-white">{focusRow[tagKey]}</p>
             <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{focusRow[headers[1]] ?? ''}</p>
@@ -575,7 +676,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
           </div>
         )}
 
-        <div className="absolute bottom-4 right-4 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-medium shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
+        <div className="absolute right-4 top-16 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-medium shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90" style={{ display: showSections ? 'none' : undefined }}>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Aprobado / en obra</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> En proceso</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> Retenido / rechazado</span>
@@ -600,7 +701,6 @@ function ToolBtn({ active, onClick, title, children }) {
 function ModelTree({ modelGroup, tick, groups, groupKey, setGroupKey, headers, hidden, toggleGroup, onFocusRow, focusId }) {
   void tick
   if (modelGroup) return <GltfTree root={modelGroup} />
-  // Árbol esquemático: agrupado por campo
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-1.5 dark:border-white/10">
@@ -610,8 +710,8 @@ function ModelTree({ modelGroup, tick, groups, groupKey, setGroupKey, headers, h
         </select>
       </label>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
-        {groups.map(([g, rows]) => (
-          <GroupNode key={g} name={g} rows={rows} hidden={hidden.has(g)} onToggle={() => toggleGroup(g)} onFocusRow={onFocusRow} focusId={focusId} tagKey={headers[0]} />
+        {groups.map(([g, rs]) => (
+          <GroupNode key={g} name={g} rows={rs} hidden={hidden.has(g)} onToggle={() => toggleGroup(g)} onFocusRow={onFocusRow} focusId={focusId} tagKey={headers[0]} />
         ))}
       </div>
     </div>
@@ -687,14 +787,7 @@ function NotesPanel({ notes, editingNote, setEditingNote, updateNote, deleteNote
               </select>
               <button onClick={() => deleteNote(n.id)} className="text-slate-400 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
-            <textarea
-              value={n.text}
-              onFocus={() => setEditingNote(n.id)}
-              onChange={(e) => updateNote(n.id, { text: e.target.value })}
-              placeholder="Describe la interferencia / observación…"
-              rows={2}
-              className="mt-2 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200"
-            />
+            <textarea value={n.text} onFocus={() => setEditingNote(n.id)} onChange={(e) => updateNote(n.id, { text: e.target.value })} placeholder="Describe la interferencia / observación…" rows={2} className="mt-2 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200" />
             <button onClick={() => setEditingNote(n.id)} className="mt-1 text-[10px] font-medium text-brand-600 hover:underline dark:text-accent">Ir a la nota</button>
           </div>
         ))}

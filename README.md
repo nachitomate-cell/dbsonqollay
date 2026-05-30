@@ -61,6 +61,11 @@ como favicon (`public/favicon.png`).
   - **Anotaciones / redlining**: notas con texto + estado ancladas a un punto
     del modelo, con marcador 3D por color de estado; persistidas en
     `localStorage` (listas para backend/notificación a diseñadores).
+  - **Filtros visuales AWP**: aislar el 3D por CWA/CWP/EWP/… (mostrar solo un
+    área/paquete de trabajo, ocultar el resto).
+  - **Simulación 4D**: timeline en la parte inferior que revela los elementos
+    según su fecha de instalación planificada (campo de fecha auto-detectado,
+    p. ej. ETA), con reproducción play/pausa.
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.
