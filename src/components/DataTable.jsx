@@ -539,7 +539,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             {(viewMode === 'bim' || viewMode === 'split') && (
             <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
               <Suspense fallback={<ViewerLoading />}>
-                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} />
+                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} />
               </Suspense>
             </div>
             )}

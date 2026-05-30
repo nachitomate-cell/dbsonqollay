@@ -53,6 +53,14 @@ como favicon (`public/favicon.png`).
   - **Herramienta de medición** punto a punto.
   - **Carga de modelo real glTF/GLB** (`GLTFLoader`) con **campo de vínculo
     configurable** (TAG/GUID/ObjectId…) para mapear datos ↔ geometría.
+  - **Árbol de modelo** (panel "Árbol"): jerarquía del glTF con visibilidad por
+    nodo, o agrupación del esquemático por campo (p. ej. especialidad/CWA/sector)
+    con encender/apagar grupos enteros.
+  - **Planos de corte X/Y/Z** (clipping) con deslizadores para inspeccionar
+    interiores.
+  - **Anotaciones / redlining**: notas con texto + estado ancladas a un punto
+    del modelo, con marcador 3D por color de estado; persistidas en
+    `localStorage` (listas para backend/notificación a diseñadores).
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.

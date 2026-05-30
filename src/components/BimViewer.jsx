@@ -2,25 +2,40 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { Box, Loader2, Palette, Ruler, Search, Upload, X } from 'lucide-react'
+import {
+  Box,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  ListTree,
+  Loader2,
+  MapPin,
+  Palette,
+  Ruler,
+  Scissors,
+  Search,
+  StickyNote,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react'
 
 /**
- * Visor BIM 3D (three.js) — Nivel 1 de interactividad:
- *  - Selección cruzada bidireccional: `selectedId` enfoca/vuela/resalta; al
- *    clicar en la lista o en la geometría se notifica vía onFocus/onSelect.
- *  - Color por estado (rojo/amarillo/verde) sobre volúmenes y sobre el modelo.
- *  - Vistas predefinidas (Planta, Elevaciones, Isométrica).
- *  - Herramienta de medición punto a punto.
- *  - Carga de modelo real glTF/GLB con mapeo configurable (campo de vínculo).
+ * Visor BIM 3D (three.js) — Nivel 1 + Nivel 2.
  *
- * props:
- *  - rows, headers, selectedId
- *  - onFocus(id):  el usuario enfocó un elemento (lista o geometría) → resaltar fila
- *  - onSelect(id): abrir la ficha del elemento (clic en geometría / botón)
+ * Nivel 1: selección cruzada bidireccional, color por estado, vistas
+ *          predefinidas, medición, carga glTF/GLB con vínculo configurable.
+ * Nivel 2:
+ *   - Árbol de modelo / escena con visibilidad por grupo (apagar disciplinas).
+ *   - Planos de corte/sección X, Y, Z (clipping) con deslizadores.
+ *   - Anotaciones / redlining: notas con texto + estado ancladas a un punto,
+ *     persistidas (localStorage; preparado para backend/notificaciones).
+ *
+ * props: rows, headers, selectedId, onFocus(id), onSelect(id), dataKey
  */
 const CAP = 1500
 const norm = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-
 const COLORS = { green: 0x10b981, amber: 0xf59e0b, red: 0xef4444, gray: 0x586878 }
 function statusColor(text) {
   const v = String(text || '').toUpperCase()
@@ -29,34 +44,65 @@ function statusColor(text) {
   if (/APROB|RECIB|EN OBRA|INSTAL|TERMIN|\bE4\b/.test(v)) return COLORS.green
   return COLORS.gray
 }
+const NOTE_STATES = ['Abierta', 'En revisión', 'Resuelta']
+const notesKey = (dk) => `sqy-notes-${dk}`
 
-export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect }) {
+export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect, dataKey }) {
   const mountRef = useRef(null)
   const fileRef = useRef(null)
   const ctx = useRef({})
   const [focusId, setFocusId] = useState(selectedId || null)
   const [listQuery, setListQuery] = useState('')
   const [matchKey, setMatchKey] = useState(headers[0])
+  const [groupKey, setGroupKey] = useState(headers.find((h) => /ESPECIAL|CWA|SECTOR|TIPO/i.test(h)) || headers[0])
   const [modelName, setModelName] = useState(null)
   const [loadingModel, setLoadingModel] = useState(false)
   const [modelError, setModelError] = useState(null)
   const [colorByStatus, setColorByStatus] = useState(true)
   const [measuring, setMeasuring] = useState(false)
   const [measureDist, setMeasureDist] = useState(null)
+  const [annotating, setAnnotating] = useState(false)
+  const [panel, setPanel] = useState('list') // list | tree | notes
+  const [showSections, setShowSections] = useState(false)
+  const [sections, setSections] = useState({ x: { on: false, t: 0.5 }, y: { on: false, t: 0.5 }, z: { on: false, t: 0.5 } })
+  const [hidden, setHidden] = useState(() => new Set()) // grupos ocultos (esquemático)
+  const [notes, setNotes] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(notesKey(dataKey))) || []
+    } catch {
+      return []
+    }
+  })
+  const [tick, setTick] = useState(0) // fuerza re-render del árbol glTF
 
   const tagKey = headers[0]
-  const statusKeys = useMemo(
-    () => headers.filter((h) => /APROB|AVANCE|ESTADO/i.test(h)),
-    [headers],
-  )
+  const statusKeys = useMemo(() => headers.filter((h) => /APROB|AVANCE|ESTADO/i.test(h)), [headers])
   const items = useMemo(() => rows.slice(0, CAP), [rows])
   const listItems = useMemo(() => {
     const q = listQuery.trim().toLowerCase()
     return q ? items.filter((r) => String(r[tagKey] ?? '').toLowerCase().includes(q)) : items
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, listQuery])
+  const groups = useMemo(() => {
+    const m = new Map()
+    items.forEach((r) => {
+      const g = String(r[groupKey] ?? '—') || '—'
+      if (!m.has(g)) m.set(g, [])
+      m.get(g).push(r)
+    })
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0], 'es'))
+  }, [items, groupKey])
 
   const rowColor = (r) => (colorByStatus ? statusColor(statusKeys.map((k) => r[k]).join(' ')) : COLORS.gray)
+
+  // persistir notas
+  useEffect(() => {
+    try {
+      localStorage.setItem(notesKey(dataKey), JSON.stringify(notes))
+    } catch {
+      /* ignore */
+    }
+  }, [notes, dataKey])
 
   // --- init escena (una vez) ---
   useEffect(() => {
@@ -69,11 +115,11 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(w, h)
+    renderer.localClippingEnabled = true
     mount.appendChild(renderer.domElement)
 
     const camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 8000)
     camera.position.set(30, 28, 38)
-
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.08
@@ -84,11 +130,9 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     scene.add(dir)
 
     const schematicGroup = new THREE.Group()
-    scene.add(schematicGroup)
-
-    // capa de medición
     const measureGroup = new THREE.Group()
-    scene.add(measureGroup)
+    const noteGroup = new THREE.Group()
+    scene.add(schematicGroup, measureGroup, noteGroup)
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
@@ -108,14 +152,13 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     }
     setTheme()
 
-    function onResize() {
+    const ro = new ResizeObserver(() => {
       const nw = mount.clientWidth || 1
       const nh = mount.clientHeight || 1
       renderer.setSize(nw, nh)
       camera.aspect = nw / nh
       camera.updateProjectionMatrix()
-    }
-    const ro = new ResizeObserver(onResize)
+    })
     ro.observe(mount)
 
     function resolveId(object) {
@@ -127,27 +170,38 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       }
       return null
     }
-    function pickPoint(e) {
+    function intersect(e, objs) {
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const targets = ctx.current.modelGroup ? [ctx.current.modelGroup] : ctx.current.schematicMeshes || []
-      return raycaster.intersectObjects(targets, true)
+      return raycaster.intersectObjects(objs, true)
     }
     function onClick(e) {
-      const hits = pickPoint(e)
+      const geomTargets = ctx.current.modelGroup ? [ctx.current.modelGroup] : ctx.current.schematicMeshes || []
       if (ctx.current.measuring) {
-        if (!hits.length) return
-        ctx.current.addMeasurePoint(hits[0].point.clone())
+        const hit = intersect(e, geomTargets)[0]
+        if (hit) ctx.current.addMeasurePoint(hit.point.clone())
         return
       }
-      if (hits.length) {
-        const id = resolveId(hits[0].object)
+      if (ctx.current.annotating) {
+        const hit = intersect(e, geomTargets)[0]
+        if (hit) ctx.current.addNote(hit.point.clone(), resolveId(hit.object))
+        return
+      }
+      // primero notas, luego geometría
+      const noteHit = intersect(e, [noteGroup])[0]
+      if (noteHit) {
+        ctx.current.onNotePick?.(noteHit.object.userData.noteId)
+        return
+      }
+      const hit = intersect(e, geomTargets)[0]
+      if (hit) {
+        const id = resolveId(hit.object)
         if (id) {
           setFocusId(id)
           ctx.current.onFocus?.(id)
-          ctx.current.onSelect?.(id) // 3D → abre ficha automáticamente
+          ctx.current.onSelect?.(id)
         }
       }
     }
@@ -160,53 +214,40 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         controls.target.lerp(target, 0.09)
         if (camera.position.distanceTo(camTarget) < 0.4) flying = false
       }
+      // marcadores de nota encaran la cámara y mantienen tamaño relativo
+      noteGroup.children.forEach((m) => m.lookAt(camera.position))
       controls.update()
       renderer.render(scene, camera)
     }
     animate()
 
-    function bounds() {
+    const getBounds = () => {
       const obj = ctx.current.modelGroup || schematicGroup
-      const box = new THREE.Box3().setFromObject(obj)
-      if (box.isEmpty()) box.set(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10))
-      return box
+      const b = new THREE.Box3().setFromObject(obj)
+      if (b.isEmpty()) b.set(new THREE.Vector3(-10, -10, -10), new THREE.Vector3(10, 10, 10))
+      return b
     }
 
     ctx.current = {
       ...ctx.current,
-      scene,
-      renderer,
-      camera,
-      controls,
-      schematicGroup,
-      measureGroup,
-      schematicMeshes: [],
-      meshById: new Map(),
-      nameToId: new Map(),
-      modelGroup: null,
-      measuring: false,
-      measurePts: [],
-      onFocus,
-      onSelect,
-      flyTo: (pos, dist = 9) => {
-        target.copy(pos)
-        camTarget.copy(pos).add(new THREE.Vector3(dist, dist * 0.85, dist))
-        flying = true
-      },
+      scene, renderer, camera, controls, schematicGroup, measureGroup, noteGroup,
+      schematicMeshes: [], meshById: new Map(), nameToId: new Map(), modelGroup: null,
+      measuring: false, annotating: false, measurePts: [],
+      onFocus, onSelect, getBounds,
+      flyTo: (pos, dist = 9) => { target.copy(pos); camTarget.copy(pos).add(new THREE.Vector3(dist, dist * 0.85, dist)); flying = true },
+      flyToPoint: (pos) => { const d = getBounds().getSize(new THREE.Vector3()).length() * 0.12 || 6; target.copy(pos); camTarget.copy(pos).add(new THREE.Vector3(d, d, d)); flying = true },
       frame: (obj) => {
         const box = new THREE.Box3().setFromObject(obj)
         if (box.isEmpty()) return
         const size = box.getSize(new THREE.Vector3())
         const center = box.getCenter(new THREE.Vector3())
-        const maxDim = Math.max(size.x, size.y, size.z) || 10
-        const d = maxDim * 1.6
+        const d = (Math.max(size.x, size.y, size.z) || 10) * 1.6
         controls.target.copy(center)
         camera.position.copy(center).add(new THREE.Vector3(d, d * 0.8, d))
-        camTarget.copy(camera.position)
-        target.copy(center)
+        camTarget.copy(camera.position); target.copy(center)
       },
       setView: (kind) => {
-        const box = bounds()
+        const box = getBounds()
         const c = box.getCenter(new THREE.Vector3())
         const s = box.getSize(new THREE.Vector3())
         const d = Math.max(s.x, s.y, s.z) || 20
@@ -217,34 +258,22 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         else if (kind === 'south') off.set(0, d * 0.3, -d * 1.8)
         else if (kind === 'east') off.set(d * 1.8, d * 0.3, 0)
         else if (kind === 'west') off.set(-d * 1.8, d * 0.3, 0)
-        target.copy(c)
-        camTarget.copy(c).add(off)
-        flying = true
+        target.copy(c); camTarget.copy(c).add(off); flying = true
       },
       addMeasurePoint: (p) => {
         const pts = ctx.current.measurePts
-        if (pts.length === 2) {
-          // reiniciar para una nueva medición
-          measureGroup.clear()
-          pts.length = 0
-          setMeasureDist(null)
-        }
+        if (pts.length === 2) { measureGroup.clear(); pts.length = 0; setMeasureDist(null) }
         pts.push(p)
-        const dotGeo = new THREE.SphereGeometry(Math.max(0.15, bounds().getSize(new THREE.Vector3()).length() * 0.004), 12, 12)
-        const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: 0xf77000 }))
-        dot.position.copy(p)
-        measureGroup.add(dot)
+        const r = getBounds().getSize(new THREE.Vector3()).length() * 0.004
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.15, r), 12, 12), new THREE.MeshBasicMaterial({ color: 0xf77000 }))
+        dot.position.copy(p); measureGroup.add(dot)
         if (pts.length === 2) {
-          const g = new THREE.BufferGeometry().setFromPoints(pts)
-          measureGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xf77000 })))
+          measureGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xf77000 })))
           setMeasureDist(pts[0].distanceTo(pts[1]))
         }
       },
-      clearMeasure: () => {
-        measureGroup.clear()
-        ctx.current.measurePts = []
-        setMeasureDist(null)
-      },
+      clearMeasure: () => { measureGroup.clear(); ctx.current.measurePts = []; setMeasureDist(null) },
+      setClipping: (planes) => { renderer.clippingPlanes = planes },
     }
 
     const themeObserver = new MutationObserver(setTheme)
@@ -252,62 +281,56 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
 
     return () => {
       cancelAnimationFrame(raf)
-      themeObserver.disconnect()
-      ro.disconnect()
+      themeObserver.disconnect(); ro.disconnect()
       renderer.domElement.removeEventListener('click', onClick)
-      controls.dispose()
-      renderer.dispose()
+      controls.dispose(); renderer.dispose()
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // callbacks/measuring siempre frescos en el ctx
-  useEffect(() => {
-    ctx.current.onFocus = onFocus
-    ctx.current.onSelect = onSelect
-  }, [onFocus, onSelect])
-  useEffect(() => {
-    ctx.current.measuring = measuring
-    if (!measuring) ctx.current.clearMeasure?.()
-  }, [measuring])
+  useEffect(() => { ctx.current.onFocus = onFocus; ctx.current.onSelect = onSelect }, [onFocus, onSelect])
+  useEffect(() => { ctx.current.measuring = measuring; if (!measuring) ctx.current.clearMeasure?.() }, [measuring])
+  useEffect(() => { ctx.current.annotating = annotating }, [annotating])
 
-  // --- (re)construye volúmenes esquemáticos ---
+  // --- volúmenes esquemáticos ---
   useEffect(() => {
     const c = ctx.current
     if (!c.scene) return
-    c.schematicMeshes.forEach((m) => {
-      c.schematicGroup.remove(m)
-      m.geometry.dispose()
-      m.material.dispose()
-    })
+    c.schematicMeshes.forEach((m) => { c.schematicGroup.remove(m); m.geometry.dispose(); m.material.dispose() })
     const meshes = []
     const meshById = new Map()
     const cols = Math.max(1, Math.ceil(Math.sqrt(items.length)))
     items.forEach((r, i) => {
-      const geo = new THREE.BoxGeometry(1.4, 1.4, 1.4)
-      const mat = new THREE.MeshStandardMaterial({ color: rowColor(r), metalness: 0.1, roughness: 0.65 })
-      const mesh = new THREE.Mesh(geo, mat)
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 1.4, 1.4),
+        new THREE.MeshStandardMaterial({ color: rowColor(r), metalness: 0.1, roughness: 0.65 }),
+      )
       mesh.position.set((i % cols) * 2.4 - (cols * 2.4) / 2, 0, Math.floor(i / cols) * 2.4 - (cols * 2.4) / 2)
       mesh.userData.id = r._id
-      c.schematicGroup.add(mesh)
-      meshes.push(mesh)
-      meshById.set(r._id, mesh)
+      mesh.userData.group = String(r[groupKey] ?? '—') || '—'
+      mesh.visible = !hidden.has(mesh.userData.group)
+      c.schematicGroup.add(mesh); meshes.push(mesh); meshById.set(r._id, mesh)
     })
-    c.schematicMeshes = meshes
-    c.meshById = meshById
+    c.schematicMeshes = meshes; c.meshById = meshById
     c.schematicGroup.visible = !c.modelGroup
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, headers.join('|'), colorByStatus])
+  }, [items, headers.join('|'), colorByStatus, groupKey])
 
-  // --- mapa identificador → fila (campo de vínculo configurable) ---
+  // aplica visibilidad de grupos (esquemático)
+  useEffect(() => {
+    const c = ctx.current
+    if (!c.schematicMeshes) return
+    c.schematicMeshes.forEach((m) => (m.visible = !hidden.has(m.userData.group)))
+  }, [hidden, items, groupKey])
+
   useEffect(() => {
     const map = new Map()
     items.forEach((r) => map.set(norm(r[matchKey]), r._id))
     ctx.current.nameToId = map
   }, [items, matchKey])
 
-  // --- color por estado sobre el modelo real ---
+  // color por estado sobre el modelo
   useEffect(() => {
     const c = ctx.current
     if (!c.modelGroup || !c.modelMeshes) return
@@ -320,16 +343,11 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colorByStatus, items, matchKey])
 
-  // --- resalta y vuela al elemento enfocado ---
+  // resaltado + vuelo
   useEffect(() => {
     const c = ctx.current
     if (!c.scene) return
-    if (c.lastHi) {
-      c.lastHi.forEach((m) => {
-        m.material.emissive?.setHex(m.userData._emi ?? 0x000000)
-        if (m.userData.id) m.scale.setScalar(1)
-      })
-    }
+    if (c.lastHi) c.lastHi.forEach((m) => { m.material.emissive?.setHex(m.userData._emi ?? 0x000000); if (m.userData.id) m.scale.setScalar(1) })
     c.lastHi = []
     if (!focusId) return
     let meshes = []
@@ -342,128 +360,162 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       if (m) meshes = [m]
     }
     if (!meshes.length) return
-    const center = new THREE.Vector3()
     const box = new THREE.Box3()
     meshes.forEach((m) => {
-      if (m.material.emissive) {
-        m.userData._emi = m.material.emissive.getHex()
-        m.material.emissive.setHex(0xf77000)
-        m.material.emissiveIntensity = 0.7
-      }
+      if (m.material.emissive) { m.userData._emi = m.material.emissive.getHex(); m.material.emissive.setHex(0xf77000); m.material.emissiveIntensity = 0.7 }
       if (m.userData.id) m.scale.setScalar(1.35)
       box.expandByObject(m)
     })
     c.lastHi = meshes
-    box.getCenter(center)
+    const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
     c.flyTo(center, Math.max(size.x, size.y, size.z, 4) * 1.5)
   }, [focusId, items, matchKey])
 
-  useEffect(() => {
-    if (selectedId) setFocusId(selectedId)
-  }, [selectedId])
+  useEffect(() => { if (selectedId) setFocusId(selectedId) }, [selectedId])
 
-  // --- carga de modelo glTF/GLB ---
+  // --- planos de corte ---
+  useEffect(() => {
+    const c = ctx.current
+    if (!c.setClipping) return
+    const b = c.getBounds()
+    const planes = []
+    const lerp = (a, z, t) => a + (z - a) * t
+    if (sections.x.on) planes.push(new THREE.Plane(new THREE.Vector3(-1, 0, 0), lerp(b.min.x, b.max.x, sections.x.t)))
+    if (sections.y.on) planes.push(new THREE.Plane(new THREE.Vector3(0, -1, 0), lerp(b.min.y, b.max.y, sections.y.t)))
+    if (sections.z.on) planes.push(new THREE.Plane(new THREE.Vector3(0, 0, -1), lerp(b.min.z, b.max.z, sections.z.t)))
+    c.setClipping(planes)
+  }, [sections, modelName, items])
+
+  // --- marcadores de notas ---
+  useEffect(() => {
+    const c = ctx.current
+    if (!c.noteGroup) return
+    c.noteGroup.clear()
+    const r = (c.getBounds().getSize(new THREE.Vector3()).length() || 40) * 0.012
+    notes.forEach((n) => {
+      const color = n.status === 'Resuelta' ? 0x10b981 : n.status === 'En revisión' ? 0xf59e0b : 0xef4444
+      const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.4, r), 14, 14), new THREE.MeshBasicMaterial({ color }))
+      m.position.set(n.x, n.y, n.z)
+      m.userData.noteId = n.id
+      c.noteGroup.add(m)
+    })
+  }, [notes])
+
+  // acciones de notas expuestas al ctx
+  useEffect(() => {
+    ctx.current.addNote = (point, elementId) => {
+      const n = { id: `n${Date.now().toString(36)}`, x: point.x, y: point.y, z: point.z, text: '', status: 'Abierta', elementId: elementId || null, createdAt: new Date().toISOString() }
+      setNotes((prev) => [...prev, n])
+      setPanel('notes')
+      setAnnotating(false)
+      setEditingNote(n.id)
+    }
+    ctx.current.onNotePick = (id) => { setPanel('notes'); setEditingNote(id); const n = notes.find((x) => x.id === id); if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z)) }
+  }, [notes])
+
+  const [editingNote, setEditingNote] = useState(null)
+
+  // --- carga glTF/GLB ---
   function addModel(root, name) {
     const c = ctx.current
-    if (c.modelGroup) {
-      c.scene.remove(c.modelGroup)
-      c.modelGroup.traverse((o) => o.isMesh && (o.geometry?.dispose(), o.material?.dispose?.()))
-    }
+    if (c.modelGroup) { c.scene.remove(c.modelGroup); c.modelGroup.traverse((o) => o.isMesh && (o.geometry?.dispose(), o.material?.dispose?.())) }
     const modelMeshes = []
-    root.traverse((o) => {
-      if (o.isMesh) {
-        o.material = o.material.clone()
-        o.userData._origColor = o.material.color?.getHex?.() ?? 0x999999
-        modelMeshes.push(o)
-      }
-    })
-    c.scene.add(root)
-    c.modelGroup = root
-    c.modelMeshes = modelMeshes
-    c.schematicGroup.visible = false
-    // aplica color por estado si corresponde
-    if (colorByStatus) {
-      modelMeshes.forEach((m) => {
-        const id = resolveModelId(c, m)
-        const row = id && items.find((r) => r._id === id)
-        if (row) m.material.color.setHex(rowColor(row))
-      })
-    }
-    c.frame(root)
-    setModelName(name)
+    root.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData._origColor = o.material.color?.getHex?.() ?? 0x999999; modelMeshes.push(o) } })
+    c.scene.add(root); c.modelGroup = root; c.modelMeshes = modelMeshes; c.schematicGroup.visible = false
+    if (colorByStatus) modelMeshes.forEach((m) => { const id = resolveModelId(c, m); const row = id && items.find((r) => r._id === id); if (row) m.material.color.setHex(rowColor(row)) })
+    c.frame(root); setModelName(name); setTick((t) => t + 1)
   }
   async function loadModelFile(file) {
-    setLoadingModel(true)
-    setModelError(null)
+    setLoadingModel(true); setModelError(null)
     try {
       const loader = new GLTFLoader()
-      const isGlb = /\.glb$/i.test(file.name)
-      const data = isGlb ? await file.arrayBuffer() : await file.text()
+      const data = /\.glb$/i.test(file.name) ? await file.arrayBuffer() : await file.text()
       loader.parse(data, '', (gltf) => { addModel(gltf.scene, file.name); setLoadingModel(false) }, () => { setModelError('No se pudo cargar el modelo.'); setLoadingModel(false) })
-    } catch {
-      setModelError('Archivo inválido.')
-      setLoadingModel(false)
-    }
+    } catch { setModelError('Archivo inválido.'); setLoadingModel(false) }
   }
   function clearModel() {
     const c = ctx.current
-    if (c.modelGroup) {
-      c.scene.remove(c.modelGroup)
-      c.modelGroup.traverse((o) => o.isMesh && (o.geometry?.dispose(), o.material?.dispose?.()))
-      c.modelGroup = null
-      c.modelMeshes = []
-    }
-    c.schematicGroup.visible = true
-    c.frame(c.schematicGroup)
-    setModelName(null)
-    setModelError(null)
+    if (c.modelGroup) { c.scene.remove(c.modelGroup); c.modelGroup.traverse((o) => o.isMesh && (o.geometry?.dispose(), o.material?.dispose?.())); c.modelGroup = null; c.modelMeshes = [] }
+    c.schematicGroup.visible = true; c.frame(c.schematicGroup); setModelName(null); setModelError(null); setTick((t) => t + 1)
   }
 
+  function toggleGroup(g) {
+    setHidden((prev) => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
+  }
+  function updateNote(id, patch) { setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n))) }
+  function deleteNote(id) { setNotes((prev) => prev.filter((n) => n.id !== id)); if (editingNote === id) setEditingNote(null) }
+
   const focusRow = focusId ? items.find((r) => r._id === focusId) : null
-  const views = [
-    ['top', 'Planta'],
-    ['iso', 'Iso'],
-    ['north', 'Norte'],
-    ['south', 'Sur'],
-    ['east', 'Este'],
-    ['west', 'Oeste'],
-  ]
+  const views = [['top', 'Planta'], ['iso', 'Iso'], ['north', 'N'], ['south', 'S'], ['east', 'E'], ['west', 'O']]
 
   return (
     <div className="flex h-full">
-      {/* Lista de TAGs */}
-      <div className="flex w-56 shrink-0 flex-col border-r border-slate-200 dark:border-white/10">
-        <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input value={listQuery} onChange={(e) => setListQuery(e.target.value)} placeholder="Buscar TAG…" className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200" />
-        </div>
-        <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Vincular por</span>
-          <select value={matchKey} onChange={(e) => setMatchKey(e.target.value)} title="Campo que coincide con el nombre del objeto en el modelo" className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
-            {headers.map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
-          </select>
-        </label>
-        <div className="min-h-0 flex-1 overflow-y-auto py-1">
-          {listItems.map((r) => (
-            <button
-              key={r._id}
-              onClick={() => { setFocusId(r._id); onFocus?.(r._id) }}
-              className={['flex w-full items-center gap-2 truncate px-3 py-1.5 text-left font-mono text-xs transition', r._id === focusId ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5'].join(' ')}
-            >
-              <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: `#${rowColor(r).toString(16).padStart(6, '0')}` }} />
-              <span className="truncate">{r[tagKey] || '—'}</span>
-            </button>
+      {/* Panel izquierdo */}
+      <div className="flex w-60 shrink-0 flex-col border-r border-slate-200 dark:border-white/10">
+        <div className="flex border-b border-slate-200 dark:border-white/10">
+          {[['list', 'Lista'], ['tree', 'Árbol'], ['notes', `Notas${notes.length ? ` (${notes.length})` : ''}`]].map(([id, label]) => (
+            <button key={id} onClick={() => setPanel(id)} className={['flex-1 px-2 py-2 text-xs font-semibold transition', panel === id ? 'border-b-2 border-brand-500 text-brand-600 dark:border-accent dark:text-accent' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'].join(' ')}>{label}</button>
           ))}
-          {listItems.length === 0 && <p className="px-3 py-4 text-center text-xs text-slate-400">Sin elementos.</p>}
         </div>
+
+        {panel === 'list' && (
+          <>
+            <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input value={listQuery} onChange={(e) => setListQuery(e.target.value)} placeholder="Buscar TAG…" className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200" />
+            </div>
+            <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-1.5 dark:border-white/10">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Vínculo</span>
+              <select value={matchKey} onChange={(e) => setMatchKey(e.target.value)} title="Campo que coincide con el nombre del objeto del modelo" className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+                {headers.map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
+              </select>
+            </label>
+            <div className="min-h-0 flex-1 overflow-y-auto py-1">
+              {listItems.map((r) => (
+                <button key={r._id} onClick={() => { setFocusId(r._id); onFocus?.(r._id) }} className={['flex w-full items-center gap-2 truncate px-3 py-1.5 text-left font-mono text-xs transition', r._id === focusId ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5'].join(' ')}>
+                  <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: `#${rowColor(r).toString(16).padStart(6, '0')}` }} />
+                  <span className="truncate">{r[tagKey] || '—'}</span>
+                </button>
+              ))}
+              {listItems.length === 0 && <p className="px-3 py-4 text-center text-xs text-slate-400">Sin elementos.</p>}
+            </div>
+          </>
+        )}
+
+        {panel === 'tree' && (
+          <ModelTree
+            modelGroup={ctx.current.modelGroup}
+            tick={tick}
+            groups={groups}
+            groupKey={groupKey}
+            setGroupKey={setGroupKey}
+            headers={headers}
+            hidden={hidden}
+            toggleGroup={toggleGroup}
+            onFocusRow={(id) => { setFocusId(id); onFocus?.(id) }}
+            focusId={focusId}
+          />
+        )}
+
+        {panel === 'notes' && (
+          <NotesPanel
+            notes={notes}
+            editingNote={editingNote}
+            setEditingNote={(id) => { setEditingNote(id); const n = notes.find((x) => x.id === id); if (n) ctx.current.flyToPoint?.(new THREE.Vector3(n.x, n.y, n.z)) }}
+            updateNote={updateNote}
+            deleteNote={deleteNote}
+            startAnnotate={() => { setAnnotating(true) }}
+            annotating={annotating}
+          />
+        )}
       </div>
 
       {/* Canvas */}
       <div className="relative min-w-0 flex-1">
         <div ref={mountRef} className="h-full w-full" />
 
-        {/* Barra superior: cargar modelo + vistas + herramientas */}
+        {/* Barra superior */}
         <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2">
             <input ref={fileRef} type="file" accept=".glb,.gltf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) loadModelFile(f); e.target.value = '' }} />
@@ -473,7 +525,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
             </button>
             {modelName && (
               <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 px-2 py-1.5 text-xs text-slate-600 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300">
-                <span className="max-w-[120px] truncate">{modelName}</span>
+                <span className="max-w-[110px] truncate">{modelName}</span>
                 <button onClick={clearModel} title="Quitar modelo" className="text-slate-400 hover:text-rose-500"><X className="h-3 w-3" /></button>
               </span>
             )}
@@ -482,28 +534,39 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
 
           <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/90 p-1 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
             {views.map(([k, label]) => (
-              <button key={k} onClick={() => ctx.current.setView?.(k)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-brand-500 hover:text-white dark:text-slate-300 dark:hover:bg-accent dark:hover:text-ink-900">
-                {label}
-              </button>
+              <button key={k} onClick={() => ctx.current.setView?.(k)} className="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-brand-500 hover:text-white dark:text-slate-300 dark:hover:bg-accent dark:hover:text-ink-900">{label}</button>
             ))}
             <span className="mx-0.5 h-4 w-px bg-slate-200 dark:bg-white/10" />
-            <button onClick={() => setColorByStatus((v) => !v)} title="Colorear por estado" className={['grid h-7 w-7 place-items-center rounded-md transition', colorByStatus ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-500 hover:text-brand-600 dark:text-slate-300'].join(' ')}>
-              <Palette className="h-4 w-4" />
-            </button>
-            <button onClick={() => setMeasuring((v) => !v)} title="Medir distancia (clic en 2 puntos)" className={['grid h-7 w-7 place-items-center rounded-md transition', measuring ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-500 hover:text-brand-600 dark:text-slate-300'].join(' ')}>
-              <Ruler className="h-4 w-4" />
-            </button>
+            <ToolBtn active={colorByStatus} onClick={() => setColorByStatus((v) => !v)} title="Color por estado"><Palette className="h-4 w-4" /></ToolBtn>
+            <ToolBtn active={showSections} onClick={() => setShowSections((v) => !v)} title="Planos de corte"><Scissors className="h-4 w-4" /></ToolBtn>
+            <ToolBtn active={measuring} onClick={() => { setMeasuring((v) => !v); setAnnotating(false) }} title="Medir distancia"><Ruler className="h-4 w-4" /></ToolBtn>
+            <ToolBtn active={annotating} onClick={() => { setAnnotating((v) => !v); setMeasuring(false) }} title="Anotar (clic en el modelo)"><MapPin className="h-4 w-4" /></ToolBtn>
           </div>
         </div>
 
-        {/* Indicador de medición */}
-        {measuring && (
-          <div className="absolute left-1/2 top-16 -translate-x-1/2 rounded-lg border border-brand-300 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow backdrop-blur dark:border-accent/40 dark:bg-ink-800/90 dark:text-slate-200">
-            {measureDist != null ? <>Distancia: <b className="text-brand-600 dark:text-accent">{measureDist.toFixed(2)} u</b> · clic para reiniciar</> : 'Modo medición: clic en 2 puntos del modelo'}
+        {/* Panel de secciones */}
+        {showSections && (
+          <div className="absolute right-3 top-16 w-56 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+            <p className="mb-2 text-xs font-bold text-slate-700 dark:text-white">Planos de corte</p>
+            {['x', 'y', 'z'].map((ax) => (
+              <div key={ax} className="mb-2">
+                <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <input type="checkbox" checked={sections[ax].on} onChange={() => setSections((s) => ({ ...s, [ax]: { ...s[ax], on: !s[ax].on } }))} className="accent-brand-500 dark:accent-accent" />
+                  Eje {ax.toUpperCase()}
+                </label>
+                <input type="range" min="0" max="1" step="0.01" value={sections[ax].t} disabled={!sections[ax].on} onChange={(e) => setSections((s) => ({ ...s, [ax]: { ...s[ax], t: parseFloat(e.target.value) } }))} className="mt-1 w-full accent-brand-500 disabled:opacity-40 dark:accent-accent" />
+              </div>
+            ))}
+            <button onClick={() => setSections({ x: { on: false, t: 0.5 }, y: { on: false, t: 0.5 }, z: { on: false, t: 0.5 } })} className="mt-1 text-[11px] text-slate-500 hover:text-rose-500">Restablecer cortes</button>
           </div>
         )}
 
-        {/* Ficha del elemento enfocado */}
+        {(measuring || annotating) && (
+          <div className="absolute left-1/2 top-16 -translate-x-1/2 rounded-lg border border-brand-300 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow backdrop-blur dark:border-accent/40 dark:bg-ink-800/90 dark:text-slate-200">
+            {measuring ? (measureDist != null ? <>Distancia: <b className="text-brand-600 dark:text-accent">{measureDist.toFixed(2)} u</b> · clic para reiniciar</> : 'Medición: clic en 2 puntos') : 'Anotación: clic sobre el modelo para fijar la nota'}
+          </div>
+        )}
+
         {focusRow && (
           <div className="absolute bottom-4 left-4 max-w-xs rounded-xl border border-slate-200 bg-white/90 p-3 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
             <p className="font-mono text-sm font-bold text-slate-900 dark:text-white">{focusRow[tagKey]}</p>
@@ -512,12 +575,10 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
           </div>
         )}
 
-        {/* Leyenda */}
         <div className="absolute bottom-4 right-4 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/90 px-3 py-2 text-[11px] font-medium shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" /> Aprobado / en obra</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-amber-500" /> En proceso</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" /> Retenido / rechazado</span>
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: '#586878' }} /> Sin estado</span>
         </div>
 
         {items.length === 0 && (
@@ -525,6 +586,118 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
             <div className="flex flex-col items-center gap-2"><Box className="h-6 w-6" />Sin elementos para visualizar.</div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function ToolBtn({ active, onClick, title, children }) {
+  return (
+    <button onClick={onClick} title={title} className={['grid h-7 w-7 place-items-center rounded-md transition', active ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-500 hover:text-brand-600 dark:text-slate-300'].join(' ')}>{children}</button>
+  )
+}
+
+function ModelTree({ modelGroup, tick, groups, groupKey, setGroupKey, headers, hidden, toggleGroup, onFocusRow, focusId }) {
+  void tick
+  if (modelGroup) return <GltfTree root={modelGroup} />
+  // Árbol esquemático: agrupado por campo
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-1.5 dark:border-white/10">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Agrupar</span>
+        <select value={groupKey} onChange={(e) => setGroupKey(e.target.value)} className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+          {headers.map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
+        </select>
+      </label>
+      <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        {groups.map(([g, rows]) => (
+          <GroupNode key={g} name={g} rows={rows} hidden={hidden.has(g)} onToggle={() => toggleGroup(g)} onFocusRow={onFocusRow} focusId={focusId} tagKey={headers[0]} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GroupNode({ name, rows, hidden, onToggle, onFocusRow, focusId, tagKey }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div className={['flex items-center gap-1 px-2 py-1.5 text-xs', hidden ? 'opacity-50' : ''].join(' ')}>
+        <button onClick={() => setOpen((v) => !v)} className="text-slate-400 hover:text-slate-600">{open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button>
+        <button onClick={onToggle} title="Mostrar/ocultar grupo" className="text-slate-400 hover:text-brand-600 dark:hover:text-accent">{hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button>
+        <span className="min-w-0 flex-1 truncate font-semibold text-slate-700 dark:text-slate-200" title={name}>{name}</span>
+        <span className="shrink-0 text-[10px] text-slate-400">{rows.length}</span>
+      </div>
+      {open && (
+        <div className="ml-6">
+          {rows.slice(0, 200).map((r) => (
+            <button key={r._id} onClick={() => onFocusRow(r._id)} className={['block w-full truncate px-2 py-1 text-left font-mono text-[11px] transition', r._id === focusId ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5'].join(' ')}>{r[tagKey] || '—'}</button>
+          ))}
+          {rows.length > 200 && <p className="px-2 py-1 text-[10px] text-slate-400">+{rows.length - 200} más…</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GltfTree({ root }) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto py-1">
+      <p className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><ListTree className="h-3.5 w-3.5" /> Jerarquía del modelo</p>
+      {root.children.map((c, i) => <GltfNode key={c.uuid || i} obj={c} depth={0} />)}
+    </div>
+  )
+}
+
+function GltfNode({ obj, depth }) {
+  const [open, setOpen] = useState(depth < 1)
+  const [, force] = useState(0)
+  const kids = obj.children?.filter((c) => c.type !== 'Bone') || []
+  const name = obj.name || obj.type || 'Objeto'
+  return (
+    <div>
+      <div className="flex items-center gap-1 py-1 pr-2 text-xs" style={{ paddingLeft: 8 + depth * 12 }}>
+        {kids.length ? (
+          <button onClick={() => setOpen((v) => !v)} className="text-slate-400 hover:text-slate-600">{open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</button>
+        ) : <span className="w-3.5" />}
+        <button onClick={() => { obj.visible = !obj.visible; force((n) => n + 1) }} title="Mostrar/ocultar" className="text-slate-400 hover:text-brand-600 dark:hover:text-accent">{obj.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}</button>
+        <span className={['min-w-0 flex-1 truncate', obj.visible ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 line-through'].join(' ')} title={name}>{name}</span>
+      </div>
+      {open && kids.map((c, i) => <GltfNode key={c.uuid || i} obj={c} depth={depth + 1} />)}
+    </div>
+  )
+}
+
+function NotesPanel({ notes, editingNote, setEditingNote, updateNote, deleteNote, startAnnotate, annotating }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-slate-200 p-2 dark:border-white/10">
+        <button onClick={startAnnotate} className={['flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition', annotating ? 'bg-brand-600 text-white' : 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900'].join(' ')}>
+          <MapPin className="h-3.5 w-3.5" /> {annotating ? 'Clic en el modelo…' : 'Nueva anotación'}
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        {notes.length === 0 && <p className="px-1 py-4 text-center text-xs text-slate-400">Sin anotaciones. Crea una sobre una interferencia del modelo.</p>}
+        {notes.map((n) => (
+          <div key={n.id} className={['mb-2 rounded-lg border p-2 text-xs transition', editingNote === n.id ? 'border-brand-400 bg-brand-50/50 dark:border-accent/40 dark:bg-accent/5' : 'border-slate-200 dark:border-white/10'].join(' ')}>
+            <div className="flex items-center gap-2">
+              <StickyNote className="h-3.5 w-3.5 shrink-0 text-brand-500" />
+              <select value={n.status} onChange={(e) => updateNote(n.id, { status: e.target.value })} className="flex-1 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+                {NOTE_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <button onClick={() => deleteNote(n.id)} className="text-slate-400 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+            <textarea
+              value={n.text}
+              onFocus={() => setEditingNote(n.id)}
+              onChange={(e) => updateNote(n.id, { text: e.target.value })}
+              placeholder="Describe la interferencia / observación…"
+              rows={2}
+              className="mt-2 w-full resize-y rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200"
+            />
+            <button onClick={() => setEditingNote(n.id)} className="mt-1 text-[10px] font-medium text-brand-600 hover:underline dark:text-accent">Ir a la nota</button>
+          </div>
+        ))}
       </div>
     </div>
   )
