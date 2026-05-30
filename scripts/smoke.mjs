@@ -5,6 +5,7 @@ const errors = []
 const logs = []
 
 const browser = await chromium.launch({
+  executablePath: process.env.CHROME_PATH || chromium.executablePath(),
   args: ['--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 })
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
