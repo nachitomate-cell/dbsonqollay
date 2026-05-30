@@ -40,13 +40,19 @@ como favicon (`public/favicon.png`).
   "Restablecer datos".
 - **Exportación**: descarga la vista actual (columnas visibles + filas
   filtradas) a **CSV** o **Excel (.xlsx)** desde el botón de exportar.
-- **Visor BIM 3D** (three.js, chunk cargado on-demand): vista "3D" con un
-  volumen por elemento y **bidireccionalidad** — clic en un TAG de la lista
-  vuela la cámara y resalta el elemento; clic en el volumen lo selecciona y
-  permite abrir su ficha. Incluye **carga de modelo real glTF/GLB**
-  (`GLTFLoader`): al cargar un modelo, la cámara lo encuadra y, si los objetos
-  tienen nombres que coinciden con los TAG, la bidireccionalidad opera sobre la
-  geometría real.
+- **Visor BIM 3D** (three.js, chunk cargado on-demand) con interactividad
+  Nivel 1:
+  - **Selección cruzada bidireccional**: clic en una fila de la planilla
+    resalta + vuela la cámara al elemento; clic en la geometría resalta y
+    desplaza la fila en la planilla y abre su **Ficha**. Modo **Split**
+    (planilla + 3D lado a lado).
+  - **Color por estado** (verde aprobado/en obra · amarillo en proceso · rojo
+    retenido/rechazado · gris sin estado), aplicado a los volúmenes y al
+    modelo real; conmutable.
+  - **Vistas predefinidas**: Planta, Isométrica, Norte/Sur/Este/Oeste.
+  - **Herramienta de medición** punto a punto.
+  - **Carga de modelo real glTF/GLB** (`GLTFLoader`) con **campo de vínculo
+    configurable** (TAG/GUID/ObjectId…) para mapear datos ↔ geometría.
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.

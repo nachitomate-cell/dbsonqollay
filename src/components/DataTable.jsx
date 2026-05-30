@@ -5,6 +5,7 @@ import {
   Box,
   ChevronDown,
   ChevronUp,
+  Columns2,
   Columns3,
   Copy,
   Download,
@@ -97,6 +98,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [showColumns, setShowColumns] = useState(false)
   const [newField, setNewField] = useState('')
   const [editingId, setEditingId] = useState(null)
+  const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
 
   const scrollRef = useRef(null)
 
@@ -186,6 +188,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const padTop = virtualItems.length ? virtualItems[0].start : 0
   const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0
 
+  // Desplaza la planilla al elemento activo (selección cruzada desde el 3D).
+  useEffect(() => {
+    if (!activeId || (viewMode !== 'grid' && viewMode !== 'split')) return
+    const idx = filtered.findIndex((r) => r._id === activeId)
+    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: 'center' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId])
+
   const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r._id))
   const toggleRow = (id) =>
     setSelected((prev) => {
@@ -234,9 +244,16 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     window.addEventListener('mouseup', onUp)
   }
 
+  // Selección cruzada: activar resalta (y vuela el 3D); abrir ficha edita.
+  const activate = (id) => setActiveId(id)
+  const openFicha = (id) => {
+    setActiveId(id)
+    setEditingId(id)
+  }
+
   function newRecord() {
     const id = addRecord()
-    setEditingId(id)
+    openFicha(id)
   }
   function saveRecord(patch) {
     updateRecord(editingId, patch)
@@ -309,6 +326,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ViewToggle active={viewMode === 'grid'} icon={List} label="Planilla" onClick={() => setViewMode('grid')} />
               <ViewToggle active={viewMode === 'cards'} icon={LayoutGrid} label="Fichas" onClick={() => setViewMode('cards')} />
               <ViewToggle active={viewMode === 'bim'} icon={Box} label="3D" onClick={() => setViewMode('bim')} />
+              <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Split" onClick={() => setViewMode('split')} />
             </div>
 
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
@@ -425,9 +443,13 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             )}
           </div>
 
-          {/* Content: planilla o fichas */}
-          {viewMode === 'grid' ? (
-            <div ref={scrollRef} className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
+          {/* Content: planilla / fichas / 3D / split */}
+          {viewMode === 'cards' ? (
+            <CardsView rows={filtered} headers={headers} selected={selected} onToggle={toggleRow} onOpen={openFicha} />
+          ) : (
+          <div className="mx-4 mb-4 flex min-h-0 flex-1 gap-3">
+            {(viewMode === 'grid' || viewMode === 'split') && (
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
               <table className="w-max table-fixed border-separate border-spacing-0 text-sm">
                 <colgroup>
                   <col style={{ width: CHECK_W }} />
@@ -481,8 +503,9 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   {virtualItems.map((vi) => {
                     const r = filtered[vi.index]
                     const isSel = selected.has(r._id)
+                    const isActive = r._id === activeId
                     return (
-                      <tr key={r._id} onClick={() => setEditingId(r._id)} className={['group cursor-pointer transition-colors', isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
+                      <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} title="Clic: seleccionar · doble clic: abrir ficha" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
                         <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
                           <input type="checkbox" checked={isSel} onChange={() => toggleRow(r._id)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                         </td>
@@ -512,14 +535,15 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 </tbody>
               </table>
             </div>
-          ) : viewMode === 'cards' ? (
-            <CardsView rows={filtered} headers={headers} selected={selected} onToggle={toggleRow} onOpen={setEditingId} />
-          ) : (
-            <div className="mx-4 mb-4 min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
+            )}
+            {(viewMode === 'bim' || viewMode === 'split') && (
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
               <Suspense fallback={<ViewerLoading />}>
-                <BimViewer rows={filtered} headers={headers} selectedId={editingId} onSelect={setEditingId} />
+                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} />
               </Suspense>
             </div>
+            )}
+          </div>
           )}
         </div>
       )}
