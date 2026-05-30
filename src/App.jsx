@@ -5,6 +5,7 @@ import DisciplineView from './components/DisciplineView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import { datasets as baseDatasets, disciplines as baseDisciplines } from './data/disciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
+import { exportProjectToExcel } from './utils/projectExport.js'
 
 /**
  * Navegación simulada (sin router). El estado vive en App:
@@ -22,6 +23,7 @@ export default function App() {
   const [openSubs, setOpenSubs] = useState([])
   const [activeSub, setActiveSub] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('sqy-theme') || 'light')
+  const [notice, setNotice] = useState(null)
 
   const { datasets: importedDatasets, extraSubs, importFile, removeImported, importing, error } = useImportedDatasets()
 
@@ -98,6 +100,17 @@ export default function App() {
     })
   }
 
+  async function exportProject() {
+    setNotice('Generando Excel del proyecto…')
+    try {
+      const n = await exportProjectToExcel(allDatasets, disciplines)
+      setNotice(n ? `Proyecto exportado · ${n} hoja(s).` : 'No hay subcategorías con datos para exportar.')
+    } catch {
+      setNotice('No se pudo exportar el proyecto.')
+    }
+    setTimeout(() => setNotice(null), 4000)
+  }
+
   const showGrid = activeSub && tabs.some((t) => t.subcategory.id === activeSub)
 
   return (
@@ -111,7 +124,12 @@ export default function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header crumbs={crumbs} theme={theme} onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} />
+        <Header
+          crumbs={crumbs}
+          theme={theme}
+          onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          onExportProject={exportProject}
+        />
 
         <main className="min-h-0 flex-1 overflow-hidden">
           {showGrid ? (
@@ -136,6 +154,12 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {notice && (
+        <div className="fixed bottom-5 right-5 z-50 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-lg dark:border-white/10 dark:bg-ink-800 dark:text-slate-200">
+          {notice}
+        </div>
+      )}
     </div>
   )
 }
