@@ -30,6 +30,7 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
   const [modelName, setModelName] = useState(null)
   const [loadingModel, setLoadingModel] = useState(false)
   const [modelError, setModelError] = useState(null)
+  const [matchKey, setMatchKey] = useState(headers[0])
 
   const tagKey = headers[0]
   const items = useMemo(() => rows.slice(0, CAP), [rows])
@@ -187,12 +188,10 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     })
     const meshes = []
     const meshById = new Map()
-    const nameToId = new Map()
     const cols = Math.max(1, Math.ceil(Math.sqrt(items.length)))
     const statusKey = headers.find((h) => /APROB/i.test(h)) || headers.find((h) => /AVANCE|ESTADO/i.test(h))
 
     items.forEach((r, i) => {
-      nameToId.set(norm(r[tagKey]), r._id)
       const sv = String(r[statusKey] ?? '').toUpperCase()
       let color = 0x586878
       if (sv.includes('NO APROB') || sv.startsWith('E1') || sv.startsWith('E2')) color = 0xf77000
@@ -209,10 +208,16 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     })
     c.schematicMeshes = meshes
     c.meshById = meshById
-    c.nameToId = nameToId
     c.schematicGroup.visible = !c.modelGroup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, headers.join('|')])
+
+  // --- mapa identificador → fila (campo de vínculo configurable) ---
+  useEffect(() => {
+    const map = new Map()
+    items.forEach((r) => map.set(norm(r[matchKey]), r._id))
+    ctx.current.nameToId = map
+  }, [items, matchKey])
 
   // --- resalta y vuela al elemento enfocado ---
   useEffect(() => {
@@ -231,7 +236,7 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     let meshes = []
     if (c.modelGroup) {
       const row = items.find((r) => r._id === focusId)
-      const tag = norm(row?.[tagKey])
+      const tag = norm(row?.[matchKey])
       if (tag) c.modelMeshes?.forEach((m) => norm(m.name).includes(tag) && meshes.push(m))
     } else {
       const m = c.meshById?.get(focusId)
@@ -254,7 +259,7 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     box.getCenter(center)
     const size = box.getSize(new THREE.Vector3())
     c.flyTo(center, Math.max(size.x, size.y, size.z, 4) * 1.5)
-  }, [focusId, items])
+  }, [focusId, items, matchKey])
 
   useEffect(() => {
     if (selectedId) setFocusId(selectedId)
@@ -339,6 +344,19 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
             className="w-full bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200"
           />
         </div>
+        <label className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Vincular 3D por</span>
+          <select
+            value={matchKey}
+            onChange={(e) => setMatchKey(e.target.value)}
+            title="Campo cuyo valor coincide con el nombre del objeto en el modelo BIM"
+            className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200"
+          >
+            {headers.map((h) => (
+              <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
+            ))}
+          </select>
+        </label>
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
           {listItems.map((r) => (
             <button
