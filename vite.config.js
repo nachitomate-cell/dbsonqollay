@@ -9,6 +9,8 @@ export default defineConfig({
     port: 5173,
   },
   build: {
+    // Los chunks grandes (xlsx, BimViewer/three) se cargan de forma diferida.
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
         manualChunks: {
