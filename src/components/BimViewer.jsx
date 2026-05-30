@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { Box, Search } from 'lucide-react'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { Box, Loader2, Search, Upload, X } from 'lucide-react'
 
 /**
  * Visor BIM 3D ligero (WebGL / three.js) con bidireccionalidad:
@@ -9,18 +10,26 @@ import { Box, Search } from 'lucide-react'
  *  - Clic en un elemento del 3D  → se resalta y se selecciona en la lista.
  *  - Botón "Abrir ficha"         → abre la ficha de edición del elemento.
  *
- * Es una representación esquemática (un volumen por elemento) pensada como base
- * para conectar luego un modelo real (IFC/glTF o Autodesk Platform Services).
+ * Soporta dos fuentes de geometría:
+ *  - Esquemática: un volumen por elemento (por defecto, sin modelo).
+ *  - Modelo real: carga un archivo glTF/GLB; si los objetos del modelo tienen
+ *    nombres que coinciden con los TAG, la bidireccionalidad opera sobre la
+ *    geometría real (vuelo + resaltado al objeto correcto).
  *
  * props: rows (filas filtradas, con _id), headers, selectedId, onSelect(id)
  */
 const CAP = 1500
+const norm = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 export default function BimViewer({ rows, headers, selectedId, onSelect }) {
   const mountRef = useRef(null)
-  const three = useRef({})
+  const fileRef = useRef(null)
+  const ctx = useRef({})
   const [focusId, setFocusId] = useState(selectedId || null)
   const [listQuery, setListQuery] = useState('')
+  const [modelName, setModelName] = useState(null)
+  const [loadingModel, setLoadingModel] = useState(false)
+  const [modelError, setModelError] = useState(null)
 
   const tagKey = headers[0]
   const items = useMemo(() => rows.slice(0, CAP), [rows])
@@ -43,7 +52,7 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     renderer.setSize(w, h)
     mount.appendChild(renderer.domElement)
 
-    const camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 2000)
+    const camera = new THREE.PerspectiveCamera(55, w / h, 0.1, 5000)
     camera.position.set(30, 28, 38)
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -55,6 +64,9 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     dir.position.set(40, 60, 30)
     scene.add(dir)
 
+    const schematicGroup = new THREE.Group()
+    scene.add(schematicGroup)
+
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
     const target = new THREE.Vector3(0, 0, 0)
@@ -64,12 +76,12 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
 
     function setTheme() {
       const dark = document.documentElement.classList.contains('dark')
-      scene.background = new THREE.Color(dark ? 0x0c1116 : 0xeef1f4)
-      if (three.current.grid) scene.remove(three.current.grid)
-      const grid = new THREE.GridHelper(400, 80, dark ? 0x33414f : 0xc3ccd6, dark ? 0x1a232e : 0xdce2e8)
+      scene.background = new THREE.Color(dark ? 0x05080c : 0xeef1f4)
+      if (ctx.current.grid) scene.remove(ctx.current.grid)
+      const grid = new THREE.GridHelper(400, 80, dark ? 0x2a3744 : 0xc3ccd6, dark ? 0x141d27 : 0xdce2e8)
       grid.position.y = -0.6
       scene.add(grid)
-      three.current.grid = grid
+      ctx.current.grid = grid
     }
     setTheme()
 
@@ -83,13 +95,26 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     const ro = new ResizeObserver(onResize)
     ro.observe(mount)
 
+    function resolveId(object) {
+      let o = object
+      while (o) {
+        if (o.userData?.id) return o.userData.id
+        if (o.name && ctx.current.nameToId?.has(norm(o.name))) return ctx.current.nameToId.get(norm(o.name))
+        o = o.parent
+      }
+      return null
+    }
     function onClick(e) {
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(pointer, camera)
-      const hits = raycaster.intersectObjects(three.current.meshes || [], false)
-      if (hits.length) setFocusId(hits[0].object.userData.id)
+      const targets = ctx.current.modelGroup ? [ctx.current.modelGroup] : ctx.current.schematicMeshes || []
+      const hits = raycaster.intersectObjects(targets, true)
+      if (hits.length) {
+        const id = resolveId(hits[0].object)
+        if (id) setFocusId(id)
+      }
     }
     renderer.domElement.addEventListener('click', onClick)
 
@@ -105,20 +130,35 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     }
     animate()
 
-    three.current = {
-      ...three.current,
+    ctx.current = {
+      ...ctx.current,
       scene,
       renderer,
       camera,
       controls,
-      meshes: [],
+      schematicGroup,
+      schematicMeshes: [],
       meshById: new Map(),
-      flyTo: (pos) => {
+      nameToId: new Map(),
+      modelGroup: null,
+      setTheme,
+      flyTo: (pos, dist = 9) => {
         target.copy(pos)
-        camTarget.copy(pos).add(new THREE.Vector3(8, 7, 8))
+        camTarget.copy(pos).add(new THREE.Vector3(dist, dist * 0.85, dist))
         flying = true
       },
-      setTheme,
+      frame: (obj) => {
+        const box = new THREE.Box3().setFromObject(obj)
+        if (box.isEmpty()) return
+        const size = box.getSize(new THREE.Vector3())
+        const center = box.getCenter(new THREE.Vector3())
+        const maxDim = Math.max(size.x, size.y, size.z) || 10
+        const d = maxDim * 1.6
+        controls.target.copy(center)
+        camera.position.copy(center).add(new THREE.Vector3(d, d * 0.8, d))
+        camTarget.copy(camera.position)
+        target.copy(center)
+      },
     }
 
     const themeObserver = new MutationObserver(setTheme)
@@ -136,61 +176,153 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // --- (re)construye los volúmenes cuando cambian las filas ---
+  // --- (re)construye los volúmenes esquemáticos cuando cambian las filas ---
   useEffect(() => {
-    const ctx = three.current
-    if (!ctx.scene) return
-    ctx.meshes.forEach((m) => {
-      ctx.scene.remove(m)
+    const c = ctx.current
+    if (!c.scene) return
+    c.schematicMeshes.forEach((m) => {
+      c.schematicGroup.remove(m)
       m.geometry.dispose()
       m.material.dispose()
     })
     const meshes = []
     const meshById = new Map()
+    const nameToId = new Map()
     const cols = Math.max(1, Math.ceil(Math.sqrt(items.length)))
     const statusKey = headers.find((h) => /APROB/i.test(h)) || headers.find((h) => /AVANCE|ESTADO/i.test(h))
 
     items.forEach((r, i) => {
+      nameToId.set(norm(r[tagKey]), r._id)
       const sv = String(r[statusKey] ?? '').toUpperCase()
-      let color = 0x586878 // steel por defecto
-      if (sv.includes('NO APROB') || sv.startsWith('E1') || sv.startsWith('E2')) color = 0xf77000 // naranja marca
-      else if (sv.includes('APROB') || sv.startsWith('E4')) color = 0x10b981 // verde
+      let color = 0x586878
+      if (sv.includes('NO APROB') || sv.startsWith('E1') || sv.startsWith('E2')) color = 0xf77000
+      else if (sv.includes('APROB') || sv.startsWith('E4')) color = 0x10b981
 
       const geo = new THREE.BoxGeometry(1.4, 1.4, 1.4)
       const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.65 })
       const mesh = new THREE.Mesh(geo, mat)
       mesh.position.set((i % cols) * 2.4 - (cols * 2.4) / 2, 0, Math.floor(i / cols) * 2.4 - (cols * 2.4) / 2)
       mesh.userData.id = r._id
-      mesh.userData.baseColor = color
-      ctx.scene.add(mesh)
+      c.schematicGroup.add(mesh)
       meshes.push(mesh)
       meshById.set(r._id, mesh)
     })
-    ctx.meshes = meshes
-    ctx.meshById = meshById
+    c.schematicMeshes = meshes
+    c.meshById = meshById
+    c.nameToId = nameToId
+    c.schematicGroup.visible = !c.modelGroup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, headers.join('|')])
 
   // --- resalta y vuela al elemento enfocado ---
   useEffect(() => {
-    const ctx = three.current
-    if (!ctx.meshById) return
-    ctx.meshes?.forEach((m) => {
-      m.material.emissive?.setHex(0x000000)
-      m.scale.setScalar(1)
-    })
-    const mesh = focusId && ctx.meshById.get(focusId)
-    if (mesh) {
-      mesh.material.emissive?.setHex(0xf77000)
-      mesh.material.emissiveIntensity = 0.6
-      mesh.scale.setScalar(1.35)
-      ctx.flyTo?.(mesh.position)
+    const c = ctx.current
+    if (!c.scene) return
+    // reset resaltado previo
+    if (c.lastHi) {
+      c.lastHi.forEach((m) => {
+        m.material.emissive?.setHex(m.userData._emi ?? 0x000000)
+        if (m.userData.id) m.scale.setScalar(1)
+      })
     }
+    c.lastHi = []
+    if (!focusId) return
+
+    let meshes = []
+    if (c.modelGroup) {
+      const row = items.find((r) => r._id === focusId)
+      const tag = norm(row?.[tagKey])
+      if (tag) c.modelMeshes?.forEach((m) => norm(m.name).includes(tag) && meshes.push(m))
+    } else {
+      const m = c.meshById?.get(focusId)
+      if (m) meshes = [m]
+    }
+    if (!meshes.length) return
+
+    const center = new THREE.Vector3()
+    const box = new THREE.Box3()
+    meshes.forEach((m) => {
+      if (m.material.emissive) {
+        m.userData._emi = m.material.emissive.getHex()
+        m.material.emissive.setHex(0xf77000)
+        m.material.emissiveIntensity = 0.7
+      }
+      if (m.userData.id) m.scale.setScalar(1.35)
+      box.expandByObject(m)
+    })
+    c.lastHi = meshes
+    box.getCenter(center)
+    const size = box.getSize(new THREE.Vector3())
+    c.flyTo(center, Math.max(size.x, size.y, size.z, 4) * 1.5)
   }, [focusId, items])
 
   useEffect(() => {
     if (selectedId) setFocusId(selectedId)
   }, [selectedId])
+
+  // --- carga de modelo glTF/GLB ---
+  function addModel(root, name) {
+    const c = ctx.current
+    if (c.modelGroup) {
+      c.scene.remove(c.modelGroup)
+      c.modelGroup.traverse((o) => {
+        if (o.isMesh) {
+          o.geometry?.dispose()
+          o.material?.dispose?.()
+        }
+      })
+    }
+    const modelMeshes = []
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.material = o.material.clone() // material propio para resaltar sin sangrado
+        modelMeshes.push(o)
+      }
+    })
+    c.scene.add(root)
+    c.modelGroup = root
+    c.modelMeshes = modelMeshes
+    c.schematicGroup.visible = false
+    c.frame(root)
+    setModelName(name)
+  }
+  async function loadModelFile(file) {
+    setLoadingModel(true)
+    setModelError(null)
+    try {
+      const loader = new GLTFLoader()
+      const isGlb = /\.glb$/i.test(file.name)
+      const data = isGlb ? await file.arrayBuffer() : await file.text()
+      loader.parse(
+        data,
+        '',
+        (gltf) => {
+          addModel(gltf.scene, file.name)
+          setLoadingModel(false)
+        },
+        () => {
+          setModelError('No se pudo cargar el modelo.')
+          setLoadingModel(false)
+        },
+      )
+    } catch {
+      setModelError('Archivo inválido.')
+      setLoadingModel(false)
+    }
+  }
+  function clearModel() {
+    const c = ctx.current
+    if (c.modelGroup) {
+      c.scene.remove(c.modelGroup)
+      c.modelGroup.traverse((o) => o.isMesh && (o.geometry?.dispose(), o.material?.dispose?.()))
+      c.modelGroup = null
+      c.modelMeshes = []
+    }
+    c.schematicGroup.visible = true
+    c.frame(c.schematicGroup)
+    setModelName(null)
+    setModelError(null)
+  }
 
   const focusRow = focusId ? items.find((r) => r._id === focusId) : null
 
@@ -229,6 +361,26 @@ export default function BimViewer({ rows, headers, selectedId, onSelect }) {
       {/* Canvas */}
       <div className="relative min-w-0 flex-1">
         <div ref={mountRef} className="h-full w-full" />
+
+        {/* Cargar modelo */}
+        <div className="absolute left-4 top-4 flex items-center gap-2">
+          <input ref={fileRef} type="file" accept=".glb,.gltf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) loadModelFile(f); e.target.value = '' }} />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={loadingModel}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 disabled:opacity-60 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200 dark:hover:text-accent"
+          >
+            {loadingModel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {modelName ? 'Cambiar modelo' : 'Cargar modelo (.glb/.gltf)'}
+          </button>
+          {modelName && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 px-2 py-1.5 text-xs text-slate-600 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300">
+              <span className="max-w-[140px] truncate">{modelName}</span>
+              <button onClick={clearModel} title="Quitar modelo" className="text-slate-400 hover:text-rose-500"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {modelError && <span className="rounded-lg bg-rose-500/90 px-2 py-1.5 text-xs font-medium text-white shadow">{modelError}</span>}
+        </div>
 
         {/* Tarjeta del elemento enfocado */}
         {focusRow && (

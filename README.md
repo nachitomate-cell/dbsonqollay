@@ -43,7 +43,10 @@ como favicon (`public/favicon.png`).
 - **Visor BIM 3D** (three.js, chunk cargado on-demand): vista "3D" con un
   volumen por elemento y **bidireccionalidad** — clic en un TAG de la lista
   vuela la cámara y resalta el elemento; clic en el volumen lo selecciona y
-  permite abrir su ficha.
+  permite abrir su ficha. Incluye **carga de modelo real glTF/GLB**
+  (`GLTFLoader`): al cargar un modelo, la cámara lo encuadra y, si los objetos
+  tienen nombres que coinciden con los TAG, la bidireccionalidad opera sobre la
+  geometría real.
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.
