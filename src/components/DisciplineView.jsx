@@ -25,8 +25,9 @@ import Icon from './Icon.jsx'
  *  - discipline, onOpenSubcategory(subId)
  *  - onImport(file), importing, importError, onRemoveImported(subId)
  */
-export default function DisciplineView({ discipline, onOpenSubcategory, onImport, importing, importError, onRemoveImported, createdSheets, onCreateSheet }) {
+export default function DisciplineView({ discipline, onOpenSubcategory, onImport, importing, importError, onRemoveImported, createdSheets, onCreateSheet, columnTemplates = [], defaultColumns = [] }) {
   const [selected, setSelected] = useState(() => new Set())
+  const [creatingFor, setCreatingFor] = useState(null) // subId para el que se elige plantilla
   const fileInput = useRef(null)
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
 
           <div className="mt-3 space-y-3">
             {subs.map((sc) => {
-              const created = createdSheets?.has(sc.id)
+              const created = !!createdSheets?.[sc.id]
               const openable = (sc.count || 0) > 0 || created
               return (
                 <SubcategoryCard
@@ -80,7 +81,7 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
                   selected={selected.has(sc.id)}
                   onToggleSelect={() => toggle(sc.id)}
                   onOpen={() => openable && onOpenSubcategory(sc.id)}
-                  onCreateSheet={() => onCreateSheet?.(sc.id)}
+                  onCreateSheet={() => setCreatingFor(sc.id)}
                   onRemove={sc.imported ? () => onRemoveImported?.(sc.id) : null}
                 />
               )
@@ -118,6 +119,61 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
             </button>
             {importError && <p className="mt-2 text-xs font-medium text-rose-500">{importError}</p>}
           </div>
+        </div>
+      </div>
+
+      {creatingFor && (
+        <TemplatePicker
+          templates={columnTemplates}
+          defaultColumns={defaultColumns}
+          onCancel={() => setCreatingFor(null)}
+          onConfirm={(cols) => { onCreateSheet?.(creatingFor, cols); setCreatingFor(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Modal para elegir las columnas de una planilla nueva: por defecto o copiando
+// las de otra subcategoría que ya tenga datos.
+function TemplatePicker({ templates, defaultColumns, onCancel, onConfirm }) {
+  const options = [{ id: '__default__', label: 'Columnas por defecto (AWP/BIM)', columns: defaultColumns }, ...templates]
+  const [choice, setChoice] = useState('__default__')
+  const selected = options.find((o) => o.id === choice) || options[0]
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onCancel()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60" onClick={onCancel} />
+      <div className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Crear planilla — elegir columnas</h3>
+          <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">Usa las columnas por defecto o copia las de otra subcategoría con datos.</p>
+          <div className="space-y-2">
+            {options.map((o) => (
+              <label key={o.id} className={['flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition', choice === o.id ? 'border-brand-400 bg-brand-50/60 dark:border-accent/50 dark:bg-accent/10' : 'border-slate-200 hover:border-brand-300 dark:border-white/10'].join(' ')}>
+                <input type="radio" name="tpl" checked={choice === o.id} onChange={() => setChoice(o.id)} className="mt-0.5 accent-brand-500 dark:accent-accent" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-slate-800 dark:text-white">{o.label}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{o.columns.length} columnas · {o.columns.slice(0, 5).map((c) => c.replace(/_/g, ' ')).join(', ')}{o.columns.length > 5 ? '…' : ''}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
+          <button onClick={onCancel} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+          <button onClick={() => onConfirm(selected.columns)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+            <Plus className="h-4 w-4" /> Crear planilla
+          </button>
         </div>
       </div>
     </div>

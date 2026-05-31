@@ -404,8 +404,12 @@ export const defaultColumns = [
   'IWP',
 ]
 
-/** Dataset vacío con columnas por defecto (para crear una planilla nueva). */
-export const emptyDataset = () => ({ headers: [...defaultColumns], rows: [], count: 0 })
+/** Dataset vacío con columnas (las dadas o las por defecto) para una planilla nueva. */
+export const emptyDataset = (columns) => ({
+  headers: columns && columns.length ? [...columns] : [...defaultColumns],
+  rows: [],
+  count: 0,
+})
 
 /** Devuelve { discipline, subcategory } a partir de un id de subcategoría. */
 export function findSubcategory(subId) {
