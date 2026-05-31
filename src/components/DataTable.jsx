@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowUpDown,
   Box,
+  Boxes,
   ChevronDown,
   ChevronUp,
   Columns2,
@@ -29,6 +30,7 @@ import {
 
 // El visor BIM 3D (y three.js) se cargan en un chunk aparte, solo al abrir la vista 3D.
 const BimViewer = lazy(() => import('./BimViewer.jsx'))
+const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
 
@@ -81,6 +83,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
   const [activeTab, setActiveTab] = useState('elements')
   const [viewMode, setViewMode] = useState('grid') // 'grid' (planilla) | 'cards' (fichas)
+  const [engine, setEngine] = useState('three') // motor 3D: 'three' (esquemático/glTF) | 'aps' (modelo real)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
@@ -329,6 +332,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Split" onClick={() => setViewMode('split')} />
             </div>
 
+            {/* Motor 3D: esquemático/glTF (sin backend) o APS (modelo real NWD/RVT/IFC) */}
+            {(viewMode === 'bim' || viewMode === 'split') && (
+              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
+                <ViewToggle active={engine === 'three'} icon={Box} label="3D propio" onClick={() => setEngine('three')} />
+                <ViewToggle active={engine === 'aps'} icon={Boxes} label="APS (real)" onClick={() => setEngine('aps')} />
+              </div>
+            )}
+
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
               <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
@@ -539,7 +550,17 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             {(viewMode === 'bim' || viewMode === 'split') && (
             <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
               <Suspense fallback={<ViewerLoading />}>
+                {engine === 'aps' ? (
+                <ApsViewer
+                  selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
+                  onSelect={(tag) => {
+                    const row = filtered.find((r) => String(r[headers[0]]) === String(tag))
+                    if (row) openFicha(row._id)
+                  }}
+                />
+              ) : (
                 <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} />
+              )}
               </Suspense>
             </div>
             )}

@@ -66,6 +66,11 @@ como favicon (`public/favicon.png`).
   - **Simulación 4D**: timeline en la parte inferior que revela los elementos
     según su fecha de instalación planificada (campo de fecha auto-detectado,
     p. ej. ETA), con reproducción play/pausa.
+  - **Motor APS (modelo real)**: alternar entre el visor propio (three.js,
+    esquemático/glTF) y el **APS Viewer** de Autodesk para ver modelos reales
+    **NWD/RVT/IFC** traducidos. Requiere el backend de `server/` con
+    credenciales APS (ver `server/README.md`). El SDK se carga del CDN, no
+    infla el bundle.
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.
