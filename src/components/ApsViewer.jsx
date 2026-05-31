@@ -40,6 +40,18 @@ function loadSdk() {
   return sdkPromise
 }
 
+// Agrupa las propiedades del objeto por su "displayCategory" (como en Navisworks).
+function groupProps(properties) {
+  const map = new Map()
+  for (const p of properties) {
+    if (p.hidden || p.displayValue === '' || p.displayValue == null) continue
+    const cat = p.displayCategory || 'General'
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat).push({ name: p.displayName, value: String(p.displayValue), units: p.units || '' })
+  }
+  return Array.from(map.entries()).map(([category, items]) => ({ category, items }))
+}
+
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
@@ -54,6 +66,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
   const awpFields = useMemo(() => headers.filter((h) => /CWA|CWP|EWP|PWP|IWP|SWP|WBS|AWP/i.test(h)), [headers])
   const [awpField, setAwpField] = useState('')
   const [awpValue, setAwpValue] = useState('')
+  const [objProps, setObjProps] = useState(null) // propiedades del objeto pinchado
+  const [showProps, setShowProps] = useState(true)
 
   useEffect(() => { if (!awpField && awpFields.length) setAwpField(awpFields[0]) }, [awpFields, awpField])
 
@@ -102,8 +116,16 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
         viewer.setTheme(document.documentElement.classList.contains('dark') ? 'dark-theme' : 'light-theme')
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, (e) => {
           const id = e.dbIdArray?.[0]
-          if (id == null) return
-          viewer.getProperties(id, (props) => onSelectRef.current?.(props.name || String(id)))
+          if (id == null) { setObjProps(null); return }
+          viewer.getProperties(id, (props) => {
+            onSelectRef.current?.(props.name || String(id))
+            // Propiedades del objeto para mostrarlas dentro de Sonqollay.
+            setObjProps({
+              name: props.name || `Objeto ${id}`,
+              dbId: id,
+              groups: groupProps(props.properties || []),
+            })
+          })
         })
         viewerRef.current = viewer
         setStatus(urn ? 'translating' : 'ready')
@@ -297,6 +319,40 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
             <button key={t} onClick={() => onSelect?.(t)} className="block w-full truncate rounded px-1.5 py-1 text-left font-mono text-[11px] text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5">{t}</button>
           ))}
         </div>
+      )}
+
+      {/* Panel de propiedades del objeto pinchado */}
+      {ready && objProps && showProps && (
+        <div className="absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+          <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-500">Propiedades del objeto</p>
+              <p className="truncate text-sm font-bold text-slate-800 dark:text-white" title={objProps.name}>{objProps.name}</p>
+            </div>
+            <button onClick={() => setShowProps(false)} className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            {objProps.groups.length === 0 && <p className="py-3 text-center text-xs text-slate-400">Este objeto no tiene propiedades.</p>}
+            {objProps.groups.map((g) => (
+              <div key={g.category} className="mb-3">
+                <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{g.category}</p>
+                <dl className="space-y-0.5">
+                  {g.items.map((it, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-2 text-xs">
+                      <dt className="shrink-0 text-slate-500 dark:text-slate-400" title={it.name}>{it.name}</dt>
+                      <dd className="min-w-0 truncate text-right font-medium text-slate-700 dark:text-slate-200" title={`${it.value} ${it.units}`}>{it.value}{it.units ? ` ${it.units}` : ''}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {ready && objProps && !showProps && (
+        <button onClick={() => setShowProps(true)} className="absolute bottom-3 left-3 z-10 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200">
+          Ver propiedades
+        </button>
       )}
 
       {/* Estado / errores */}
