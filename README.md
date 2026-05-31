@@ -70,7 +70,10 @@ como favicon (`public/favicon.png`).
     esquemático/glTF) y el **APS Viewer** de Autodesk para ver modelos reales
     **NWD/RVT/IFC** traducidos. Requiere el backend de `server/` con
     credenciales APS (ver `server/README.md`). El SDK se carga del CDN, no
-    infla el bundle.
+    infla el bundle. Incluye los comportamientos de la lámina "Uso de BIM":
+    **aislar por CWA/CWP/IWP/SWP** (resto del modelo en blanco con ~75% de
+    transparencia, paquete resaltado), **exportar imagen en 16:9** y **listado
+    de componentes** del paquete.
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.

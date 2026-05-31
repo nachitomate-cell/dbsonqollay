@@ -552,6 +552,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <Suspense fallback={<ViewerLoading />}>
                 {engine === 'aps' ? (
                 <ApsViewer
+                  rows={filtered}
+                  headers={headers}
                   selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
                   onSelect={(tag) => {
                     const row = filtered.find((r) => String(r[headers[0]]) === String(tag))
