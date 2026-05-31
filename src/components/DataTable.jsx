@@ -85,7 +85,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
   const [activeTab, setActiveTab] = useState('elements')
   const [viewMode, setViewMode] = useState('grid') // 'grid' (planilla) | 'cards' (fichas)
-  const [engine, setEngine] = useState('three') // motor 3D: 'three' (esquemático/glTF) | 'aps' (modelo real)
+  const [engine, setEngine] = useState(() => localStorage.getItem('sqy-3d-engine') || 'three') // 'three' | 'aps'
+  useEffect(() => { localStorage.setItem('sqy-3d-engine', engine) }, [engine])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
