@@ -7,6 +7,7 @@ import {
   Info,
   LayoutGrid,
   Loader2,
+  Plus,
   Trash2,
   TriangleAlert,
   Upload,
@@ -24,7 +25,7 @@ import Icon from './Icon.jsx'
  *  - discipline, onOpenSubcategory(subId)
  *  - onImport(file), importing, importError, onRemoveImported(subId)
  */
-export default function DisciplineView({ discipline, onOpenSubcategory, onImport, importing, importError, onRemoveImported }) {
+export default function DisciplineView({ discipline, onOpenSubcategory, onImport, importing, importError, onRemoveImported, createdSheets, onCreateSheet }) {
   const [selected, setSelected] = useState(() => new Set())
   const fileInput = useRef(null)
 
@@ -67,16 +68,23 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
           <SelectAllCard checked={allSelected} onToggle={toggleAll} />
 
           <div className="mt-3 space-y-3">
-            {subs.map((sc) => (
-              <SubcategoryCard
-                key={sc.id}
-                sub={sc}
-                selected={selected.has(sc.id)}
-                onToggleSelect={() => toggle(sc.id)}
-                onOpen={() => (sc.count || 0) > 0 && onOpenSubcategory(sc.id)}
-                onRemove={sc.imported ? () => onRemoveImported?.(sc.id) : null}
-              />
-            ))}
+            {subs.map((sc) => {
+              const created = createdSheets?.has(sc.id)
+              const openable = (sc.count || 0) > 0 || created
+              return (
+                <SubcategoryCard
+                  key={sc.id}
+                  sub={sc}
+                  created={created}
+                  openable={openable}
+                  selected={selected.has(sc.id)}
+                  onToggleSelect={() => toggle(sc.id)}
+                  onOpen={() => openable && onOpenSubcategory(sc.id)}
+                  onCreateSheet={() => onCreateSheet?.(sc.id)}
+                  onRemove={sc.imported ? () => onRemoveImported?.(sc.id) : null}
+                />
+              )
+            })}
           </div>
         </div>
 
@@ -150,7 +158,7 @@ function SelectAllCard({ checked, onToggle }) {
   )
 }
 
-function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onRemove }) {
+function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onCreateSheet, onRemove, created, openable }) {
   const hasData = (sub.count || 0) > 0
   return (
     <div
@@ -159,7 +167,7 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onRemove }) {
         selected
           ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/[0.06]'
           : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/70',
-        hasData ? 'hover:shadow-md dark:hover:shadow-card' : '',
+        openable ? 'hover:shadow-md dark:hover:shadow-card' : '',
       ].join(' ')}
     >
       <button onClick={onToggleSelect} className="relative shrink-0" title={selected ? 'Quitar de la selección' : 'Agregar a la selección'}>
@@ -169,7 +177,7 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onRemove }) {
         </div>
       </button>
 
-      <button onClick={onOpen} disabled={!hasData} className={['min-w-0 flex-1 text-left', hasData ? 'cursor-pointer' : 'cursor-default'].join(' ')}>
+      <button onClick={onOpen} disabled={!openable} className={['min-w-0 flex-1 text-left', openable ? 'cursor-pointer' : 'cursor-default'].join(' ')}>
         <div className="flex items-center gap-2">
           <h3 className="truncate font-semibold text-slate-800 dark:text-white">{sub.name}</h3>
           {hasData && (
@@ -182,6 +190,11 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onRemove }) {
               Importado
             </span>
           )}
+          {!hasData && created && (
+            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              Planilla nueva
+            </span>
+          )}
         </div>
         <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{sub.description}</p>
       </button>
@@ -191,9 +204,17 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onRemove }) {
           <X className="h-4 w-4" />
         </button>
       )}
-      {hasData && (
+      {openable ? (
         <button onClick={onOpen} className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-white/5 dark:hover:text-accent" title="Abrir grilla de datos">
           <ArrowUpRight className="h-5 w-5" />
+        </button>
+      ) : (
+        <button
+          onClick={onCreateSheet}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-100 dark:border-accent/40 dark:bg-accent/10 dark:text-accent"
+          title="Crear una planilla vacía con columnas para esta subcategoría"
+        >
+          <Plus className="h-3.5 w-3.5" /> Crear planilla
         </button>
       )}
     </div>

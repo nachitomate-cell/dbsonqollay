@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
-import { datasets as baseDatasets, disciplines as baseDisciplines } from './data/disciplines.js'
+import { datasets as baseDatasets, disciplines as baseDisciplines, emptyDataset } from './data/disciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 
@@ -24,6 +24,14 @@ export default function App() {
   const [activeSub, setActiveSub] = useState(null)
   const [theme, setTheme] = useState(() => localStorage.getItem('sqy-theme') || 'light')
   const [notice, setNotice] = useState(null)
+  // Subcategorías sin datos para las que el usuario creó una planilla vacía.
+  // Se persiste el set de ids para que sobreviva recargas.
+  const [createdSheets, setCreatedSheets] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('sqy-created-sheets')) || []) } catch { return new Set() }
+  })
+  useEffect(() => {
+    localStorage.setItem('sqy-created-sheets', JSON.stringify([...createdSheets]))
+  }, [createdSheets])
 
   const { datasets: importedDatasets, extraSubs, importFile, removeImported, importing, error } = useImportedDatasets()
 
@@ -47,7 +55,14 @@ export default function App() {
   const findSub = (subId) => {
     for (const d of disciplines) {
       const s = d.subcategories.find((sc) => sc.id === subId)
-      if (s) return { discipline: d, subcategory: s }
+      if (s) {
+        // Si no tiene datos pero el usuario creó la planilla, le damos un
+        // dataKey sintético para que opere como una planilla editable vacía.
+        if (!s.dataKey && createdSheets.has(s.id)) {
+          return { discipline: d, subcategory: { ...s, dataKey: `new-${s.id}`, created: true } }
+        }
+        return { discipline: d, subcategory: s }
+      }
     }
     return null
   }
@@ -69,7 +84,12 @@ export default function App() {
     .map((id) => {
       const info = findSub(id)
       if (!info) return null
-      return { ...info, dataset: allDatasets[info.subcategory.dataKey] }
+      // Planilla nueva (sin datos base): se entrega un dataset vacío con
+      // columnas por defecto; useEditableDataset lo persiste desde ahí.
+      const dataset = info.subcategory.created
+        ? emptyDataset()
+        : allDatasets[info.subcategory.dataKey]
+      return { ...info, dataset }
     })
     .filter(Boolean)
 
@@ -91,6 +111,11 @@ export default function App() {
   function openSubcategory(subId) {
     setOpenSubs((prev) => (prev.includes(subId) ? prev : [...prev, subId]))
     setActiveSub(subId)
+  }
+  // Crear una planilla nueva en una subcategoría sin datos y abrirla.
+  function createSheet(subId) {
+    setCreatedSheets((prev) => new Set(prev).add(subId))
+    openSubcategory(subId)
   }
   function closeTab(subId) {
     setOpenSubs((prev) => {
@@ -149,6 +174,8 @@ export default function App() {
                 importing={importing}
                 importError={error}
                 onRemoveImported={removeImported}
+                createdSheets={createdSheets}
+                onCreateSheet={createSheet}
               />
             </div>
           )}

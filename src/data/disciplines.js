@@ -381,6 +381,32 @@ export const disciplines = [
 /** Devuelve la disciplina por id. */
 export const getDiscipline = (id) => disciplines.find((d) => d.id === id) || null
 
+/**
+ * Columnas por defecto para una planilla nueva (subcategoría sin datos).
+ * Siguen el modelo de ingeniería AWP/BIM usado en el resto de la plataforma.
+ */
+export const defaultColumns = [
+  'TAG',
+  'DESCRIPCIÓN_GENERAL',
+  'DESCRIPCIÓN_COMPLEMENTARIA',
+  'ESTADO_APROBACIÓN',
+  'ESTADO_AVANCE',
+  'ESPECIALIDAD',
+  'COSTO',
+  'PESO',
+  'SECTOR_OBRA',
+  'CONTRATO_CONSTRUCCIÓN',
+  'WBS',
+  'CWA',
+  'CWP',
+  'EWP',
+  'PWP',
+  'IWP',
+]
+
+/** Dataset vacío con columnas por defecto (para crear una planilla nueva). */
+export const emptyDataset = () => ({ headers: [...defaultColumns], rows: [], count: 0 })
+
 /** Devuelve { discipline, subcategory } a partir de un id de subcategoría. */
 export function findSubcategory(subId) {
   for (const d of disciplines) {

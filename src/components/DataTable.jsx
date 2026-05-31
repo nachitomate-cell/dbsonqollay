@@ -101,7 +101,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       return {}
     }
   })
-  const [showColumns, setShowColumns] = useState(false)
+  // Planilla recién creada (vacía): abre el gestor de columnas para guiar al usuario.
+  const [showColumns, setShowColumns] = useState(() => (dataset?.rows?.length ?? 0) === 0)
   const [newField, setNewField] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
@@ -571,7 +572,11 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                     <tr aria-hidden><td colSpan={headers.length + 1} style={{ height: padBottom }} className="p-0" /></tr>
                   )}
                   {filtered.length === 0 && (
-                    <tr><td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">No se encontraron elementos con los filtros actuales.</td></tr>
+                    <tr><td colSpan={headers.length + 1} className="px-4 py-16 text-center text-sm text-slate-400 dark:text-slate-500">
+                      {rows.length === 0
+                        ? 'Planilla vacía. Ajusta las columnas con “Campos / columnas” y agrega registros con “Nuevo registro” (＋).'
+                        : 'No se encontraron elementos con los filtros actuales.'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
