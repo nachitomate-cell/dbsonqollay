@@ -29,7 +29,15 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const BUCKET = (process.env.APS_BUCKET || 'sonqollay-models').toLowerCase()
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }))
+const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGIN || '')
+  .split(',').map(o => o.trim()).filter(Boolean)
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) return cb(null, true)
+    cb(new Error(`CORS: origen no permitido → ${origin}`))
+  },
+}))
 app.use(express.json())
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 500 * 1024 * 1024 } })
