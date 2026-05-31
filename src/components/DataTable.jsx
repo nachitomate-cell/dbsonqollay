@@ -592,6 +592,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   headers={headers}
                   selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
                   onSelect={handleApsSelect}
+                  dataKey={subcategory.dataKey}
                 />
               ) : (
                 <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} />

@@ -52,14 +52,31 @@ function groupProps(properties) {
   return Array.from(map.entries()).map(([category, items]) => ({ category, items }))
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default' }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
   const ctxRef = useRef({}) // estado interno persistente (initStarted, urn cargado…)
   const [status, setStatus] = useState('idle') // idle|loadingSdk|uploading|translating|ready|error
   const [message, setMessage] = useState('')
-  const [urn, setUrn] = useState(import.meta.env.VITE_APS_URN || '')
+  // El último modelo cargado se recuerda por subcategoría (localStorage), así
+  // volver al 3D no obliga a re-subir ni re-traducir: el modelo sigue en
+  // Autodesk y se reabre directo por su urn.
+  const storeKey = `sqy-aps-model-${dataKey}`
+  const restored = (() => {
+    try { return JSON.parse(localStorage.getItem(storeKey)) || {} } catch { return {} }
+  })()
+  const [urn, setUrn] = useState(restored.urn || import.meta.env.VITE_APS_URN || '')
+  const [modelName, setModelName] = useState(restored.name || null)
+
+  function rememberModel(u, name) {
+    try { localStorage.setItem(storeKey, JSON.stringify({ urn: u, name: name || null })) } catch { /* ignore */ }
+  }
+  function forgetModel() {
+    try { localStorage.removeItem(storeKey) } catch { /* ignore */ }
+    setUrn(''); setModelName(null)
+    setStatus('ready')
+  }
 
   // Filtro AWP
   const tagKey = headers[0]
@@ -171,7 +188,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
         if (!r.ok) throw new Error('Falló la subida. ¿Está el backend corriendo y con credenciales?')
         return r.json()
       })
-      setUrn(newUrn); setMessage('Traduciendo modelo (puede tardar varios minutos)…')
+      setUrn(newUrn); setModelName(file.name); rememberModel(newUrn, file.name)
+      setMessage('Traduciendo modelo (puede tardar varios minutos)…')
       pollStatus(newUrn)
     } catch (e) { setStatus('error'); setMessage(e.message) }
   }
@@ -292,6 +310,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             {urn ? 'Cambiar modelo' : 'Subir modelo (NWD/RVT/IFC…)'}
           </button>
+          {urn && modelName && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 px-2 py-1.5 text-xs text-slate-600 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300">
+              <span className="max-w-[140px] truncate" title={modelName}>{modelName}</span>
+              <button onClick={forgetModel} title="Quitar modelo" className="text-slate-400 hover:text-rose-500"><X className="h-3 w-3" /></button>
+            </span>
+          )}
         </div>
 
         {ready && urn && (
