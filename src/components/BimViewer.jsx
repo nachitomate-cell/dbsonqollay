@@ -344,6 +344,10 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
       themeObserver.disconnect(); ro.disconnect()
       renderer.domElement.removeEventListener('click', onClick)
       controls.dispose(); renderer.dispose()
+      // Libera el contexto WebGL de la GPU. Sin esto, abrir/cerrar el visor
+      // varias veces agota el límite de contextos (~16) del navegador y el
+      // siguiente WebGLRenderer falla ("addEventListener is not a function").
+      renderer.forceContextLoss?.()
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
