@@ -15,6 +15,8 @@ import {
   LayoutGrid,
   Link2,
   List,
+  Maximize2,
+  Minimize2,
   Loader2,
   Pencil,
   PieChart,
@@ -104,6 +106,21 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
 
   const scrollRef = useRef(null)
+  const viewerWrapRef = useRef(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Pantalla completa del contenedor del visor 3D (sirve para ambos motores).
+  function toggleFullscreen() {
+    const el = viewerWrapRef.current
+    if (!el) return
+    if (document.fullscreenElement) document.exitFullscreen?.()
+    else el.requestFullscreen?.()
+  }
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -548,7 +565,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             </div>
             )}
             {(viewMode === 'bim' || viewMode === 'split') && (
-            <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-white/10">
+            <div ref={viewerWrapRef} className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-900">
+              <button
+                onClick={toggleFullscreen}
+                title={isFullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
+                className="absolute bottom-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white/90 text-slate-600 shadow backdrop-blur transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300 dark:hover:text-accent"
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
               <Suspense fallback={<ViewerLoading />}>
                 {engine === 'aps' ? (
                 <ApsViewer
