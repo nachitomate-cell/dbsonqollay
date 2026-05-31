@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowUpDown,
@@ -270,6 +270,18 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     setActiveId(id)
     setEditingId(id)
   }
+
+  // Handler estable para el visor APS (evita re-renders por nueva fn cada render).
+  const filteredRef = useRef(filtered)
+  filteredRef.current = filtered
+  const handleApsSelect = useCallback((tag) => {
+    const row = filteredRef.current.find((r) => String(r[headers[0]]) === String(tag))
+    if (row) {
+      setActiveId(row._id)
+      setEditingId(row._id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers[0]])
 
   function newRecord() {
     const id = addRecord()
@@ -579,10 +591,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   rows={filtered}
                   headers={headers}
                   selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
-                  onSelect={(tag) => {
-                    const row = filtered.find((r) => String(r[headers[0]]) === String(tag))
-                    if (row) openFicha(row._id)
-                  }}
+                  onSelect={handleApsSelect}
                 />
               ) : (
                 <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} />

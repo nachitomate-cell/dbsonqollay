@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, Layers, Loader2, Upload, X } from 'lucide-react'
 
 /**
@@ -40,10 +40,11 @@ function loadSdk() {
   return sdkPromise
 }
 
-export default function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
+  const ctxRef = useRef({}) // estado interno persistente (initStarted, urn cargado…)
   const [status, setStatus] = useState('idle') // idle|loadingSdk|uploading|translating|ready|error
   const [message, setMessage] = useState('')
   const [urn, setUrn] = useState(import.meta.env.VITE_APS_URN || '')
@@ -70,9 +71,15 @@ export default function ApsViewer({ rows = [], headers = [], selectedTag, onSele
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, awpField, awpValue])
 
-  // ---- init SDK + viewer ----
+  // Callback siempre fresco sin re-disparar efectos.
+  const onSelectRef = useRef(onSelect)
+  useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
+
+  // ---- init SDK + viewer (una sola vez, a prueba de StrictMode) ----
   useEffect(() => {
     let cancelled = false
+    if (ctxRef.current.initStarted) return // evita doble inicialización (dev StrictMode)
+    ctxRef.current.initStarted = true
     ;(async () => {
       try {
         setStatus('loadingSdk')
@@ -89,14 +96,14 @@ export default function ApsViewer({ rows = [], headers = [], selectedTag, onSele
             resolve,
           )
         })
-        if (cancelled) return
+        if (cancelled || !mountRef.current) return
         const viewer = new window.Autodesk.Viewing.GuiViewer3D(mountRef.current)
         viewer.start()
         viewer.setTheme(document.documentElement.classList.contains('dark') ? 'dark-theme' : 'light-theme')
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, (e) => {
           const id = e.dbIdArray?.[0]
           if (id == null) return
-          viewer.getProperties(id, (props) => onSelect?.(props.name || String(id)))
+          viewer.getProperties(id, (props) => onSelectRef.current?.(props.name || String(id)))
         })
         viewerRef.current = viewer
         setStatus(urn ? 'translating' : 'ready')
@@ -105,7 +112,12 @@ export default function ApsViewer({ rows = [], headers = [], selectedTag, onSele
         if (!cancelled) { setStatus('error'); setMessage(e.message) }
       }
     })()
-    return () => { cancelled = true; viewerRef.current?.finish?.(); viewerRef.current = null }
+    return () => {
+      cancelled = true
+      // Solo destruye el visor al desmontar de verdad (no en el doble-montaje de dev).
+      if (viewerRef.current) { viewerRef.current.finish?.(); viewerRef.current = null }
+      ctxRef.current.initStarted = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -225,10 +237,12 @@ export default function ApsViewer({ rows = [], headers = [], selectedTag, onSele
     })
   }
 
-  // cross-selection: enfocar el TAG activo de la planilla
+  // cross-selection: enfocar el TAG activo de la planilla (solo si cambió).
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !selectedTag || status !== 'ready') return
+    if (ctxRef.current.lastTag === selectedTag) return
+    ctxRef.current.lastTag = selectedTag
     findDbIds([selectedTag]).then((ids) => { if (ids.length) { viewer.isolate(ids); viewer.fitToView(ids) } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
@@ -310,3 +324,6 @@ export default function ApsViewer({ rows = [], headers = [], selectedTag, onSele
     </div>
   )
 }
+
+// memo: evita re-renders del visor por cambios del padre que no afectan al 3D.
+export default memo(ApsViewer)
