@@ -1,6 +1,7 @@
 /**
  * Exportación de todo el proyecto a un único Excel multi-hoja: una hoja por
- * cada subcategoría con datos (incluyendo importadas). Refleja las ediciones
+ * cada subcategoría con datos (incluyendo importadas y las planillas nuevas
+ * creadas por el usuario que ya tengan registros). Refleja las ediciones
  * guardadas en localStorage (`sqy-ds-<dataKey>`) cuando existen; si no, usa el
  * dataset base. `xlsx` se importa de forma dinámica para no inflar el bundle.
  */
@@ -19,6 +20,15 @@ function resolveWorking(dataKey, base) {
     /* ignore */
   }
   return base ? { headers: base.headers, rows: base.rows } : null
+}
+
+// Ids de subcategorías con planilla nueva creada por el usuario (persistido).
+function createdSheetIds() {
+  try {
+    return Object.keys(JSON.parse(localStorage.getItem('sqy-created-sheets-v2')) || {})
+  } catch {
+    return []
+  }
 }
 
 // Nombre de hoja válido para Excel: ≤31 chars, sin : \ / ? * [ ], único.
@@ -42,8 +52,12 @@ export async function exportProjectToExcel(datasets, disciplines) {
 
   for (const d of disciplines) {
     for (const sc of d.subcategories) {
-      if (!sc.dataKey) continue
-      const working = resolveWorking(sc.dataKey, datasets[sc.dataKey])
+      // Subcategorías con datos base/importados.
+      let dataKey = sc.dataKey
+      // Planillas nuevas creadas por el usuario (sin datos base): dataKey sintético.
+      if (!dataKey && createdSheetIds().includes(sc.id)) dataKey = `new-${sc.id}`
+      if (!dataKey) continue
+      const working = resolveWorking(dataKey, datasets[sc.dataKey])
       if (!working || !working.rows.length) continue
       const aoa = [working.headers, ...working.rows.map((r) => working.headers.map((h) => r[h] ?? ''))]
       const ws = XLSX.utils.aoa_to_sheet(aoa)
