@@ -179,6 +179,14 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         const viewer = new window.Autodesk.Viewing.GuiViewer3D(mountRef.current)
         viewer.start()
         applyViewerStyle(viewer)
+        // Si el contenedor cambia de tamaño (Split, pantalla completa, panel que
+        // entra con tamaño 0), avisamos al visor para que ajuste el viewport.
+        // Sin esto, el WebGL puede quedar en 0×0 y el modelo no se ve.
+        const ro = new ResizeObserver(() => {
+          try { viewer.resize() } catch { /* aún no listo */ }
+        })
+        ro.observe(mountRef.current)
+        ctxRef.current.resizeObs = ro
         // Re-aplica el estilo al cambiar el tema claro/oscuro de Sonqollay.
         const themeObs = new MutationObserver(() => applyViewerStyle(viewer))
         themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
@@ -207,6 +215,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       cancelled = true
       // Solo destruye el visor al desmontar de verdad (no en el doble-montaje de dev).
       ctxRef.current.themeObs?.disconnect?.()
+      ctxRef.current.resizeObs?.disconnect?.()
       if (viewerRef.current) { viewerRef.current.finish?.(); viewerRef.current = null }
       ctxRef.current.initStarted = false
     }
@@ -235,7 +244,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         const onGeom = () => {
           viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
           applyViewerStyle(viewer)
-          viewer.fitToView()
+          // Forzar ajuste del viewport por si el contenedor cambió de tamaño,
+          // y encuadrar el modelo en el frame siguiente.
+          try { viewer.resize() } catch { /* noop */ }
+          requestAnimationFrame(() => { try { viewer.resize(); viewer.fitToView() } catch { /* noop */ } })
           setStatus('ready'); setMessage('')
         }
         viewer.addEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
