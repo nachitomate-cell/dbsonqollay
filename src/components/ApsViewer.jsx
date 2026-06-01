@@ -236,9 +236,19 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       ctxRef.current.resizeObs?.disconnect?.()
       const v = viewerRef.current
       if (v) {
+        // Captura el canvas/contexto WebGL ANTES de destruir el visor.
+        const canvas = v.canvas || v.impl?.canvas || mountRef.current?.querySelector('canvas')
         try { (v.getVisibleModels?.() || []).forEach((m) => v.unloadModel?.(m)) } catch { /* noop */ }
         try { v.tearDown?.() } catch { /* noop */ }
         try { v.finish?.() } catch { /* noop */ }
+        // Libera explícitamente el contexto WebGL: `finish()` NO lo hace de
+        // inmediato y los navegadores limitan ~8-16 contextos (GPU Intel). Sin
+        // esto, recrear el visor al cambiar de pestaña los agota y rompe el
+        // siguiente render ("addEventListener is not a function").
+        try {
+          const gl = canvas?.getContext?.('webgl2') || canvas?.getContext?.('webgl')
+          gl?.getExtension?.('WEBGL_lose_context')?.loseContext?.()
+        } catch { /* noop */ }
       }
       viewerRef.current = null
       ctxRef.current.loadedUrn = null
