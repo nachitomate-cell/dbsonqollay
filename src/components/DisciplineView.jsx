@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowUpRight,
   Check,
+  ChevronDown,
+  ChevronUp,
   FolderPlus,
   FolderSync,
   Info,
@@ -134,12 +136,19 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
   )
 }
 
-// Modal para elegir las columnas de una planilla nueva: por defecto o copiando
-// las de otra subcategoría que ya tenga datos.
+// Modal para definir las columnas de una planilla nueva: por defecto, copiando
+// las de otra subcategoría con datos, o personalizada (eliges cada columna).
 function TemplatePicker({ templates, defaultColumns, onCancel, onConfirm }) {
-  const options = [{ id: '__default__', label: 'Columnas por defecto (AWP/BIM)', columns: defaultColumns }, ...templates]
+  const presets = [
+    { id: '__default__', label: 'Columnas por defecto (AWP/BIM)', columns: defaultColumns },
+    ...templates,
+  ]
   const [choice, setChoice] = useState('__default__')
-  const selected = options.find((o) => o.id === choice) || options[0]
+  const [custom, setCustom] = useState([...defaultColumns]) // columnas en modo personalizado
+  const [field, setField] = useState('')
+  const isCustom = choice === '__custom__'
+  const selectedPreset = presets.find((o) => o.id === choice)
+  const finalColumns = isCustom ? custom : selectedPreset?.columns || defaultColumns
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onCancel()
@@ -147,33 +156,100 @@ function TemplatePicker({ templates, defaultColumns, onCancel, onConfirm }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel])
 
+  function addField() {
+    const key = field.trim().toUpperCase().replace(/\s+/g, '_')
+    if (key && !custom.includes(key)) setCustom((c) => [...c, key])
+    setField('')
+  }
+  const removeField = (k) => setCustom((c) => c.filter((x) => x !== k))
+  const move = (i, dir) => setCustom((c) => {
+    const j = i + dir
+    if (j < 0 || j >= c.length) return c
+    const next = [...c]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    return next
+  })
+  // Sembrar el modo personalizado con las columnas del preset elegido.
+  function seedCustomFrom(cols) {
+    setCustom([...cols])
+    setChoice('__custom__')
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60" onClick={onCancel} />
-      <div className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+      <div className="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">Crear planilla — elegir columnas</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Crear planilla — columnas</h3>
           <button onClick={onCancel} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
         </div>
+
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">Usa las columnas por defecto o copia las de otra subcategoría con datos.</p>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">Usa una plantilla o crea una <b>planilla personalizada</b> eligiendo cada columna.</p>
           <div className="space-y-2">
-            {options.map((o) => (
-              <label key={o.id} className={['flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition', choice === o.id ? 'border-brand-400 bg-brand-50/60 dark:border-accent/50 dark:bg-accent/10' : 'border-slate-200 hover:border-brand-300 dark:border-white/10'].join(' ')}>
+            {/* Personalizada */}
+            <label className={['flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition', isCustom ? 'border-brand-400 bg-brand-50/60 dark:border-accent/50 dark:bg-accent/10' : 'border-slate-200 hover:border-brand-300 dark:border-white/10'].join(' ')}>
+              <input type="radio" name="tpl" checked={isCustom} onChange={() => setChoice('__custom__')} className="mt-0.5 accent-brand-500 dark:accent-accent" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-slate-800 dark:text-white">Personalizada — yo defino las columnas</span>
+                <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">Agrega, quita y ordena tus propias columnas.</span>
+              </span>
+            </label>
+
+            {/* Editor de columnas personalizado */}
+            {isCustom && (
+              <div className="ml-7 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-ink-900/40">
+                <div className="mb-2 flex gap-2">
+                  <input
+                    value={field}
+                    onChange={(e) => setField(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addField())}
+                    placeholder="Nombre de columna…"
+                    className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-200"
+                  />
+                  <button onClick={addField} disabled={!field.trim()} className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-2.5 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
+                    <Plus className="h-4 w-4" /> Agregar
+                  </button>
+                </div>
+                {custom.length === 0 && <p className="py-2 text-center text-xs text-slate-400">Aún no hay columnas. Agrega al menos una.</p>}
+                <ul className="max-h-44 space-y-1 overflow-y-auto">
+                  {custom.map((c, i) => (
+                    <li key={c} className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs dark:border-white/10 dark:bg-ink-800">
+                      <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-200" title={c}>{c.replace(/_/g, ' ')}</span>
+                      <button onClick={() => move(i, -1)} disabled={i === 0} title="Subir" className="text-slate-400 hover:text-brand-600 disabled:opacity-30 dark:hover:text-accent"><ChevronUp className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => move(i, 1)} disabled={i === custom.length - 1} title="Bajar" className="text-slate-400 hover:text-brand-600 disabled:opacity-30 dark:hover:text-accent"><ChevronDown className="h-3.5 w-3.5" /></button>
+                      <button onClick={() => removeField(c)} title="Quitar" className="text-slate-400 hover:text-rose-500"><X className="h-3.5 w-3.5" /></button>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-slate-400">{custom.length} columna(s). Sugerencia: incluye al menos un identificador como “TAG”.</p>
+              </div>
+            )}
+
+            {/* Presets */}
+            {presets.map((o) => (
+              <div key={o.id} className={['flex items-start gap-3 rounded-lg border p-3 transition', choice === o.id ? 'border-brand-400 bg-brand-50/60 dark:border-accent/50 dark:bg-accent/10' : 'border-slate-200 hover:border-brand-300 dark:border-white/10'].join(' ')}>
                 <input type="radio" name="tpl" checked={choice === o.id} onChange={() => setChoice(o.id)} className="mt-0.5 accent-brand-500 dark:accent-accent" />
-                <span className="min-w-0">
+                <label className="min-w-0 flex-1 cursor-pointer" onClick={() => setChoice(o.id)}>
                   <span className="block text-sm font-semibold text-slate-800 dark:text-white">{o.label}</span>
                   <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{o.columns.length} columnas · {o.columns.slice(0, 5).map((c) => c.replace(/_/g, ' ')).join(', ')}{o.columns.length > 5 ? '…' : ''}</span>
-                </span>
-              </label>
+                </label>
+                <button onClick={() => seedCustomFrom(o.columns)} title="Personalizar a partir de estas columnas" className="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-accent">
+                  Personalizar
+                </button>
+              </div>
             ))}
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
-          <button onClick={onCancel} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
-          <button onClick={() => onConfirm(selected.columns)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
-            <Plus className="h-4 w-4" /> Crear planilla
-          </button>
+
+        <div className="flex items-center justify-between gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
+          <span className="text-xs text-slate-400">{finalColumns.length} columna(s)</span>
+          <div className="flex gap-2">
+            <button onClick={onCancel} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+            <button onClick={() => onConfirm(finalColumns)} disabled={finalColumns.length === 0} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
+              <Plus className="h-4 w-4" /> Crear planilla
+            </button>
+          </div>
         </div>
       </div>
     </div>
