@@ -1,4 +1,5 @@
 import { Bell, ChevronRight, Download, Moon, Search, Settings, Sun } from 'lucide-react'
+import InstallButton from './InstallButton.jsx'
 
 /**
  * Encabezado del área principal: breadcrumbs, búsqueda global, exportación del
@@ -55,6 +56,8 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           />
           <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5">⌘K</kbd>
         </div>
+
+        <InstallButton />
 
         <button
           onClick={onExportProject}
