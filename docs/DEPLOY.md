@@ -10,25 +10,44 @@ frontend a su URL con `VITE_APS_API`.
 > "Failed to fetch" en el visor. El resto de la app (planillas, fichas, 3D
 > propio, export) sí funciona sin backend.
 
+## ⚠️ Causa del 404 en `/api/*`
+
+Si el sitio está en un **hosting estático** (solo sirve archivos: Netlify, Vercel
+estático, cPanel, S3, Nginx sirviendo `dist/`…), las rutas `/api/*` devuelven
+**404** porque ahí **no corre Node**. La app (planillas, 3D propio, export) sí
+funciona, pero el **visor APS no**, porque necesita el backend.
+
+Solución: el sitio debe ser servido por el **proceso Node** (`server/index.js`),
+que sirve el frontend **y** la API. Usá una de estas opciones.
+
 ## Opción A (recomendada): un solo despliegue
 
 El backend ya sirve el frontend compilado. Es lo más simple: misma URL, sin
 CORS ni contenido mixto, y `VITE_APS_API` puede quedar vacío (mismo origen).
 
-```bash
-# 1) Compilar el frontend (en la raíz del repo)
-npm install && npm run build        # genera dist/
+### A.1 — Docker (cualquier host con contenedores)
 
-# 2) Levantar el backend (sirve dist/ y la API)
-cd server
-cp .env.example .env                # pegá tus credenciales APS
-npm install && npm start            # http://localhost:3000 sirve TODO
+```bash
+docker build -t sonqollay .
+docker run -p 3000:3000 --env-file server/.env sonqollay
 ```
 
-En tu host: build del front, y que el proceso de Node sea `server/index.js` con
-las variables de entorno (`APS_CLIENT_ID`, `APS_CLIENT_SECRET`, `APS_BUCKET`).
-`CLIENT_ORIGIN` no hace falta si todo va por el mismo origen. Verificá
-`https://TU_DOMINIO/api/health` → `{ ok: true }`.
+### A.2 — Render (incluye `render.yaml`)
+
+1. Conectá el repo en Render → "New Web Service" (detecta `render.yaml`).
+2. Cargá las variables secretas `APS_CLIENT_ID` y `APS_CLIENT_SECRET`.
+3. Deploy. Verificá `https://TU_SERVICIO.onrender.com/api/health`.
+
+### A.3 — VPS / manual
+
+```bash
+npm install && npm run build        # genera dist/
+cd server
+cp .env.example .env                # pegá tus credenciales APS
+npm install && npm start            # sirve dist/ + API en el puerto 3000
+```
+
+(Con un VPS, poné Nginx como proxy inverso a ese puerto y PM2 para mantenerlo vivo.)
 
 ## Opción B: frontend y backend separados
 

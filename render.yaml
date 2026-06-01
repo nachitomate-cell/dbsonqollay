@@ -1,0 +1,23 @@
+# Despliegue en Render (https://render.com) como un único Web Service Node que
+# compila el frontend y sirve dist/ + la API APS desde el mismo origen.
+#
+# Tras crear el servicio, agregá en el dashboard de Render las variables
+# secretas APS_CLIENT_ID y APS_CLIENT_SECRET (marcadas sync:false abajo).
+services:
+  - type: web
+    name: sonqollay
+    runtime: node
+    plan: free
+    # Instala deps de raíz y de server, y compila el frontend.
+    buildCommand: npm install && npm run build && cd server && npm install
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: APS_CLIENT_ID
+        sync: false
+      - key: APS_CLIENT_SECRET
+        sync: false
+      - key: APS_BUCKET
+        value: sonqollay-models-2026
+      - key: NODE_VERSION
+        value: 20.18.0
