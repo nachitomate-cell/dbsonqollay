@@ -112,8 +112,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   // Reabre un proyecto guardado (ya traducido) sin re-subir el archivo.
   function openProject(p) {
     setShowProjects(false)
+    if (p.urn === ctxRef.current.loadedUrn) return // ya está abierto
     setUrn(p.urn); setModelName(p.name); rememberModel(p.urn, p.name)
-    if (viewerRef.current) loadDocument(p.urn)
+    if (viewerRef.current) loadDocument(p.urn, { force: true })
   }
   function deleteProject(urn) {
     setProjects(removeProject(urn))
@@ -222,40 +223,57 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function loadDocument(theUrn) {
+  function loadDocument(theUrn, opts = {}) {
     const viewer = viewerRef.current
     if (!viewer) return
+    // Evita cargas concurrentes (OtgLoader "stopping load before complete" →
+    // corrompe la escena). Si ya está cargado/cargándose ese urn, no recarga.
+    if (!opts.force && (ctxRef.current.loadingUrn === theUrn || ctxRef.current.loadedUrn === theUrn)) return
+    if (ctxRef.current.loadingUrn && ctxRef.current.loadingUrn !== theUrn) {
+      // Hay otra carga en curso: reintenta cuando termine.
+      ctxRef.current.pendingUrn = theUrn
+      return
+    }
+    ctxRef.current.loadingUrn = theUrn
+    // Descarga modelos previos antes de cargar el nuevo (evita superposición).
+    try { (viewer.getVisibleModels?.() || []).forEach((m) => viewer.unloadModel?.(m)) } catch { /* noop */ }
+
     setStatus('translating'); setMessage('Abriendo modelo…')
     window.Autodesk.Viewing.Document.load(
       `urn:${theUrn}`,
       (doc) => {
         const root = doc.getRoot()
-        // Vista 3D por defecto; si no hay, toma la primera geometría 3D disponible.
         let node = root.getDefaultGeometry()
         if (!node) {
           const geoms = root.search({ type: 'geometry', role: '3d' })
           node = geoms?.[0] || root.search({ type: 'geometry' })?.[0]
         }
         if (!node) {
+          ctxRef.current.loadingUrn = null
           setStatus('error'); setMessage('El modelo no tiene una vista 3D para mostrar.')
           return
         }
-        // Encuadra la cámara cuando la geometría termina de cargar (no antes).
         const onGeom = () => {
           viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
+          ctxRef.current.loadingUrn = null
+          ctxRef.current.loadedUrn = theUrn
           applyViewerStyle(viewer)
-          // Forzar ajuste del viewport por si el contenedor cambió de tamaño,
-          // y encuadrar el modelo en el frame siguiente.
           try { viewer.resize() } catch { /* noop */ }
           requestAnimationFrame(() => { try { viewer.resize(); viewer.fitToView() } catch { /* noop */ } })
           setStatus('ready'); setMessage('')
+          // Si llegó un pedido de cargar otro modelo mientras tanto, atiéndelo.
+          const next = ctxRef.current.pendingUrn
+          if (next && next !== theUrn) { ctxRef.current.pendingUrn = null; loadDocument(next) }
+          else ctxRef.current.pendingUrn = null
         }
         viewer.addEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
         viewer.loadDocumentNode(doc, node).catch(() => {
+          ctxRef.current.loadingUrn = null
           setStatus('error'); setMessage('No se pudo cargar la vista del modelo.')
         })
       },
       (code) => {
+        ctxRef.current.loadingUrn = null
         if (code === 9 || code === window.Autodesk.Viewing.ErrorCodes?.NETWORK_FAILED) {
           setMessage('El modelo aún se está traduciendo… reintentando en 8 s.')
           setTimeout(() => loadDocument(theUrn), 8000)
