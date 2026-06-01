@@ -239,15 +239,36 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
   async function handleUpload(file) {
     try {
-      setStatus('uploading'); setMessage('Subiendo modelo a Autodesk…')
-      const fd = new FormData()
-      fd.append('file', file)
-      const { urn: newUrn } = await fetch(`${API}/api/aps/models`, { method: 'POST', body: fd })
-        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). Configura VITE_APS_API con la URL del backend desplegado.`) })
-        .then((r) => {
-          if (!r.ok) throw new Error('Falló la subida. ¿Está el backend con credenciales válidas?')
-          return r.json()
-        })
+      setStatus('uploading'); setMessage('Preparando subida…')
+      const connErr = () => { throw new Error(`No se pudo conectar al backend APS. Verifica el despliegue (VITE_APS_API o las funciones /api).`) }
+
+      // 1) Pedir URL firmada al backend (paquete pequeño, no el archivo).
+      const { objectKey, uploadKey, urls } = await fetch(`${API}/api/aps/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name }),
+      }).catch(connErr).then((r) => {
+        if (!r.ok) return r.json().then((j) => { throw new Error(j.error || 'No se pudo iniciar la subida.') })
+        return r.json()
+      })
+
+      // 2) Subir el binario DIRECTO a Autodesk (S3), sin pasar por el backend
+      //    (evita el límite de tamaño de las funciones serverless).
+      setMessage('Subiendo modelo a Autodesk…')
+      const put = await fetch(urls[0], { method: 'PUT', body: file }).catch(connErr)
+      if (!put.ok) throw new Error('Falló la subida del archivo a Autodesk.')
+
+      // 3) Confirmar y lanzar la traducción.
+      setMessage('Procesando modelo…')
+      const { urn: newUrn } = await fetch(`${API}/api/aps/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objectKey, uploadKey }),
+      }).catch(connErr).then((r) => {
+        if (!r.ok) return r.json().then((j) => { throw new Error(j.error || 'No se pudo procesar el modelo.') })
+        return r.json()
+      })
+
       setUrn(newUrn); setModelName(file.name); rememberModel(newUrn, file.name)
       setProjects(addProject({ urn: newUrn, name: file.name })) // queda como proyecto guardado
       setMessage('Traduciendo modelo (puede tardar varios minutos)…')
@@ -259,7 +280,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setStatus('translating')
     const tick = async () => {
       try {
-        const s = await fetch(`${API}/api/aps/models/${theUrn}/status`).then((r) => r.json())
+        const s = await fetch(`${API}/api/aps/status/${theUrn}`).then((r) => r.json())
         if (s.status === 'success') return loadDocument(theUrn)
         if (s.status === 'failed') { setStatus('error'); setMessage('La traducción del modelo falló.'); return }
         setMessage(`Traduciendo… ${s.progress || ''}`)

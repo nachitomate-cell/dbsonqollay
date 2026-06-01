@@ -10,6 +10,29 @@ frontend a su URL con `VITE_APS_API`.
 > "Failed to fetch" en el visor. El resto de la app (planillas, fichas, 3D
 > propio, export) sí funciona sin backend.
 
+## Despliegue en Vercel (recomendado si ya usás Vercel)
+
+El backend está implementado **también** como **funciones serverless** en `api/`,
+así que Vercel sirve el frontend y la API en el **mismo dominio**, sin servidor
+aparte. No hace falta `VITE_APS_API` (mismo origen).
+
+Pasos:
+1. En el proyecto de Vercel, agregá las **Environment Variables**:
+   - `APS_CLIENT_ID`, `APS_CLIENT_SECRET` (de aps.autodesk.com)
+   - `APS_BUCKET` (p. ej. `sonqollay-models-2026`)
+2. Deploy (Vercel detecta `vercel.json`, build con Vite, funciones en `/api`).
+3. Verificá `https://TU_DOMINIO/api/aps/token` → debe devolver un `access_token`.
+
+Endpoints (funciones): `GET /api/aps/token`, `GET /api/aps/models`,
+`POST /api/aps/upload-url`, `POST /api/aps/complete`, `GET /api/aps/status/:urn`.
+
+> La subida del modelo (NWD 55 MB) **no pasa por la función** (Vercel limita el
+> payload a ~4.5 MB): el navegador pide una URL firmada (`/api/aps/upload-url`)
+> y sube el archivo **directo a Autodesk (S3)**; luego `/api/aps/complete`
+> confirma y lanza la traducción. Por eso funciona pese al tamaño.
+
+---
+
 ## ⚠️ Causa del 404 en `/api/*`
 
 Si el sitio está en un **hosting estático** (solo sirve archivos: Netlify, Vercel
