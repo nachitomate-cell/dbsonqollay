@@ -220,12 +220,27 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     window.Autodesk.Viewing.Document.load(
       `urn:${theUrn}`,
       (doc) => {
-        const node = doc.getRoot().getDefaultGeometry()
-        viewer.loadDocumentNode(doc, node).then(() => {
-          setStatus('ready'); setMessage('')
-          // Algunos ajustes (sombra de piso, AO) requieren geometría cargada.
+        const root = doc.getRoot()
+        // Vista 3D por defecto; si no hay, toma la primera geometría 3D disponible.
+        let node = root.getDefaultGeometry()
+        if (!node) {
+          const geoms = root.search({ type: 'geometry', role: '3d' })
+          node = geoms?.[0] || root.search({ type: 'geometry' })?.[0]
+        }
+        if (!node) {
+          setStatus('error'); setMessage('El modelo no tiene una vista 3D para mostrar.')
+          return
+        }
+        // Encuadra la cámara cuando la geometría termina de cargar (no antes).
+        const onGeom = () => {
+          viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
           applyViewerStyle(viewer)
           viewer.fitToView()
+          setStatus('ready'); setMessage('')
+        }
+        viewer.addEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
+        viewer.loadDocumentNode(doc, node).catch(() => {
+          setStatus('error'); setMessage('No se pudo cargar la vista del modelo.')
         })
       },
       (code) => {
@@ -373,7 +388,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   useEffect(() => {
     if (status !== 'ready') return
     if (awpValue) isolatePackage()
-    else clearIsolation()
+    else if (viewerRef.current) { viewerRef.current.clearThemingColors?.(); viewerRef.current.isolate?.([]) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awpValue])
 
