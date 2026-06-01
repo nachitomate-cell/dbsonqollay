@@ -33,12 +33,28 @@ export default defineConfig({
         // Cachea el app shell para uso offline. Sube el límite por los chunks
         // grandes (xlsx, BimViewer/three) que se precachean.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        navigateFallback: '/index.html',
+        globPatterns: ['**/*.{js,css,svg,png,ico,woff2}'],
+        // NO precachear index.html: se sirve siempre desde la red (NetworkFirst)
+        // para evitar quedar con un HTML viejo que apunte a chunks viejos
+        // (causa de "addEventListener is not a function" tras un deploy).
+        navigateFallback: null,
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
         runtimeCaching: [
+          {
+            // HTML / navegaciones: siempre la última versión si hay red; el
+            // caché solo se usa como respaldo offline.
+            urlPattern: ({ request, url }) =>
+              request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 10 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             // Fuentes de Google: cache-first con expiración larga.
             urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',

@@ -228,10 +228,21 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     })()
     return () => {
       cancelled = true
-      // Solo destruye el visor al desmontar de verdad (no en el doble-montaje de dev).
+      // Destrucción completa del visor al desmontar: descarga modelos, libera
+      // el contexto WebGL y resetea el estado. Sin esto, cambiar de pestaña deja
+      // visores huérfanos que agotan los contextos WebGL (GPU Intel) y disparan
+      // "addEventListener is not a function".
       ctxRef.current.themeObs?.disconnect?.()
       ctxRef.current.resizeObs?.disconnect?.()
-      if (viewerRef.current) { viewerRef.current.finish?.(); viewerRef.current = null }
+      const v = viewerRef.current
+      if (v) {
+        try { (v.getVisibleModels?.() || []).forEach((m) => v.unloadModel?.(m)) } catch { /* noop */ }
+        try { v.tearDown?.() } catch { /* noop */ }
+        try { v.finish?.() } catch { /* noop */ }
+      }
+      viewerRef.current = null
+      ctxRef.current.loadedUrn = null
+      ctxRef.current.loadingUrn = null
       ctxRef.current.initStarted = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -256,6 +267,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     window.Autodesk.Viewing.Document.load(
       `urn:${theUrn}`,
       (doc) => {
+        // El callback puede llegar tras desmontar (cambio de pestaña): si el
+        // visor ya no existe, abortamos para no tocar un objeto destruido.
+        if (!viewerRef.current) { ctxRef.current.loadingUrn = null; return }
         const root = doc.getRoot()
         let node = root.getDefaultGeometry()
         if (!node) {
