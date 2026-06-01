@@ -21,6 +21,7 @@ import {
   ensureBucket,
   getManifest,
   getViewerToken,
+  listObjects,
   translate,
   uploadObject,
 } from './aps.js'
@@ -63,6 +64,13 @@ app.post('/api/aps/models', upload.single('file'), wrap(async (req, res) => {
   const objectId = await uploadObject(BUCKET, objectKey, req.file.buffer)
   const { urn } = await translate(objectId)
   res.json({ urn, objectKey, name: req.file.originalname })
+}))
+
+// Lista los modelos del bucket (proyectos guardados, visibles desde cualquier
+// dispositivo).
+app.get('/api/aps/models', wrap(async (_req, res) => {
+  const items = await listObjects(BUCKET)
+  res.json(items)
 }))
 
 // Estado de la traducción.

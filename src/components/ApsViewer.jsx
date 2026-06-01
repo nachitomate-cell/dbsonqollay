@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, FolderOpen, Layers, Loader2, Trash2, Upload, X } from 'lucide-react'
-import { addProject, listProjects, removeProject } from '../utils/apsProjects.js'
+import { addProject, fetchAllProjects, listProjects, removeProject } from '../utils/apsProjects.js'
 
 /**
  * Visor de modelos reales con el SDK de Autodesk (APS Viewer) + comportamientos
@@ -95,6 +95,14 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const [modelName, setModelName] = useState(restored.name || null)
   const [projects, setProjects] = useState(() => listProjects())
   const [showProjects, setShowProjects] = useState(false)
+  const [loadingProjects, setLoadingProjects] = useState(false)
+
+  // Carga la lista combinada (bucket de APS + locales) al abrir el desplegable.
+  function refreshProjects() {
+    setLoadingProjects(true)
+    fetchAllProjects().then((list) => { setProjects(list); setLoadingProjects(false) })
+  }
+  useEffect(() => { fetchAllProjects().then(setProjects) }, [])
 
   function rememberModel(u, name) {
     try { localStorage.setItem(storeKey, JSON.stringify({ urn: u, name: name || null })) } catch { /* ignore */ }
@@ -363,7 +371,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
           {projects.length > 0 && (
             <div className="relative">
-              <button onClick={() => setShowProjects((v) => !v)} title="Proyectos guardados" className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:text-brand-600 dark:text-slate-200 dark:hover:text-accent ${glass}`}>
+              <button onClick={() => { setShowProjects((v) => !v); if (!showProjects) refreshProjects() }} title="Proyectos guardados" className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:text-brand-600 dark:text-slate-200 dark:hover:text-accent ${glass}`}>
                 <FolderOpen className="h-3.5 w-3.5" /> Proyectos
                 <span className="rounded bg-brand-100 px-1 text-[10px] text-brand-700 dark:bg-accent/20 dark:text-accent">{projects.length}</span>
               </button>
@@ -371,15 +379,19 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setShowProjects(false)} />
                   <div className={`absolute left-0 top-11 z-20 w-64 overflow-hidden p-1 ${glass}`}>
-                    <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Modelos guardados (se reabren sin re-subir)</p>
+                    <p className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Modelos guardados {loadingProjects && <Loader2 className="h-3 w-3 animate-spin" />}
+                    </p>
                     <div className="max-h-72 overflow-y-auto">
                       {projects.map((p) => (
                         <div key={p.urn} className="group flex items-center gap-1 rounded-md px-1 hover:bg-slate-100 dark:hover:bg-white/5">
                           <button onClick={() => openProject(p)} className="min-w-0 flex-1 py-1.5 pl-1.5 text-left">
                             <span className="block truncate text-xs font-medium text-slate-700 dark:text-slate-200" title={p.name}>{p.name}</span>
-                            <span className="block text-[10px] text-slate-400">{new Date(p.savedAt).toLocaleDateString('es-CL')}</span>
+                            <span className="block text-[10px] text-slate-400">{p.savedAt ? new Date(p.savedAt).toLocaleDateString('es-CL') : (p.remote ? 'En la nube (APS)' : '')}</span>
                           </button>
-                          <button onClick={() => deleteProject(p.urn)} title="Quitar de la lista" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          {!p.remote && (
+                            <button onClick={() => deleteProject(p.urn)} title="Quitar de la lista" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          )}
                         </div>
                       ))}
                     </div>

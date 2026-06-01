@@ -116,3 +116,23 @@ export async function getManifest(urn) {
   if (!res.ok) throw new Error(`Manifest falló (${res.status}): ${await res.text()}`)
   return res.json()
 }
+
+/**
+ * Lista los objetos del bucket OSS (modelos subidos). Para cada uno arma el urn
+ * base64 y un nombre legible. Así los proyectos aparecen en cualquier
+ * dispositivo, no solo en el navegador que los subió.
+ */
+export async function listObjects(bucketKey) {
+  const token = await getToken('data:read bucket:read')
+  const res = await fetch(`${BASE}/oss/v2/buckets/${bucketKey}/objects?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 404) return [] // el bucket aún no existe
+  if (!res.ok) throw new Error(`Listar objetos falló (${res.status}): ${await res.text()}`)
+  const json = await res.json()
+  return (json.items || []).map((o) => {
+    // objectKey con prefijo de timestamp: "<ms>-<nombre>"; lo limpiamos.
+    const pretty = String(o.objectKey).replace(/^\d+-/, '')
+    return { urn: toBase64Urn(o.objectId), objectKey: o.objectKey, name: pretty, size: o.size }
+  })
+}

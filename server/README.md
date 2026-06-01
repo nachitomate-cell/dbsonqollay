@@ -41,6 +41,7 @@ En la app: abrí una subcategoría → vista **3D** → botón **"APS (real)"** 
 |--------|------|---------|
 | `GET`  | `/api/aps/token` | Token de solo lectura para el visor (`viewables:read`) |
 | `POST` | `/api/aps/models` | Sube un modelo (multipart `file`) y lanza la traducción |
+| `GET`  | `/api/aps/models` | Lista los modelos del bucket (proyectos, visibles en cualquier dispositivo) |
 | `GET`  | `/api/aps/models/:urn/status` | Estado de la traducción |
 | `GET`  | `/api/health` | Healthcheck |
 

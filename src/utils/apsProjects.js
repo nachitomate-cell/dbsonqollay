@@ -39,3 +39,25 @@ export function removeProject(urn) {
   save(list)
   return list
 }
+
+/**
+ * Lista los modelos del bucket de APS vía el backend (visibles desde cualquier
+ * dispositivo) y los fusiona con los guardados localmente. Si el backend no
+ * responde, devuelve solo los locales.
+ */
+export async function fetchAllProjects() {
+  const local = listProjects()
+  const API = import.meta.env.VITE_APS_API || 'http://localhost:3000'
+  try {
+    const remote = await fetch(`${API}/api/aps/models`).then((r) => (r.ok ? r.json() : []))
+    const byUrn = new Map()
+    // Locales primero (conservan nombre y fecha originales).
+    for (const p of local) byUrn.set(p.urn, p)
+    for (const r of remote) {
+      if (!byUrn.has(r.urn)) byUrn.set(r.urn, { urn: r.urn, name: r.name, savedAt: null, remote: true })
+    }
+    return Array.from(byUrn.values())
+  } catch {
+    return local
+  }
+}
