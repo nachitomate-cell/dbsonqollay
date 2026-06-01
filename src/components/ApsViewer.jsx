@@ -73,6 +73,26 @@ function applyViewerStyle(viewer, hq = true) {
   safe(() => viewer.impl?.renderer?.().setUnitScale?.(1))
 }
 
+// Encuadra el modelo completo (zoom-to-fit). Tras GEOMETRY_LOADED la geometría
+// puede seguir llegando por streaming y, en el primer intento, fitToView usa una
+// bounding-box parcial y deja el modelo como un puntito al centro. Por eso se
+// reintenta unas cuantas veces durante ~1.5 s; cada intento es inmediato (sin
+// animación) para no marear, y el último deja el encuadre definitivo.
+function frameModel(viewer) {
+  let tries = 0
+  const fit = () => {
+    if (!viewer || !viewer.model) return
+    try {
+      viewer.resize()
+      // fitToView(ids, model, immediate=true) encuadra todo el modelo sin animar.
+      viewer.fitToView(null, viewer.model, true)
+    } catch { /* el visor aún no está listo; lo intenta el próximo tick */ }
+    if (++tries < 6) setTimeout(fit, 250)
+  }
+  // Primer intento en el siguiente frame (deja que el canvas tome su tamaño).
+  requestAnimationFrame(fit)
+}
+
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default' }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
@@ -265,8 +285,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
           ctxRef.current.loadingUrn = null
           ctxRef.current.loadedUrn = theUrn
           applyViewerStyle(viewer, hq)
-          try { viewer.resize() } catch { /* noop */ }
-          requestAnimationFrame(() => { try { viewer.resize(); viewer.fitToView() } catch { /* noop */ } })
+          frameModel(viewer)
           setStatus('ready'); setMessage('')
           // Si llegó un pedido de cargar otro modelo mientras tanto, atiéndelo.
           const next = ctxRef.current.pendingUrn
