@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FolderOpen, Layers, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { Camera, ChevronDown, FolderOpen, Layers, Loader2, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 import { getApsViewer } from './apsViewerSingleton.js'
 

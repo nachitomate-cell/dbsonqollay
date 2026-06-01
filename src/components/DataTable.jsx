@@ -35,6 +35,7 @@ const BimViewer = lazy(() => import('./BimViewer.jsx'))
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
+import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -637,7 +638,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
-              <Suspense fallback={<ViewerLoading />}>
+              <ViewerErrorBoundary>
+                <Suspense fallback={<ViewerLoading />}>
                 {engine === 'aps' ? (
                 <ApsViewer
                   rows={filtered}
@@ -649,7 +651,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               ) : (
                 <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} onRequestApsEngine={() => setEngine('aps')} />
               )}
-              </Suspense>
+                </Suspense>
+              </ViewerErrorBoundary>
             </div>
             )}
           </div>
