@@ -47,7 +47,7 @@ export function removeProject(urn) {
  */
 export async function fetchAllProjects() {
   const local = listProjects()
-  const API = import.meta.env.VITE_APS_API || 'http://localhost:3000'
+  const API = import.meta.env.VITE_APS_API ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')
   try {
     const remote = await fetch(`${API}/api/aps/models`).then((r) => (r.ok ? r.json() : []))
     const byUrn = new Map()

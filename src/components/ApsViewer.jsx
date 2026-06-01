@@ -19,7 +19,9 @@ import { addProject, fetchAllProjects, listProjects, removeProject } from '../ut
  *   selectedTag             — TAG activo (cross-selection desde la planilla)
  *   onSelect(tag)           — clic en geometría -> notifica el TAG
  */
-const API = import.meta.env.VITE_APS_API || 'http://localhost:3000'
+// Base del backend APS. En dev usa el server local; en producción, mismo origen
+// (el backend sirve el frontend) salvo que se defina VITE_APS_API.
+const API = import.meta.env.VITE_APS_API ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')
 const SDK_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css'
 const SDK_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js'
 

@@ -10,6 +10,28 @@ frontend a su URL con `VITE_APS_API`.
 > "Failed to fetch" en el visor. El resto de la app (planillas, fichas, 3D
 > propio, export) sí funciona sin backend.
 
+## Opción A (recomendada): un solo despliegue
+
+El backend ya sirve el frontend compilado. Es lo más simple: misma URL, sin
+CORS ni contenido mixto, y `VITE_APS_API` puede quedar vacío (mismo origen).
+
+```bash
+# 1) Compilar el frontend (en la raíz del repo)
+npm install && npm run build        # genera dist/
+
+# 2) Levantar el backend (sirve dist/ y la API)
+cd server
+cp .env.example .env                # pegá tus credenciales APS
+npm install && npm start            # http://localhost:3000 sirve TODO
+```
+
+En tu host: build del front, y que el proceso de Node sea `server/index.js` con
+las variables de entorno (`APS_CLIENT_ID`, `APS_CLIENT_SECRET`, `APS_BUCKET`).
+`CLIENT_ORIGIN` no hace falta si todo va por el mismo origen. Verificá
+`https://TU_DOMINIO/api/health` → `{ ok: true }`.
+
+## Opción B: frontend y backend separados
+
 ## 1. Desplegar el backend (`server/`)
 
 Cualquier host de Node sirve (Render, Railway, Fly.io, un VPS con PM2, etc.).

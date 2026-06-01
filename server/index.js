@@ -14,6 +14,9 @@
  *   3) npm start
  */
 import 'dotenv/config'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
@@ -78,6 +81,16 @@ app.get('/api/aps/models/:urn/status', wrap(async (req, res) => {
   const manifest = await getManifest(req.params.urn)
   res.json({ status: manifest.status, progress: manifest.progress })
 }))
+
+// En producción, sirve el frontend compilado (../dist) desde el mismo origen,
+// así no hay problemas de localhost/CORS/contenido mixto: un solo despliegue.
+const distDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist')
+if (existsSync(distDir)) {
+  app.use(express.static(distDir))
+  // Fallback SPA: cualquier ruta no-API devuelve index.html.
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(join(distDir, 'index.html')))
+  console.log('Sirviendo frontend desde', distDir)
+}
 
 app.listen(PORT, () => {
   console.log(`Sonqollay APS server escuchando en http://localhost:${PORT}`)
