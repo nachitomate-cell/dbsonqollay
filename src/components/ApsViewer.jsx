@@ -160,10 +160,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         setStatus('loadingSdk')
         await loadSdk()
         if (cancelled) return
-        const token = await fetch(`${API}/api/aps/token`).then((r) => {
-          if (!r.ok) throw new Error('Backend APS no disponible. Inicia el servidor (carpeta server/).')
-          return r.json()
-        })
+        const token = await fetch(`${API}/api/aps/token`)
+          .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
+          .then((r) => {
+            if (!r.ok) throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
+            return r.json()
+          })
         if (cancelled) return
         await new Promise((resolve) => {
           window.Autodesk.Viewing.Initializer(
@@ -238,10 +240,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       setStatus('uploading'); setMessage('Subiendo modelo a Autodesk…')
       const fd = new FormData()
       fd.append('file', file)
-      const { urn: newUrn } = await fetch(`${API}/api/aps/models`, { method: 'POST', body: fd }).then((r) => {
-        if (!r.ok) throw new Error('Falló la subida. ¿Está el backend corriendo y con credenciales?')
-        return r.json()
-      })
+      const { urn: newUrn } = await fetch(`${API}/api/aps/models`, { method: 'POST', body: fd })
+        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). Configura VITE_APS_API con la URL del backend desplegado.`) })
+        .then((r) => {
+          if (!r.ok) throw new Error('Falló la subida. ¿Está el backend con credenciales válidas?')
+          return r.json()
+        })
       setUrn(newUrn); setModelName(file.name); rememberModel(newUrn, file.name)
       setProjects(addProject({ urn: newUrn, name: file.name })) // queda como proyecto guardado
       setMessage('Traduciendo modelo (puede tardar varios minutos)…')
