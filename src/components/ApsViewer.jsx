@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, FolderOpen, Layers, Loader2, Trash2, Upload, X } from 'lucide-react'
-import { addProject, fetchAllProjects, listProjects, removeProject } from '../utils/apsProjects.js'
+import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 
 /**
  * Visor de modelos reales con el SDK de Autodesk (APS Viewer) + comportamientos
@@ -116,8 +116,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setUrn(p.urn); setModelName(p.name); rememberModel(p.urn, p.name)
     if (viewerRef.current) loadDocument(p.urn, { force: true })
   }
-  function deleteProject(urn) {
-    setProjects(removeProject(urn))
+  function deleteProject(p) {
+    deleteProjectRemote(p)
+    setProjects((prev) => prev.filter((x) => x.urn !== p.urn))
   }
   function forgetModel() {
     try { localStorage.removeItem(storeKey) } catch { /* ignore */ }
@@ -461,9 +462,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
                             <span className="block truncate text-xs font-medium text-slate-700 dark:text-slate-200" title={p.name}>{p.name}</span>
                             <span className="block text-[10px] text-slate-400">{p.savedAt ? new Date(p.savedAt).toLocaleDateString('es-CL') : (p.remote ? 'En la nube (APS)' : '')}</span>
                           </button>
-                          {!p.remote && (
-                            <button onClick={() => deleteProject(p.urn)} title="Quitar de la lista" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
-                          )}
+                          <button onClick={() => deleteProject(p)} title="Eliminar modelo del proyecto" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                     </div>

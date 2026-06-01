@@ -85,6 +85,16 @@ export async function uploadObject(bucketKey, objectKey, buffer) {
   return json.objectId // urn::sin codificar (urn:adsk.objects:os.object:bucket/objectKey)
 }
 
+/** Borra un objeto del bucket por su objectKey. */
+export async function deleteObject(bucketKey, objectKey) {
+  const token = await getToken('data:write data:read')
+  const res = await fetch(`${BASE}/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok && res.status !== 404) throw new Error(`Borrar objeto falló (${res.status}): ${await res.text()}`)
+}
+
 /** urn base64url (sin padding) para Model Derivative. */
 export function toBase64Urn(objectId) {
   return Buffer.from(objectId).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')

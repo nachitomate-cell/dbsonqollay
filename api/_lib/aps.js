@@ -100,6 +100,17 @@ export async function listObjects() {
   }))
 }
 
+/** Borra un objeto del bucket por su objectKey. */
+export async function deleteObject(objectKey) {
+  const { access_token } = await getToken('data:write data:read')
+  const res = await fetch(`${BASE}/oss/v2/buckets/${BUCKET}/objects/${encodeURIComponent(objectKey)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${access_token}` },
+  })
+  if (!res.ok && res.status !== 404) throw new Error(`Borrar objeto falló (${res.status}): ${await res.text()}`)
+  return { ok: true }
+}
+
 /** Helper de respuesta JSON con manejo de errores. */
 export function send(res, status, body) {
   res.status(status).setHeader('Content-Type', 'application/json')

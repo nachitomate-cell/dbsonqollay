@@ -21,6 +21,7 @@ import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
 import {
+  deleteObject,
   ensureBucket,
   getManifest,
   getViewerToken,
@@ -74,6 +75,14 @@ app.post('/api/aps/models', upload.single('file'), wrap(async (req, res) => {
 app.get('/api/aps/models', wrap(async (_req, res) => {
   const items = await listObjects(BUCKET)
   res.json(items)
+}))
+
+// Borra un objeto del bucket (limpiar proyectos duplicados).
+app.delete('/api/aps/models', wrap(async (req, res) => {
+  const objectKey = req.query.objectKey
+  if (!objectKey) return res.status(400).json({ error: 'Falta objectKey' })
+  await deleteObject(BUCKET, objectKey)
+  res.json({ ok: true })
 }))
 
 // Estado de la traducción.
