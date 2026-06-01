@@ -358,19 +358,15 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     if (!dbIds.length) { setMessage('No se encontraron objetos del paquete en el modelo (revisa el campo de vínculo).'); return }
 
     ctxRef.current.awpActive = true
-    const WHITE = new window.THREE.Vector4(1, 1, 1, 0.25) // 25% opacidad = 75% transparencia
-    // Ghosting ON: el resto queda translúcido (no oculto) — efecto de la lámina.
+    // Ghosting nativo: el resto del modelo queda como "fantasma" gris tenue que
+    // SÍ da contexto sobre cualquier fondo (no blanco invisible). `isolate`
+    // mantiene el paquete a color pleno y atenúa lo demás.
     viewer.setGhosting(true)
     viewer.isolate(dbIds)
-    // Pinta el "resto" de blanco translúcido por encima del ghosting.
-    const tree = viewer.model?.getInstanceTree?.()
-    if (tree) {
-      viewer.clearThemingColors()
-      const pkg = new Set(dbIds)
-      const allIds = []
-      tree.enumNodeChildren(tree.getRootId(), function rec(id) { allIds.push(id); tree.enumNodeChildren(id, rec) }, true)
-      allIds.forEach((id) => { if (!pkg.has(id)) viewer.setThemingColor(id, WHITE) })
-    }
+    // Resalta el paquete elegido en naranja de marca para que destaque.
+    const ORANGE = new window.THREE.Vector4(0.97, 0.44, 0, 1)
+    viewer.clearThemingColors()
+    dbIds.forEach((id) => viewer.setThemingColor(id, ORANGE))
     viewer.fitToView(dbIds)
     setMessage('')
   }
