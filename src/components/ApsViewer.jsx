@@ -56,13 +56,12 @@ function applyViewerStyle(viewer, hq = true) {
 
   // Calidad de render: SAO (ambient occlusion) + FXAA antialiasing.
   safe(() => viewer.setQualityLevel(hq, true))
-  // Sombra de contacto → profundidad y look "maqueta".
-  safe(() => viewer.setGroundShadow(hq))
-  // OJO: el reflejo de piso (setGroundReflection) crea un segundo pase/target de
-  // render que re-proyecta la escena; en GPUs Intel (y según la versión del SDK)
-  // ese pase revienta en _projectObject/_initObject con
-  // "t.addEventListener is not a function" y tumba el render. Se deja SIEMPRE
-  // desactivado: el resto del look HD (sombra, AO, bordes) se mantiene.
+  // OJO: tanto la sombra (setGroundShadow) como el reflejo (setGroundReflection)
+  // de piso hacen un pase extra que re-proyecta la escena; en GPUs Intel (y según
+  // la versión del SDK) ese pase revienta en _projectObject/_initObject con
+  // "t.addEventListener is not a function" y tumba el render. Ambos se dejan
+  // SIEMPRE desactivados; el resto del look (AO, bordes) se mantiene.
+  safe(() => viewer.setGroundShadow(false))
   safe(() => viewer.setGroundReflection(false))
   // Bordes/contornos: resaltan la geometría y dan look técnico (CAD).
   safe(() => viewer.setDisplayEdges?.(hq))
