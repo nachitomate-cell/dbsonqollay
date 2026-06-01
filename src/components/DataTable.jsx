@@ -92,7 +92,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
   const [colFilters, setColFilters] = useState({})
   const [filterByCol, setFilterByCol] = useState('')
-  const [filterByVal, setFilterByVal] = useState('')
   const [propertyChange, setPropertyChange] = useState('')
   const [colWidths, setColWidths] = useState(() => {
     try {
@@ -170,17 +169,51 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     }
   }
 
-  const distinctValues = (h) => {
-    const s = new Set()
-    for (const r of rows) if (r[h] !== '' && r[h] != null) s.add(String(r[h]))
-    return Array.from(s).sort()
+  // Valores distintos de una columna con su conteo (para el buscador del filtro).
+  const valueCounts = (h) => {
+    const m = new Map()
+    for (const r of rows) {
+      const v = r[h]
+      if (v === '' || v == null) continue
+      const k = String(v)
+      m.set(k, (m.get(k) || 0) + 1)
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0], 'es'))
   }
-  const filterValues = useMemo(() => (filterByCol ? distinctValues(filterByCol) : []), [filterByCol, rows])
+  // ¿La columna es mayormente numérica? → habilita filtro por rango.
+  const isNumericCol = (h) => {
+    let n = 0, ok = 0
+    for (const r of rows) {
+      const v = r[h]
+      if (v === '' || v == null) continue
+      n++
+      if (!Number.isNaN(Number(v))) ok++
+      if (n > 30) break
+    }
+    return n > 0 && ok / n > 0.8
+  }
+  const filterValues = useMemo(() => (filterByCol ? valueCounts(filterByCol) : []), [filterByCol, rows])
+  const filterColIsNumeric = useMemo(() => (filterByCol ? isNumericCol(filterByCol) : false), [filterByCol, rows])
+
+  // Evalúa un filtro (multi-valor o rango) sobre una fila.
+  const matchFilter = (r, h, f) => {
+    if (!f) return true
+    if (f.type === 'range') {
+      const num = Number(r[h])
+      if (Number.isNaN(num)) return false
+      if (f.min != null && num < f.min) return false
+      if (f.max != null && num > f.max) return false
+      return true
+    }
+    // multi-valor: la fila pasa si su valor está entre los seleccionados
+    if (!f.values || f.values.length === 0) return true
+    return f.values.includes(String(r[h] ?? ''))
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     let data = rows.filter((r) => {
-      for (const [h, val] of Object.entries(colFilters)) if (val && String(r[h]) !== val) return false
+      for (const [h, f] of Object.entries(colFilters)) if (!matchFilter(r, h, f)) return false
       if (!q) return true
       return headers.some((h) => String(r[h] ?? '').toLowerCase().includes(q))
     })
@@ -235,7 +268,24 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const setSortKey = (h) =>
     setSort((s) => (s.key === h ? { key: h, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: h, dir: 'asc' }))
 
-  const applyFilter = () => filterByCol && filterByVal && setColFilters((p) => ({ ...p, [filterByCol]: filterByVal }))
+  // Aplica/actualiza el filtro de una columna (multi-valor o rango).
+  const setColumnFilter = (h, f) =>
+    setColFilters((p) => {
+      const n = { ...p }
+      if (!f || (f.type !== 'range' && (!f.values || f.values.length === 0))) delete n[h]
+      else if (f.type === 'range' && f.min == null && f.max == null) delete n[h]
+      else n[h] = f
+      return n
+    })
+  const toggleFilterValue = (h, value) =>
+    setColFilters((p) => {
+      const cur = p[h]?.values || []
+      const values = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]
+      const n = { ...p }
+      if (values.length) n[h] = { type: 'values', values }
+      else delete n[h]
+      return n
+    })
   const removeFilter = (h) =>
     setColFilters((p) => {
       const n = { ...p }
@@ -420,29 +470,24 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           {/* Filter row */}
           <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
             <Labeled label="Filter By">
-              <Select value={filterByCol} onChange={(v) => { setFilterByCol(v); setFilterByVal('') }}>
-                <option value="">—</option>
+              <Select value={filterByCol} onChange={setFilterByCol}>
+                <option value="">— Elegir columna —</option>
                 {headers.map((h) => (
-                  <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
+                  <option key={h} value={h}>{h.replace(/_/g, ' ')}{colFilters[h] ? ' ●' : ''}</option>
                 ))}
               </Select>
             </Labeled>
-            <Labeled label="Value">
-              <Select value={filterByVal} onChange={setFilterByVal} disabled={!filterByCol}>
-                <option value="">—</option>
-                {filterValues.map((v) => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </Select>
-            </Labeled>
-            <button
-              onClick={applyFilter}
-              disabled={!filterByCol || !filterByVal}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-accent dark:text-ink-900 dark:hover:bg-accent-400"
-            >
-              <Search className="h-4 w-4" />
-              Search
-            </button>
+            {filterByCol && (
+              <FilterPopover
+                column={filterByCol}
+                numeric={filterColIsNumeric}
+                values={filterValues}
+                current={colFilters[filterByCol]}
+                onToggleValue={(v) => toggleFilterValue(filterByCol, v)}
+                onSetRange={(min, max) => setColumnFilter(filterByCol, { type: 'range', min, max })}
+                onClear={() => removeFilter(filterByCol)}
+              />
+            )}
             <div className="ml-auto">
               <Labeled label="Property Change">
                 <Select value={propertyChange} onChange={setPropertyChange}>
@@ -464,14 +509,15 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           {/* Active filter chips */}
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
-              {activeFilters.map(([h, v]) => (
+              {activeFilters.map(([h, f]) => (
                 <span key={h} className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-accent/15 dark:text-accent">
-                  {h.replace(/_/g, ' ')}: {v}
+                  {h.replace(/_/g, ' ')}: {describeFilter(f)}
                   <button onClick={() => removeFilter(h)} className="hover:text-brand-900 dark:hover:text-white">
                     <X className="h-3 w-3" />
                   </button>
                 </span>
               ))}
+              <button onClick={() => setColFilters({})} className="text-xs font-medium text-slate-400 hover:text-rose-500">Limpiar filtros</button>
             </div>
           )}
 
@@ -787,6 +833,76 @@ function ViewToggle({ active, icon: IconCmp, label, onClick }) {
       <IconCmp className="h-4 w-4" />
       {label}
     </button>
+  )
+}
+
+// Texto corto para el chip de filtro activo.
+function describeFilter(f) {
+  if (!f) return ''
+  if (f.type === 'range') {
+    if (f.min != null && f.max != null) return `${f.min}–${f.max}`
+    if (f.min != null) return `≥ ${f.min}`
+    if (f.max != null) return `≤ ${f.max}`
+    return ''
+  }
+  const v = f.values || []
+  return v.length <= 2 ? v.join(', ') : `${v.length} valores`
+}
+
+// Popover de filtro por columna: multi-selección de valores con buscador y
+// conteo, o rango (min/max) para columnas numéricas.
+function FilterPopover({ column, numeric, values, current, onToggleValue, onSetRange, onClear }) {
+  const [open, setOpen] = useState(true)
+  const [q, setQ] = useState('')
+  const sel = new Set(current?.values || [])
+  const shown = q ? values.filter(([v]) => v.toLowerCase().includes(q.toLowerCase())) : values
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={['inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition', current ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-accent/40 dark:bg-accent/10 dark:text-accent' : 'border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300'].join(' ')}
+      >
+        <Filter className="h-4 w-4" />
+        {current ? describeFilter(current) : 'Definir filtro'}
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-12 z-30 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-white/10 dark:bg-ink-800">
+          {numeric ? (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rango de {column.replace(/_/g, ' ')}</p>
+              <div className="flex items-center gap-2">
+                <input type="number" placeholder="Mín" defaultValue={current?.min ?? ''} onChange={(e) => onSetRange(e.target.value === '' ? null : Number(e.target.value), current?.max ?? null)} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-ink-900 dark:text-slate-200" />
+                <span className="text-slate-400">–</span>
+                <input type="number" placeholder="Máx" defaultValue={current?.max ?? ''} onChange={(e) => onSetRange(current?.min ?? null, e.target.value === '' ? null : Number(e.target.value))} className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-white/10 dark:bg-ink-900 dark:text-slate-200" />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 dark:border-white/10">
+                <Search className="h-3.5 w-3.5 text-slate-400" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar valor…" className="w-full bg-transparent text-sm focus:outline-none dark:text-slate-200" />
+              </div>
+              <div className="max-h-56 space-y-0.5 overflow-y-auto">
+                {shown.map(([v, count]) => (
+                  <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-100 dark:hover:bg-white/5">
+                    <input type="checkbox" checked={sel.has(v)} onChange={() => onToggleValue(v)} className="h-3.5 w-3.5 accent-brand-500 dark:accent-accent" />
+                    <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200" title={v}>{v}</span>
+                    <span className="shrink-0 text-[10px] text-slate-400">{count}</span>
+                  </label>
+                ))}
+                {shown.length === 0 && <p className="py-3 text-center text-xs text-slate-400">Sin coincidencias.</p>}
+              </div>
+            </>
+          )}
+          <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 dark:border-white/10">
+            <button onClick={onClear} className="text-xs font-medium text-slate-400 hover:text-rose-500">Quitar</button>
+            <button onClick={() => setOpen(false)} className="text-xs font-medium text-brand-600 dark:text-accent">Listo</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

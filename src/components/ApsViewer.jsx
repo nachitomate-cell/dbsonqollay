@@ -124,25 +124,36 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const tagKey = headers[0]
   const awpFields = useMemo(() => headers.filter((h) => /CWA|CWP|EWP|PWP|IWP|SWP|WBS|AWP/i.test(h)), [headers])
   const [awpField, setAwpField] = useState('')
-  const [awpValue, setAwpValue] = useState('')
+  const [awpSel, setAwpSel] = useState([]) // valores AWP seleccionados (multi)
+  const [awpOpen, setAwpOpen] = useState(false)
+  const [awpQuery, setAwpQuery] = useState('')
   const [objProps, setObjProps] = useState(null) // propiedades del objeto pinchado
   const [showProps, setShowProps] = useState(true)
 
   useEffect(() => { if (!awpField && awpFields.length) setAwpField(awpFields[0]) }, [awpFields, awpField])
+  // Al cambiar de campo AWP, limpia la selección.
+  useEffect(() => { setAwpSel([]) }, [awpField])
 
+  // Valores del campo AWP con su conteo de elementos.
   const awpValues = useMemo(() => {
     if (!awpField) return []
-    const s = new Set()
-    rows.forEach((r) => r[awpField] !== '' && r[awpField] != null && s.add(String(r[awpField])))
-    return Array.from(s).sort()
+    const m = new Map()
+    rows.forEach((r) => {
+      const v = r[awpField]
+      if (v === '' || v == null) return
+      const k = String(v)
+      m.set(k, (m.get(k) || 0) + 1)
+    })
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0], 'es'))
   }, [rows, awpField])
 
-  // TAGs que pertenecen al paquete elegido (listado de componentes).
+  // TAGs que pertenecen a los paquetes seleccionados (listado de componentes).
   const packageTags = useMemo(() => {
-    if (!awpField || !awpValue) return []
-    return rows.filter((r) => String(r[awpField] ?? '') === awpValue).map((r) => String(r[tagKey] ?? '')).filter(Boolean)
+    if (!awpField || !awpSel.length) return []
+    const set = new Set(awpSel)
+    return rows.filter((r) => set.has(String(r[awpField] ?? ''))).map((r) => String(r[tagKey] ?? '')).filter(Boolean)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, awpField, awpValue])
+  }, [rows, awpField, awpSel])
 
   // Callback siempre fresco sin re-disparar efectos.
   const onSelectRef = useRef(onSelect)
@@ -390,7 +401,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       const url = typeof blob === 'string' ? blob : URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${(awpValue || 'vista').replace(/\W+/g, '_')}_16x9.png`
+      a.download = `${(awpSel[0] || 'vista').replace(/\W+/g, '_')}_16x9.png`
       a.click()
       if (typeof blob !== 'string') URL.revokeObjectURL(url)
     })
@@ -411,13 +422,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
 
-  // aplicar filtro AWP automáticamente al elegir valor
+  // aplicar filtro AWP automáticamente al cambiar la selección
   useEffect(() => {
     if (status !== 'ready') return
-    if (awpValue) isolatePackage()
+    if (awpSel.length) isolatePackage()
     else clearIsolation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awpValue])
+  }, [awpSel])
 
   const busy = ['loadingSdk', 'uploading', 'translating'].includes(status)
   const ready = status === 'ready'
@@ -479,13 +490,51 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         {ready && urn && (
           <div className={`pointer-events-auto flex flex-wrap items-center gap-1.5 p-1.5 ${glass}`}>
             <Layers className="ml-1 h-4 w-4 text-brand-500" />
-            <select value={awpField} onChange={(e) => { setAwpField(e.target.value); setAwpValue('') }} title="Tipo de paquete de trabajo" className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
+            <select value={awpField} onChange={(e) => setAwpField(e.target.value)} title="Tipo de paquete de trabajo" className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
               {(awpFields.length ? awpFields : headers).map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
             </select>
-            <select value={awpValue} onChange={(e) => setAwpValue(e.target.value)} title="Aislar paquete" className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
-              <option value="">— Ver todo —</option>
-              {awpValues.map((v) => <option key={v} value={v}>{v}</option>)}
-            </select>
+
+            {/* Selector AWP multi-valor con buscador y conteo */}
+            <div className="relative">
+              <button
+                onClick={() => setAwpOpen((v) => !v)}
+                className={['inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition', awpSel.length ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-accent/40 dark:bg-accent/10 dark:text-accent' : 'border-slate-200 text-slate-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+              >
+                {awpSel.length ? `${awpSel.length} paquete(s)` : '— Ver todo —'}
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {awpOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setAwpOpen(false)} />
+                  <div className="absolute left-0 top-9 z-20 w-60 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-white/10 dark:bg-ink-800">
+                    <div className="mb-2 flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 dark:border-white/10">
+                      <Search className="h-3.5 w-3.5 text-slate-400" />
+                      <input value={awpQuery} onChange={(e) => setAwpQuery(e.target.value)} placeholder="Buscar paquete…" className="w-full bg-transparent text-xs focus:outline-none dark:text-slate-200" />
+                    </div>
+                    <div className="max-h-56 space-y-0.5 overflow-y-auto">
+                      {awpValues
+                        .filter(([v]) => !awpQuery || v.toLowerCase().includes(awpQuery.toLowerCase()))
+                        .map(([v, count]) => (
+                          <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-slate-100 dark:hover:bg-white/5">
+                            <input
+                              type="checkbox"
+                              checked={awpSel.includes(v)}
+                              onChange={() => setAwpSel((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]))}
+                              className="h-3.5 w-3.5 accent-brand-500 dark:accent-accent"
+                            />
+                            <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200" title={v}>{v}</span>
+                            <span className="shrink-0 text-[10px] text-slate-400">{count}</span>
+                          </label>
+                        ))}
+                    </div>
+                    <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 dark:border-white/10">
+                      <button onClick={() => setAwpSel([])} className="text-[11px] font-medium text-slate-400 hover:text-rose-500">Ver todo</button>
+                      <button onClick={() => setAwpOpen(false)} className="text-[11px] font-medium text-brand-600 dark:text-accent">Listo</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => setHq((v) => !v)}
               title={hq ? 'Calidad alta (sombras, AO, bordes) — clic para priorizar rendimiento' : 'Modo rendimiento — clic para alta calidad'}
@@ -500,10 +549,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         )}
       </div>
 
-      {/* Listado de componentes del paquete */}
-      {ready && awpValue && packageTags.length > 0 && (
+      {/* Listado de componentes del/los paquete(s) */}
+      {ready && awpSel.length > 0 && packageTags.length > 0 && (
         <div className={`absolute right-3 top-16 z-10 max-h-[45%] w-56 overflow-y-auto p-2 ${glass}`}>
-          <p className="mb-1 px-1 text-[11px] font-bold text-slate-700 dark:text-white">{awpValue} · {packageTags.length} comp.</p>
+          <p className="mb-1 px-1 text-[11px] font-bold text-slate-700 dark:text-white">{awpSel.length === 1 ? awpSel[0] : `${awpSel.length} paquetes`} · {packageTags.length} comp.</p>
           {packageTags.map((t) => (
             <button key={t} onClick={() => onSelect?.(t)} className="block w-full truncate rounded px-1.5 py-1 text-left font-mono text-[11px] text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5">{t}</button>
           ))}
