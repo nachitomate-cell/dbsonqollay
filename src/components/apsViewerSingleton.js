@@ -85,21 +85,20 @@ export function getApsViewer(getToken) {
         resolve,
       )
     })
-    // El contenedor se monta en el DOM (oculto, fuera de pantalla) ANTES de
-    // start(): así el visor crea su canvas con un tamaño válido. El componente
-    // React luego lo "adopta" moviéndolo a su <div>.
+    // El contenedor se crea DESLIGADO del DOM con estilo de relleno: el visor lo
+    // usa tal cual y el componente React lo "adopta" moviéndolo a su <div>. Es
+    // el mismo arranque que el SDK espera; montarlo en otro lado antes de
+    // start() confunde la construcción interna de paneles (bug "tBodies").
     container = document.createElement('div')
-    container.style.cssText = 'position:fixed;left:-99999px;top:0;width:1280px;height:720px;'
-    document.body.appendChild(container)
+    container.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
     try {
       viewer = new window.Autodesk.Viewing.GuiViewer3D(container)
       const code = viewer.start()
       // start() devuelve un código != 0 si falló la creación del contexto WebGL.
       if (code) throw new Error('start() falló')
     } catch (err) {
-      // Limpieza: deja el singleton en estado recreables y propaga un mensaje claro.
+      // Limpieza: deja el singleton en estado recreable y propaga un mensaje claro.
       try { viewer?.finish?.() } catch { /* noop */ }
-      if (container.parentNode) container.parentNode.removeChild(container)
       viewer = null
       container = null
       initPromise = null
