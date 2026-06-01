@@ -38,34 +38,40 @@ function groupProps(properties) {
 
 // Estilo "profesional" del visor APS. `hq` = alta calidad (sombras, AO,
 // reflejo de piso, bordes); en `false` prioriza rendimiento (GPU modestas).
+// Cada ajuste va envuelto por separado: si uno falla (el visor puede no estar
+// listo, o un efecto no es compatible con la GPU), no debe abortar los demás.
+function safe(fn) {
+  try { fn() } catch { /* ajuste no disponible aún o no soportado */ }
+}
+
 function applyViewerStyle(viewer, hq = true) {
-  try {
-    const dark = document.documentElement.classList.contains('dark')
-    // Fondo en degradé (top, bottom) en RGB 0-255 — más luminoso y "estudio".
-    if (dark) viewer.setBackgroundColor(26, 33, 46, 7, 10, 16)
-    else viewer.setBackgroundColor(247, 249, 252, 214, 222, 232)
+  const dark = document.documentElement.classList.contains('dark')
+  // Fondo en degradé (top, bottom) en RGB 0-255 — más luminoso y "estudio".
+  safe(() => (dark ? viewer.setBackgroundColor(26, 33, 46, 7, 10, 16) : viewer.setBackgroundColor(247, 249, 252, 214, 222, 232)))
 
-    // Iluminación tipo estudio fotográfico (preset de APS):
-    //  - Claro: "Boardwalk"(7) da luz suave y agradable.
-    //  - Oscuro: "Plaza"(2) mantiene contraste sin quemar.
-    if (viewer.setLightPreset) viewer.setLightPreset(dark ? 2 : 7)
+  // Iluminación tipo estudio fotográfico (preset de APS):
+  //  - Claro: "Boardwalk"(7) da luz suave y agradable.
+  //  - Oscuro: "Plaza"(2) mantiene contraste sin quemar.
+  safe(() => viewer.setLightPreset?.(dark ? 2 : 7))
 
-    // Calidad de render: SAO (ambient occlusion) + FXAA antialiasing.
-    viewer.setQualityLevel(hq, true)
-    // Sombra de contacto + reflejo sutil en el piso → profundidad y “maqueta”.
-    viewer.setGroundShadow(hq)
-    viewer.setGroundReflection(hq)
-    // Bordes/contornos: resaltan la geometría y dan look técnico (CAD).
-    viewer.setDisplayEdges?.(hq)
-    // Selección y rollover con el naranja de marca.
-    if (window.THREE) {
-      viewer.setSelectionColor?.(new window.THREE.Color(0xf77000))
-      viewer.set2dSelectionColor?.(new window.THREE.Color(0xf77000))
-    }
-    if (viewer.impl?.renderer) viewer.impl.renderer().setUnitScale?.(1)
-  } catch {
-    /* el visor puede no estar listo para algunos ajustes; se reintenta al cargar */
+  // Calidad de render: SAO (ambient occlusion) + FXAA antialiasing.
+  safe(() => viewer.setQualityLevel(hq, true))
+  // Sombra de contacto → profundidad y look "maqueta".
+  safe(() => viewer.setGroundShadow(hq))
+  // OJO: el reflejo de piso (setGroundReflection) crea un segundo pase/target de
+  // render que re-proyecta la escena; en GPUs Intel (y según la versión del SDK)
+  // ese pase revienta en _projectObject/_initObject con
+  // "t.addEventListener is not a function" y tumba el render. Se deja SIEMPRE
+  // desactivado: el resto del look HD (sombra, AO, bordes) se mantiene.
+  safe(() => viewer.setGroundReflection(false))
+  // Bordes/contornos: resaltan la geometría y dan look técnico (CAD).
+  safe(() => viewer.setDisplayEdges?.(hq))
+  // Selección y rollover con el naranja de marca.
+  if (window.THREE) {
+    safe(() => viewer.setSelectionColor?.(new window.THREE.Color(0xf77000)))
+    safe(() => viewer.set2dSelectionColor?.(new window.THREE.Color(0xf77000)))
   }
+  safe(() => viewer.impl?.renderer?.().setUnitScale?.(1))
 }
 
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default' }) {
