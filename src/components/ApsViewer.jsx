@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FolderOpen, Layers, Loader2, Trash2, Upload, X } from 'lucide-react'
+import { Camera, FolderOpen, Layers, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 
 /**
@@ -55,25 +55,33 @@ function groupProps(properties) {
   return Array.from(map.entries()).map(([category, items]) => ({ category, items }))
 }
 
-// Estilo "profesional" del visor APS: fondo en degradé acorde al tema, alta
-// calidad de render (AO + antialiasing), sombra de piso, iluminación neutra.
-function applyViewerStyle(viewer) {
+// Estilo "profesional" del visor APS. `hq` = alta calidad (sombras, AO,
+// reflejo de piso, bordes); en `false` prioriza rendimiento (GPU modestas).
+function applyViewerStyle(viewer, hq = true) {
   try {
     const dark = document.documentElement.classList.contains('dark')
-    // Fondo en degradé (top, bottom) en RGB 0-255.
-    if (dark) viewer.setBackgroundColor(18, 24, 33, 5, 8, 12)
-    else viewer.setBackgroundColor(238, 242, 246, 209, 217, 226)
-    // Calidad: ambient occlusion + antialiasing.
-    viewer.setQualityLevel(true, true)
-    // Sombra de contacto en el piso para dar profundidad.
-    viewer.setGroundShadow(true)
-    viewer.setGroundReflection(false)
-    // Estilo de iluminación neutro y luminoso (índice del preset de APS).
-    if (viewer.setLightPreset) viewer.setLightPreset(dark ? 0 : 4)
-    // Selección con el naranja de marca.
-    if (viewer.setSelectionColor && window.THREE) {
-      viewer.setSelectionColor(new window.THREE.Color(0xf77000))
+    // Fondo en degradé (top, bottom) en RGB 0-255 — más luminoso y "estudio".
+    if (dark) viewer.setBackgroundColor(26, 33, 46, 7, 10, 16)
+    else viewer.setBackgroundColor(247, 249, 252, 214, 222, 232)
+
+    // Iluminación tipo estudio fotográfico (preset de APS):
+    //  - Claro: "Boardwalk"(7) da luz suave y agradable.
+    //  - Oscuro: "Plaza"(2) mantiene contraste sin quemar.
+    if (viewer.setLightPreset) viewer.setLightPreset(dark ? 2 : 7)
+
+    // Calidad de render: SAO (ambient occlusion) + FXAA antialiasing.
+    viewer.setQualityLevel(hq, true)
+    // Sombra de contacto + reflejo sutil en el piso → profundidad y “maqueta”.
+    viewer.setGroundShadow(hq)
+    viewer.setGroundReflection(hq)
+    // Bordes/contornos: resaltan la geometría y dan look técnico (CAD).
+    viewer.setDisplayEdges?.(hq)
+    // Selección y rollover con el naranja de marca.
+    if (window.THREE) {
+      viewer.setSelectionColor?.(new window.THREE.Color(0xf77000))
+      viewer.set2dSelectionColor?.(new window.THREE.Color(0xf77000))
     }
+    if (viewer.impl?.renderer) viewer.impl.renderer().setUnitScale?.(1)
   } catch {
     /* el visor puede no estar listo para algunos ajustes; se reintenta al cargar */
   }
@@ -98,6 +106,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const [projects, setProjects] = useState(() => listProjects())
   const [showProjects, setShowProjects] = useState(false)
   const [loadingProjects, setLoadingProjects] = useState(false)
+  // Alta calidad (sombras/AO/bordes) vs. rendimiento. Persistido por usuario.
+  const [hq, setHq] = useState(() => localStorage.getItem('sqy-aps-hq') !== '0')
+  useEffect(() => { localStorage.setItem('sqy-aps-hq', hq ? '1' : '0') }, [hq])
+  // Reaplica el estilo cuando cambia la calidad.
+  useEffect(() => { if (viewerRef.current) applyViewerStyle(viewerRef.current, hq) }, [hq])
 
   // Carga la lista combinada (bucket de APS + locales) al abrir el desplegable.
   function refreshProjects() {
@@ -180,7 +193,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         if (cancelled || !mountRef.current) return
         const viewer = new window.Autodesk.Viewing.GuiViewer3D(mountRef.current)
         viewer.start()
-        applyViewerStyle(viewer)
+        applyViewerStyle(viewer, hq)
         // Si el contenedor cambia de tamaño (Split, pantalla completa, panel que
         // entra con tamaño 0), avisamos al visor para que ajuste el viewport.
         // Sin esto, el WebGL puede quedar en 0×0 y el modelo no se ve.
@@ -190,7 +203,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         ro.observe(mountRef.current)
         ctxRef.current.resizeObs = ro
         // Re-aplica el estilo al cambiar el tema claro/oscuro de Sonqollay.
-        const themeObs = new MutationObserver(() => applyViewerStyle(viewer))
+        const themeObs = new MutationObserver(() => applyViewerStyle(viewer, hq))
         themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
         ctxRef.current.themeObs = themeObs
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, (e) => {
@@ -258,7 +271,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
           viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
           ctxRef.current.loadingUrn = null
           ctxRef.current.loadedUrn = theUrn
-          applyViewerStyle(viewer)
+          applyViewerStyle(viewer, hq)
           try { viewer.resize() } catch { /* noop */ }
           requestAnimationFrame(() => { try { viewer.resize(); viewer.fitToView() } catch { /* noop */ } })
           setStatus('ready'); setMessage('')
@@ -490,6 +503,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
               <option value="">— Ver todo —</option>
               {awpValues.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
+            <button
+              onClick={() => setHq((v) => !v)}
+              title={hq ? 'Calidad alta (sombras, AO, bordes) — clic para priorizar rendimiento' : 'Modo rendimiento — clic para alta calidad'}
+              className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', hq ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> {hq ? 'HD' : 'Rápido'}
+            </button>
             <button onClick={exportImage16x9} title="Exportar imagen 16:9" className="inline-flex items-center gap-1 rounded-md bg-brand-500 px-2 py-1 text-xs font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
               <Camera className="h-3.5 w-3.5" /> 16:9
             </button>
