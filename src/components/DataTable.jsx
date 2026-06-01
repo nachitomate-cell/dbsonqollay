@@ -601,7 +601,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   dataKey={subcategory.dataKey}
                 />
               ) : (
-                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} />
+                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} onRequestApsEngine={() => setEngine('aps')} />
               )}
               </Suspense>
             </div>

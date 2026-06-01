@@ -56,7 +56,7 @@ const parseDate = (v) => {
 }
 const fmtDate = (ms) => new Date(ms).toLocaleDateString('es-CL', { year: 'numeric', month: 'short', day: '2-digit' })
 
-export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect, dataKey }) {
+export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect, dataKey, onRequestApsEngine }) {
   const mountRef = useRef(null)
   const fileRef = useRef(null)
   const ctx = useRef({})
@@ -502,6 +502,11 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
     c.frame(root); setModelName(name); setTick((t) => t + 1)
   }
   async function loadModelFile(file) {
+    // Formatos propietarios (NWD/RVT/IFC…) no los lee three.js: requieren APS.
+    if (/\.(nwd|nwc|rvt|rfa|ifc|dwg|dwf|dwfx|nwf)$/i.test(file.name)) {
+      setModelError('proprietary')
+      return
+    }
     setLoadingModel(true); setModelError(null)
     try {
       const loader = new GLTFLoader()
@@ -573,7 +578,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         {/* Barra superior */}
         <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-start justify-between gap-2">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2">
-            <input ref={fileRef} type="file" accept=".glb,.gltf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) loadModelFile(f); e.target.value = '' }} />
+            <input ref={fileRef} type="file" accept=".glb,.gltf,.nwd,.nwc,.rvt,.ifc,.dwg" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) loadModelFile(f); e.target.value = '' }} />
             <button onClick={() => fileRef.current?.click()} disabled={loadingModel} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 disabled:opacity-60 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200 dark:hover:text-accent">
               {loadingModel ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {modelName ? 'Cambiar' : 'Cargar modelo'}
@@ -584,7 +589,7 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
                 <button onClick={clearModel} title="Quitar modelo" className="text-slate-400 hover:text-rose-500"><X className="h-3 w-3" /></button>
               </span>
             )}
-            {modelError && <span className="rounded-lg bg-rose-500/90 px-2 py-1.5 text-xs font-medium text-white shadow">{modelError}</span>}
+            {modelError && modelError !== 'proprietary' && <span className="rounded-lg bg-rose-500/90 px-2 py-1.5 text-xs font-medium text-white shadow">{modelError}</span>}
           </div>
 
           <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/90 p-1 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
@@ -689,6 +694,30 @@ export default function BimViewer({ rows, headers, selectedId, onFocus, onSelect
         {items.length === 0 && (
           <div className="absolute inset-0 grid place-items-center text-sm text-slate-400">
             <div className="flex flex-col items-center gap-2"><Box className="h-6 w-6" />Sin elementos para visualizar.</div>
+          </div>
+        )}
+
+        {/* Aviso: formato propietario (NWD/RVT/IFC) -> requiere el motor APS */}
+        {modelError === 'proprietary' && (
+          <div className="absolute inset-0 z-20 grid place-items-center p-4">
+            <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm dark:bg-black/50" onClick={() => setModelError(null)} />
+            <div className="relative max-w-sm rounded-xl border border-slate-200 bg-white p-5 text-center shadow-2xl dark:border-white/10 dark:bg-ink-800">
+              <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">
+                <Box className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Formato no compatible con el 3D propio</h3>
+              <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+                Los archivos <b>NWD, RVT, IFC</b> son formatos de Autodesk y solo se pueden ver con el motor <b>APS (real)</b>. El 3D propio admite glTF/GLB.
+              </p>
+              <div className="mt-4 flex justify-center gap-2">
+                <button onClick={() => setModelError(null)} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+                {onRequestApsEngine && (
+                  <button onClick={() => { setModelError(null); onRequestApsEngine() }} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+                    Cambiar a APS (real)
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

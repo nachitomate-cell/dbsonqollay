@@ -52,6 +52,30 @@ function groupProps(properties) {
   return Array.from(map.entries()).map(([category, items]) => ({ category, items }))
 }
 
+// Estilo "profesional" del visor APS: fondo en degradé acorde al tema, alta
+// calidad de render (AO + antialiasing), sombra de piso, iluminación neutra.
+function applyViewerStyle(viewer) {
+  try {
+    const dark = document.documentElement.classList.contains('dark')
+    // Fondo en degradé (top, bottom) en RGB 0-255.
+    if (dark) viewer.setBackgroundColor(18, 24, 33, 5, 8, 12)
+    else viewer.setBackgroundColor(238, 242, 246, 209, 217, 226)
+    // Calidad: ambient occlusion + antialiasing.
+    viewer.setQualityLevel(true, true)
+    // Sombra de contacto en el piso para dar profundidad.
+    viewer.setGroundShadow(true)
+    viewer.setGroundReflection(false)
+    // Estilo de iluminación neutro y luminoso (índice del preset de APS).
+    if (viewer.setLightPreset) viewer.setLightPreset(dark ? 0 : 4)
+    // Selección con el naranja de marca.
+    if (viewer.setSelectionColor && window.THREE) {
+      viewer.setSelectionColor(new window.THREE.Color(0xf77000))
+    }
+  } catch {
+    /* el visor puede no estar listo para algunos ajustes; se reintenta al cargar */
+  }
+}
+
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default' }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
@@ -130,7 +154,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         if (cancelled || !mountRef.current) return
         const viewer = new window.Autodesk.Viewing.GuiViewer3D(mountRef.current)
         viewer.start()
-        viewer.setTheme(document.documentElement.classList.contains('dark') ? 'dark-theme' : 'light-theme')
+        applyViewerStyle(viewer)
+        // Re-aplica el estilo al cambiar el tema claro/oscuro de Sonqollay.
+        const themeObs = new MutationObserver(() => applyViewerStyle(viewer))
+        themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+        ctxRef.current.themeObs = themeObs
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, (e) => {
           const id = e.dbIdArray?.[0]
           if (id == null) { setObjProps(null); return }
@@ -154,6 +182,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     return () => {
       cancelled = true
       // Solo destruye el visor al desmontar de verdad (no en el doble-montaje de dev).
+      ctxRef.current.themeObs?.disconnect?.()
       if (viewerRef.current) { viewerRef.current.finish?.(); viewerRef.current = null }
       ctxRef.current.initStarted = false
     }
@@ -168,7 +197,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       `urn:${theUrn}`,
       (doc) => {
         const node = doc.getRoot().getDefaultGeometry()
-        viewer.loadDocumentNode(doc, node).then(() => { setStatus('ready'); setMessage('') })
+        viewer.loadDocumentNode(doc, node).then(() => {
+          setStatus('ready'); setMessage('')
+          // Algunos ajustes (sombra de piso, AO) requieren geometría cargada.
+          applyViewerStyle(viewer)
+          viewer.fitToView()
+        })
       },
       (code) => {
         if (code === 9 || code === window.Autodesk.Viewing.ErrorCodes?.NETWORK_FAILED) {
@@ -298,28 +332,32 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const busy = ['loadingSdk', 'uploading', 'translating'].includes(status)
   const ready = status === 'ready'
 
+  // Estilos compartidos para una apariencia de visor profesional.
+  const glass = 'rounded-xl border border-white/60 bg-white/80 shadow-lg ring-1 ring-black/5 backdrop-blur-md dark:border-white/10 dark:bg-ink-800/80 dark:ring-white/5'
+
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       <div ref={mountRef} className="absolute inset-0" />
 
       {/* Barra superior: subir modelo + filtro AWP + exportar */}
       <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2">
         <div className="pointer-events-auto flex items-center gap-2">
           <input ref={fileRef} type="file" accept=".nwd,.nwc,.rvt,.ifc,.dwg,.dwfx,.3ds,.obj,.glb,.gltf,.fbx,.step,.stp,.iam,.ipt" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }} />
-          <button onClick={() => fileRef.current?.click()} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 disabled:opacity-60 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200">
+          <button onClick={() => fileRef.current?.click()} disabled={busy} className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:text-brand-600 disabled:opacity-60 dark:text-slate-200 dark:hover:text-accent ${glass}`}>
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
             {urn ? 'Cambiar modelo' : 'Subir modelo (NWD/RVT/IFC…)'}
           </button>
           {urn && modelName && (
-            <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 px-2 py-1.5 text-xs text-slate-600 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300">
-              <span className="max-w-[140px] truncate" title={modelName}>{modelName}</span>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-2 text-xs text-slate-600 dark:text-slate-300 ${glass}`}>
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="max-w-[140px] truncate font-medium" title={modelName}>{modelName}</span>
               <button onClick={forgetModel} title="Quitar modelo" className="text-slate-400 hover:text-rose-500"><X className="h-3 w-3" /></button>
             </span>
           )}
         </div>
 
         {ready && urn && (
-          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-white/90 p-1.5 shadow backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
+          <div className={`pointer-events-auto flex flex-wrap items-center gap-1.5 p-1.5 ${glass}`}>
             <Layers className="ml-1 h-4 w-4 text-brand-500" />
             <select value={awpField} onChange={(e) => { setAwpField(e.target.value); setAwpValue('') }} title="Tipo de paquete de trabajo" className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-700 dark:border-white/10 dark:bg-ink-900 dark:text-slate-200">
               {(awpFields.length ? awpFields : headers).map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
@@ -337,7 +375,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       {/* Listado de componentes del paquete */}
       {ready && awpValue && packageTags.length > 0 && (
-        <div className="absolute right-3 top-16 z-10 max-h-[45%] w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+        <div className={`absolute right-3 top-16 z-10 max-h-[45%] w-56 overflow-y-auto p-2 ${glass}`}>
           <p className="mb-1 px-1 text-[11px] font-bold text-slate-700 dark:text-white">{awpValue} · {packageTags.length} comp.</p>
           {packageTags.map((t) => (
             <button key={t} onClick={() => onSelect?.(t)} className="block w-full truncate rounded px-1.5 py-1 text-left font-mono text-[11px] text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5">{t}</button>
@@ -347,7 +385,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       {/* Panel de propiedades del objeto pinchado */}
       {ready && objProps && showProps && (
-        <div className="absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white/95 shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/95">
+        <div className={`absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden ${glass}`}>
           <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-500">Propiedades del objeto</p>
@@ -381,7 +419,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       {/* Estado / errores */}
       {(busy || status === 'error' || message) && (
-        <div className={['absolute left-1/2 top-14 z-10 max-w-md -translate-x-1/2 rounded-lg px-3 py-1.5 text-xs font-medium shadow backdrop-blur', status === 'error' ? 'bg-rose-500/90 text-white' : 'border border-slate-200 bg-white/90 text-slate-700 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200'].join(' ')}>
+        <div className={['absolute left-1/2 top-14 z-10 max-w-md -translate-x-1/2 px-3 py-2 text-xs font-medium', status === 'error' ? 'rounded-xl bg-rose-500/90 text-white shadow-lg' : `text-slate-700 dark:text-slate-200 ${glass}`].join(' ')}>
           <span className="inline-flex items-center gap-1.5">
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {message || (status === 'loadingSdk' ? 'Cargando visor de Autodesk…' : '')}
@@ -392,10 +430,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       {ready && !urn && (
         <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto max-w-sm rounded-xl border border-slate-200 bg-white/90 p-5 text-center shadow-lg backdrop-blur dark:border-white/10 dark:bg-ink-800/90">
-            <p className="text-sm font-semibold text-slate-800 dark:text-white">Visor de modelos reales (APS)</p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sube un modelo de Navisworks/Revit/IFC. Luego podrás aislar por CWA/CWP/IWP/SWP (resto en blanco translúcido) y exportar la imagen en 16:9.</p>
-            <button onClick={() => fileRef.current?.click()} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+          <div className={`pointer-events-auto max-w-sm p-6 text-center ${glass}`}>
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-glow">
+              <Layers className="h-7 w-7" />
+            </div>
+            <p className="text-base font-bold text-slate-800 dark:text-white">Visor de modelos reales (APS)</p>
+            <p className="mx-auto mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sube un modelo de Navisworks/Revit/IFC. Luego podrás aislar por CWA/CWP/IWP/SWP (resto en blanco translúcido), ver propiedades y exportar la imagen en 16:9.</p>
+            <button onClick={() => fileRef.current?.click()} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
               <Upload className="h-4 w-4" /> Subir modelo
             </button>
           </div>
