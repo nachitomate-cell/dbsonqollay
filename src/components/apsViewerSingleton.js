@@ -35,6 +35,37 @@ let viewer = null
 let container = null
 let initPromise = null
 
+/** ¿El navegador/GPU puede entregar un contexto WebGL nuevo? */
+function webglAvailable() {
+  try {
+    const c = document.createElement('canvas')
+    return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Si el contexto WebGL del visor se pierde de verdad (la GPU lo recicla cuando
+ * se agotan los contextos), el visor queda inservible: cualquier render vuelve a
+ * tirar "t.addEventListener is not a function". En ese caso reseteamos el
+ * singleton para que la próxima entrada al 3D recree el visor desde cero.
+ */
+function watchContextLoss() {
+  const canvas = viewer?.canvas || container?.querySelector('canvas')
+  if (!canvas) return
+  canvas.addEventListener('webglcontextlost', (e) => {
+    // preventDefault() habilita el intento de restauración del navegador.
+    e.preventDefault()
+    console.warn('[APS] Contexto WebGL perdido — se recreará el visor al reabrir el 3D.')
+    try { viewer?.tearDown?.() } catch { /* noop */ }
+    try { viewer?.finish?.() } catch { /* noop */ }
+    viewer = null
+    container = null
+    initPromise = null
+  }, false)
+}
+
 /**
  * Devuelve { viewer, container }. Inicializa SDK + visor una sola vez.
  * @param {() => Promise<{access_token, expires_in}>} getToken
@@ -43,6 +74,9 @@ export function getApsViewer(getToken) {
   if (viewer && container) return Promise.resolve({ viewer, container })
   if (initPromise) return initPromise
   initPromise = (async () => {
+    if (!webglAvailable()) {
+      throw new Error('Tu navegador/GPU agotó los contextos WebGL disponibles. Cierra otras pestañas con 3D/mapas y recarga la página.')
+    }
     await loadSdk()
     const token = await getToken()
     await new Promise((resolve) => {
@@ -51,10 +85,27 @@ export function getApsViewer(getToken) {
         resolve,
       )
     })
+    // El contenedor se monta en el DOM (oculto, fuera de pantalla) ANTES de
+    // start(): así el visor crea su canvas con un tamaño válido. El componente
+    // React luego lo "adopta" moviéndolo a su <div>.
     container = document.createElement('div')
-    container.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
-    viewer = new window.Autodesk.Viewing.GuiViewer3D(container)
-    viewer.start()
+    container.style.cssText = 'position:fixed;left:-99999px;top:0;width:1280px;height:720px;'
+    document.body.appendChild(container)
+    try {
+      viewer = new window.Autodesk.Viewing.GuiViewer3D(container)
+      const code = viewer.start()
+      // start() devuelve un código != 0 si falló la creación del contexto WebGL.
+      if (code) throw new Error('start() falló')
+    } catch (err) {
+      // Limpieza: deja el singleton en estado recreables y propaga un mensaje claro.
+      try { viewer?.finish?.() } catch { /* noop */ }
+      if (container.parentNode) container.parentNode.removeChild(container)
+      viewer = null
+      container = null
+      initPromise = null
+      throw new Error('No se pudo iniciar el visor 3D (contextos WebGL agotados). Cierra otras pestañas y recarga la página.')
+    }
+    watchContextLoss()
     return { viewer, container }
   })()
   return initPromise
