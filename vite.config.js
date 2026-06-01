@@ -65,16 +65,13 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
-          {
-            // SDK del visor de Autodesk (CDN): stale-while-revalidate.
-            urlPattern: ({ url }) => url.href.includes('developer.api.autodesk.com/modelderivative'),
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'aps-viewer-sdk',
-              expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+          // IMPORTANTE: el service worker NO debe interceptar el CDN de Autodesk.
+          // Cachear esas respuestas como opacas (status 0) rompe la carga de
+          // `lmvworker.min.js`, que el navegador pide como Worker y NO acepta
+          // respuestas opacas ("an opaque response was used for a request whose
+          // type is not no-cors" → net::ERR_FAILED → el visor cae en
+          // "t.addEventListener is not a function"). El SDK requiere red y token
+          // en vivo, así que no tiene sentido cachearlo: se deja pasar directo.
         ],
       },
       devOptions: { enabled: false },
