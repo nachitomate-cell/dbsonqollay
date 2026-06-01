@@ -16,23 +16,37 @@
 // a veces trae regresiones que rompen el render en GPUs Intel
 // ("t.addEventListener is not a function" en WebGLRenderer/_initObject).
 const VIEWER_VERSION = import.meta.env.VITE_APS_VIEWER_VERSION || '7.*'
-const SDK_CSS = `https://developer.api.autodesk.com/modelderivative/v2/viewers/${VIEWER_VERSION}/style.min.css`
-const SDK_JS = `https://developer.api.autodesk.com/modelderivative/v2/viewers/${VIEWER_VERSION}/viewer3D.min.js`
+
+const cdn = (v, file) => `https://developer.api.autodesk.com/modelderivative/v2/viewers/${v}/${file}`
 
 let sdkPromise = null
+// Carga el SDK de una versión concreta (CSS + JS). Resuelve al cargar el JS.
+function loadSdkVersion(version) {
+  return new Promise((resolve, reject) => {
+    const css = document.createElement('link')
+    css.rel = 'stylesheet'
+    css.href = cdn(version, 'style.min.css')
+    document.head.appendChild(css)
+    const js = document.createElement('script')
+    js.src = cdn(version, 'viewer3D.min.js')
+    js.onload = resolve
+    js.onerror = () => { css.remove(); js.remove(); reject(new Error(`SDK ${version} no disponible`)) }
+    document.head.appendChild(js)
+  })
+}
+
 function loadSdk() {
   if (window.Autodesk?.Viewing) return Promise.resolve()
   if (sdkPromise) return sdkPromise
-  sdkPromise = new Promise((resolve, reject) => {
-    const css = document.createElement('link')
-    css.rel = 'stylesheet'
-    css.href = SDK_CSS
-    document.head.appendChild(css)
-    const js = document.createElement('script')
-    js.src = SDK_JS
-    js.onload = resolve
-    js.onerror = () => reject(new Error('No se pudo cargar el SDK de APS (revisa tu conexión).'))
-    document.head.appendChild(js)
+  // Intenta la versión configurada; si falla (p. ej. una versión inexistente en
+  // VITE_APS_VIEWER_VERSION → 404), cae a la última 7.x para no dejar el visor
+  // sin cargar. El formato válido es "mayor.menor.patch", p. ej. "7.95.0".
+  sdkPromise = loadSdkVersion(VIEWER_VERSION).catch((e) => {
+    if (VIEWER_VERSION !== '7.*') {
+      console.warn(`[APS] ${e.message}; usando 7.* como respaldo. Usa el formato 7.x.y (p. ej. 7.95.0).`)
+      return loadSdkVersion('7.*')
+    }
+    throw new Error('No se pudo cargar el SDK de APS (revisa tu conexión).')
   })
   return sdkPromise
 }
