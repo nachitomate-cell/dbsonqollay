@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import PwaPrompt from './components/PwaPrompt.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
@@ -205,6 +206,8 @@ export default function App() {
           {notice}
         </div>
       )}
+
+      <PwaPrompt />
     </div>
   )
 }

@@ -77,6 +77,9 @@ como favicon (`public/favicon.png`).
 - **Premium Dark** consolidado: negros profundos y alto contraste con acentos
   naranja sutiles, pensado para jornadas largas en centros de control.
 - **Doble tema** claro/oscuro con toggle; el ancho de columnas se persiste.
+- **PWA instalable**: se puede instalar en escritorio/móvil (manifest + íconos
+  de marca), funciona **sin conexión** (app shell precacheada con Workbox) y se
+  **auto-actualiza** avisando cuando hay una versión nueva (`vite-plugin-pwa`).
 
 ## Stack
 
