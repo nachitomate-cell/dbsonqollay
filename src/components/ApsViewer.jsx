@@ -393,25 +393,29 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   }
 
   // Comportamiento de la lámina: aislar el paquete, resto en blanco + 75% transp.
+  // Un "token" evita que un search asíncrono viejo pise un filtro más nuevo.
   async function isolatePackage() {
     const viewer = viewerRef.current
     if (!viewer || !packageTags.length) return
+    const token = ++ctxRef.current.awpToken
     setMessage('Aislando paquete…')
     const dbIds = await findDbIds(packageTags)
+    // Si llegó tarde (cambió el filtro o se limpió), descartar este resultado.
+    if (token !== ctxRef.current.awpToken || !viewerRef.current) return
     if (!dbIds.length) { setMessage('No se encontraron objetos del paquete en el modelo (revisa el campo de vínculo).'); return }
-    // resto fantasma (blanco translúcido) + paquete resaltado
-    viewer.isolate(dbIds)          // oculta/atenúa el resto (ghosting nativo ~ transparente)
-    viewer.setGhosting(true)
+
+    ctxRef.current.awpActive = true
     const WHITE = new window.THREE.Vector4(1, 1, 1, 0.25) // 25% opacidad = 75% transparencia
-    // pinta el "resto" de blanco translúcido
-    const tree = viewer.model.getInstanceTree()
+    // Ghosting ON: el resto queda translúcido (no oculto) — efecto de la lámina.
+    viewer.setGhosting(true)
+    viewer.isolate(dbIds)
+    // Pinta el "resto" de blanco translúcido por encima del ghosting.
+    const tree = viewer.model?.getInstanceTree?.()
     if (tree) {
-      const allIds = []
-      tree.enumNodeChildren(tree.getRootId(), function rec(id) {
-        allIds.push(id)
-        tree.enumNodeChildren(id, rec)
-      }, true)
+      viewer.clearThemingColors()
       const pkg = new Set(dbIds)
+      const allIds = []
+      tree.enumNodeChildren(tree.getRootId(), function rec(id) { allIds.push(id); tree.enumNodeChildren(id, rec) }, true)
       allIds.forEach((id) => { if (!pkg.has(id)) viewer.setThemingColor(id, WHITE) })
     }
     viewer.fitToView(dbIds)
@@ -421,10 +425,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   function clearIsolation() {
     const viewer = viewerRef.current
     if (!viewer) return
+    ctxRef.current.awpActive = false
+    ctxRef.current.awpToken = (ctxRef.current.awpToken || 0) + 1 // invalida searches en curso
     viewer.clearThemingColors()
     viewer.isolate([])
-    viewer.setGhosting(true)
-    viewer.fitToView()
+    viewer.showAll?.()
   }
 
   // Exportar imagen 16:9 del estado actual.
@@ -443,12 +448,17 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   }
 
   // cross-selection: enfocar el TAG activo de la planilla (solo si cambió).
+  // No actúa si hay un filtro AWP activo, para no pisar el aislado del paquete.
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !selectedTag || status !== 'ready') return
+    if (ctxRef.current.awpActive) return
     if (ctxRef.current.lastTag === selectedTag) return
     ctxRef.current.lastTag = selectedTag
-    findDbIds([selectedTag]).then((ids) => { if (ids.length) { viewer.isolate(ids); viewer.fitToView(ids) } })
+    findDbIds([selectedTag]).then((ids) => {
+      if (ctxRef.current.awpActive || !viewerRef.current) return
+      if (ids.length) { viewer.isolate(ids); viewer.fitToView(ids) }
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
 
@@ -456,7 +466,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   useEffect(() => {
     if (status !== 'ready') return
     if (awpValue) isolatePackage()
-    else if (viewerRef.current) { viewerRef.current.clearThemingColors?.(); viewerRef.current.isolate?.([]) }
+    else clearIsolation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [awpValue])
 
