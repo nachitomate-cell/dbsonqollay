@@ -56,18 +56,15 @@ export default function GridWorkspace({ tabs, activeSub, onSwitch, onClose, onRe
         })}
       </div>
 
-      {/* Se mantienen montadas todas las pestañas; las inactivas se ocultan con
-          CSS (display:none) en lugar de desmontarse. Así el visor 3D/APS no se
-          destruye y recrea al cambiar de pestaña (evita agotar contextos WebGL
-          y el error "addEventListener is not a function"). */}
-      {tabs.map((t) => {
-        const isActive = t.subcategory.id === activeSub
-        return (
-          <div key={t.subcategory.id} className={isActive ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
-            <DataTable dataset={t.dataset} subcategory={t.subcategory} onBack={onReturn} />
-          </div>
-        )
-      })}
+      {/* Solo se renderiza la pestaña activa. El visor APS es un singleton
+          global (un único contexto WebGL): al cambiar de pestaña el visor NO se
+          destruye, solo se suelta y se re-adopta, así que no hay churn de
+          contextos WebGL ("addEventListener is not a function"). */}
+      {(() => {
+        const active = tabs.find((t) => t.subcategory.id === activeSub)
+        if (!active) return null
+        return <DataTable key={active.subcategory.id} dataset={active.dataset} subcategory={active.subcategory} onBack={onReturn} />
+      })()}
     </div>
   )
 }

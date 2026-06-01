@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Camera, FolderOpen, Layers, Loader2, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
+import { getApsViewer } from './apsViewerSingleton.js'
 
 /**
  * Visor de modelos reales con el SDK de Autodesk (APS Viewer) + comportamientos
@@ -22,26 +23,6 @@ import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from 
 // Base del backend APS. En dev usa el server local; en producción, mismo origen
 // (el backend sirve el frontend) salvo que se defina VITE_APS_API.
 const API = import.meta.env.VITE_APS_API ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')
-const SDK_CSS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/style.min.css'
-const SDK_JS = 'https://developer.api.autodesk.com/modelderivative/v2/viewers/7.*/viewer3D.min.js'
-
-let sdkPromise = null
-function loadSdk() {
-  if (window.Autodesk?.Viewing) return Promise.resolve()
-  if (sdkPromise) return sdkPromise
-  sdkPromise = new Promise((resolve, reject) => {
-    const css = document.createElement('link')
-    css.rel = 'stylesheet'
-    css.href = SDK_CSS
-    document.head.appendChild(css)
-    const js = document.createElement('script')
-    js.src = SDK_JS
-    js.onload = resolve
-    js.onerror = () => reject(new Error('No se pudo cargar el SDK de APS (revisa tu conexión).'))
-    document.head.appendChild(js)
-  })
-  return sdkPromise
-}
 
 // Agrupa las propiedades del objeto por su "displayCategory" (como en Navisworks).
 function groupProps(properties) {
@@ -167,93 +148,65 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const onSelectRef = useRef(onSelect)
   useEffect(() => { onSelectRef.current = onSelect }, [onSelect])
 
-  // ---- init SDK + viewer (una sola vez, a prueba de StrictMode) ----
+  // ---- adopta el visor SINGLETON (un único contexto WebGL para toda la app) ----
   useEffect(() => {
     let cancelled = false
-    if (ctxRef.current.initStarted) return // evita doble inicialización (dev StrictMode)
-    ctxRef.current.initStarted = true
-    ;(async () => {
-      try {
-        setStatus('loadingSdk')
-        await loadSdk()
+    setStatus('loadingSdk')
+    getApsViewer(() =>
+      fetch(`${API}/api/aps/token`)
+        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
+        .then((r) => {
+          if (!r.ok) throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
+          return r.json()
+        }),
+    )
+      .then(({ viewer, container }) => {
         if (cancelled) return
-        const token = await fetch(`${API}/api/aps/token`)
-          .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
-          .then((r) => {
-            if (!r.ok) throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
-            return r.json()
-          })
-        if (cancelled) return
-        await new Promise((resolve) => {
-          window.Autodesk.Viewing.Initializer(
-            { env: 'AutodeskProduction', api: 'streamingV2', getAccessToken: (cb) => cb(token.access_token, token.expires_in) },
-            resolve,
-          )
-        })
-        if (cancelled || !mountRef.current) return
-        const viewer = new window.Autodesk.Viewing.GuiViewer3D(mountRef.current)
-        viewer.start()
+        viewerRef.current = viewer
+        // Mueve el contenedor compartido del visor a este componente.
+        mountRef.current?.appendChild(container)
+        try { viewer.resize() } catch { /* noop */ }
         applyViewerStyle(viewer, hq)
-        // Si el contenedor cambia de tamaño (Split, pantalla completa, panel que
-        // entra con tamaño 0), avisamos al visor para que ajuste el viewport.
-        // Sin esto, el WebGL puede quedar en 0×0 y el modelo no se ve.
-        const ro = new ResizeObserver(() => {
-          try { viewer.resize() } catch { /* aún no listo */ }
-        })
-        ro.observe(mountRef.current)
-        ctxRef.current.resizeObs = ro
-        // Re-aplica el estilo al cambiar el tema claro/oscuro de Sonqollay.
-        const themeObs = new MutationObserver(() => applyViewerStyle(viewer, hq))
-        themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-        ctxRef.current.themeObs = themeObs
-        viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, (e) => {
+
+        // Handlers propios de esta instancia (se quitan al desmontar).
+        const onSel = (e) => {
           const id = e.dbIdArray?.[0]
           if (id == null) { setObjProps(null); return }
           viewer.getProperties(id, (props) => {
             onSelectRef.current?.(props.name || String(id))
-            // Propiedades del objeto para mostrarlas dentro de Sonqollay.
-            setObjProps({
-              name: props.name || `Objeto ${id}`,
-              dbId: id,
-              groups: groupProps(props.properties || []),
-            })
+            setObjProps({ name: props.name || `Objeto ${id}`, dbId: id, groups: groupProps(props.properties || []) })
           })
-        })
-        viewerRef.current = viewer
-        setStatus(urn ? 'translating' : 'ready')
-        if (urn) loadDocument(urn)
-      } catch (e) {
-        if (!cancelled) { setStatus('error'); setMessage(e.message) }
-      }
-    })()
+        }
+        viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSel)
+        ctxRef.current.onSel = onSel
+
+        const ro = new ResizeObserver(() => { try { viewer.resize() } catch { /* noop */ } })
+        ro.observe(mountRef.current)
+        ctxRef.current.resizeObs = ro
+        const themeObs = new MutationObserver(() => applyViewerStyle(viewer, hq))
+        themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+        ctxRef.current.themeObs = themeObs
+
+        // Carga el modelo de esta subcategoría (si difiere del ya cargado).
+        if (urn) loadDocument(urn, { force: ctxRef.current.loadedUrn !== urn })
+        else setStatus('ready')
+      })
+      .catch((e) => { if (!cancelled) { setStatus('error'); setMessage(e.message) } })
+
     return () => {
       cancelled = true
-      // Destrucción completa del visor al desmontar: descarga modelos, libera
-      // el contexto WebGL y resetea el estado. Sin esto, cambiar de pestaña deja
-      // visores huérfanos que agotan los contextos WebGL (GPU Intel) y disparan
-      // "addEventListener is not a function".
+      // NO se destruye el visor (es singleton). Solo se "suelta": se quitan los
+      // listeners de esta instancia y se saca el contenedor del DOM de este
+      // componente. El visor y su contexto WebGL siguen vivos para reusarse.
       ctxRef.current.themeObs?.disconnect?.()
       ctxRef.current.resizeObs?.disconnect?.()
       const v = viewerRef.current
-      if (v) {
-        // Captura el canvas/contexto WebGL ANTES de destruir el visor.
-        const canvas = v.canvas || v.impl?.canvas || mountRef.current?.querySelector('canvas')
-        try { (v.getVisibleModels?.() || []).forEach((m) => v.unloadModel?.(m)) } catch { /* noop */ }
-        try { v.tearDown?.() } catch { /* noop */ }
-        try { v.finish?.() } catch { /* noop */ }
-        // Libera explícitamente el contexto WebGL: `finish()` NO lo hace de
-        // inmediato y los navegadores limitan ~8-16 contextos (GPU Intel). Sin
-        // esto, recrear el visor al cambiar de pestaña los agota y rompe el
-        // siguiente render ("addEventListener is not a function").
-        try {
-          const gl = canvas?.getContext?.('webgl2') || canvas?.getContext?.('webgl')
-          gl?.getExtension?.('WEBGL_lose_context')?.loseContext?.()
-        } catch { /* noop */ }
+      if (v && ctxRef.current.onSel) {
+        try { v.removeEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, ctxRef.current.onSel) } catch { /* noop */ }
       }
+      const cont = v?.container
+      if (cont && cont.parentNode) { try { cont.parentNode.removeChild(cont) } catch { /* noop */ } }
       viewerRef.current = null
-      ctxRef.current.loadedUrn = null
-      ctxRef.current.loadingUrn = null
-      ctxRef.current.initStarted = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
