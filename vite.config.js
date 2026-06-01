@@ -36,6 +36,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             // Fuentes de Google: cache-first con expiración larga.

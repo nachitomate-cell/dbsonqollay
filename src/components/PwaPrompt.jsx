@@ -16,6 +16,17 @@ export default function PwaPrompt() {
   const [updateSW, setUpdateSW] = useState(() => () => {})
 
   useEffect(() => {
+    // Cuando el SW nuevo toma el control, recarga una vez para evitar que
+    // queden chunks JS viejos mezclados con los nuevos (causa de errores tras
+    // un deploy). Guard para no entrar en bucle de recargas.
+    if ('serviceWorker' in navigator) {
+      let reloaded = false
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloaded) return
+        reloaded = true
+        window.location.reload()
+      })
+    }
     const fn = registerSW({
       immediate: true,
       onNeedRefresh: () => setNeedRefresh(true),
