@@ -194,7 +194,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       fetch(`\${getAPI()}/api/aps/token`)
         .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then((r) => {
-          if (!r.ok) throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
+          if (!r.ok || !r.headers.get('content-type')?.includes('application/json'))
+            throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
           return r.json()
         }),
     )
@@ -321,7 +322,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: file.name }),
       }).catch(connErr).then((r) => {
-        if (!r.ok) return r.json().then((j) => { throw new Error(j.error || 'No se pudo iniciar la subida.') })
+        if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) throw new Error('No se pudo iniciar la subida.')
         return r.json()
       })
 
@@ -338,7 +339,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ objectKey, uploadKey }),
       }).catch(connErr).then((r) => {
-        if (!r.ok) return r.json().then((j) => { throw new Error(j.error || 'No se pudo procesar el modelo.') })
+        if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) throw new Error('No se pudo procesar el modelo.')
         return r.json()
       })
 
@@ -353,7 +354,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setStatus('translating')
     const tick = async () => {
       try {
-        const s = await fetch(`\${getAPI()}/api/aps/status/${theUrn}`).then((r) => r.json())
+        const s = await fetch(`\${getAPI()}/api/aps/status/${theUrn}`).then((r) => {
+          if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) throw new Error('status fetch error')
+          return r.json()
+        })
         if (s.status === 'success') return loadDocument(theUrn)
         if (s.status === 'failed') { setStatus('error'); setMessage('La traducción del modelo falló.'); return }
         setMessage(`Traduciendo… ${s.progress || ''}`)
