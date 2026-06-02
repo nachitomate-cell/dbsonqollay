@@ -109,6 +109,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
   const scrollRef = useRef(null)
   const viewerWrapRef = useRef(null)
+  const newFieldRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Pantalla completa del contenedor del visor 3D (sirve para ambos motores).
@@ -633,6 +634,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               dirty={dirty}
               onReset={reset}
               onClose={() => setShowColumns(false)}
+              inputRef={newFieldRef}
             />
           )}
 
@@ -751,6 +753,19 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                         </th>
                       )
                     })}
+                    {/* Botón + para agregar columna directamente desde el encabezado */}
+                    <th className={`sticky top-0 z-20 border-b border-slate-200 px-2 py-2.5 dark:border-white/10 ${headBg}`}>
+                      <button
+                        onClick={() => {
+                          setShowColumns(true)
+                          setTimeout(() => newFieldRef.current?.focus(), 50)
+                        }}
+                        title="Agregar columna"
+                        className="grid h-6 w-6 place-items-center rounded-md border border-dashed border-slate-300 text-slate-400 transition hover:border-brand-400 hover:text-brand-600 dark:border-white/15 dark:hover:border-accent/50 dark:hover:text-accent"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -907,7 +922,7 @@ function CardsView({ rows, headers, selected, onToggle, onOpen }) {
   )
 }
 
-function ColumnManager({ columns, onToggle, onRemove, newField, setNewField, onAdd, dirty, onReset, onClose }) {
+function ColumnManager({ columns, onToggle, onRemove, newField, setNewField, onAdd, dirty, onReset, onClose, inputRef }) {
   return (
     <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-ink-800">
       <div className="mb-3 flex items-center justify-between">
@@ -925,6 +940,7 @@ function ColumnManager({ columns, onToggle, onRemove, newField, setNewField, onA
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-white/10">
         <input
+          ref={inputRef}
           value={newField}
           onChange={(e) => setNewField(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onAdd()}
