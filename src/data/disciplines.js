@@ -376,6 +376,14 @@ export const disciplines = [
       },
     ],
   },
+  {
+    id: 'academia',
+    name: 'Academia',
+    icon: 'GraduationCap',
+    comingSoon: true,
+    description: 'Formación y capacitación en AWP, BIM y gestión de proyectos de ingeniería.',
+    subcategories: [],
+  },
 ]
 
 /** Devuelve la disciplina por id. */

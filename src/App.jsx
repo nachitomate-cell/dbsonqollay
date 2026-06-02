@@ -3,6 +3,7 @@ import PwaPrompt from './components/PwaPrompt.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
+import AcademiaView from './components/AcademiaView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import { datasets as baseDatasets, disciplines as baseDisciplines, defaultColumns, emptyDataset } from './data/disciplines.js'
@@ -201,6 +202,10 @@ export default function App() {
               onClose={closeTab}
               onReturn={() => setActiveSub(null)}
             />
+          ) : discipline?.comingSoon ? (
+            <div className="h-full overflow-y-auto">
+              <AcademiaView />
+            </div>
           ) : (
             <div className="h-full overflow-y-auto">
               <DisciplineView
