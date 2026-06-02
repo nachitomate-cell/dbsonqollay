@@ -43,6 +43,12 @@ export default defineConfig({
         skipWaiting: true,
         runtimeCaching: [
           {
+            // /api/* siempre va a la red — nunca se cachea. Sin esto el SW puede
+            // devolver index.html cacheado para rutas API y romper el visor 3D.
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            handler: 'NetworkOnly',
+          },
+          {
             // HTML / navegaciones: siempre la última versión si hay red; el
             // caché solo se usa como respaldo offline.
             urlPattern: ({ request, url }) =>
