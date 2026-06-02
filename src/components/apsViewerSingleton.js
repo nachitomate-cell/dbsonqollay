@@ -10,12 +10,13 @@
  * El componente React "adopta" el contenedor del visor (lo mueve a su <div>)
  * cuando está activo, y lo libera al desmontar. El visor nunca se destruye.
  */
-// Versión del visor de Autodesk. Por defecto `7.*` (la última 7.x), pero se
-// puede FIJAR a una versión estable concreta con VITE_APS_VIEWER_VERSION
-// (p. ej. "7.95", "7.92", "7.90") sin tocar código. Útil porque la última 7.x
-// a veces trae regresiones que rompen el render en GPUs Intel
-// ("t.addEventListener is not a function" en WebGLRenderer/_initObject).
-const VIEWER_VERSION = import.meta.env.VITE_APS_VIEWER_VERSION || '7.*'
+// Versión del visor de Autodesk. Se FIJA a 7.95.0 (estable) porque la última
+// 7.x (comodín `7.*`) trae una regresión que rompe el render en GPUs Intel
+// ("t.addEventListener is not a function" en WebGLRenderer/_initObject). Se
+// puede sobreescribir con VITE_APS_VIEWER_VERSION (formato "mayor.menor.patch",
+// p. ej. "7.95.0") sin tocar código, y si esa versión no existe el loader cae
+// de vuelta a `7.*`.
+const VIEWER_VERSION = import.meta.env.VITE_APS_VIEWER_VERSION || '7.95.0'
 
 const cdn = (v, file) => `https://developer.api.autodesk.com/modelderivative/v2/viewers/${v}/${file}`
 
