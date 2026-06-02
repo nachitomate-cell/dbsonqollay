@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronDown, FolderOpen, Layers, Loader2, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { Camera, ChevronDown, Check, FolderOpen, Layers, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 import { getApsViewer } from './apsViewerSingleton.js'
 
@@ -104,7 +104,7 @@ function frameModel(viewer) {
   requestAnimationFrame(fit)
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default', isFiltered = false }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
@@ -165,6 +165,38 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   const [awpQuery, setAwpQuery] = useState('')
   const [objProps, setObjProps] = useState(null) // propiedades del objeto pinchado
   const [showProps, setShowProps] = useState(true)
+
+  // ---- vínculo con la planilla: editar los datos de ingeniería del objeto ----
+  // Al pinchar un objeto se busca su registro en la planilla por TAG y se
+  // muestran sus campos EDITABLES en el panel. Se guardan con onEditRecord, que
+  // persiste en el dataset editable → queda sincronizado con la tabla. Esto
+  // funciona también en pantalla completa (el drawer de la tabla no se ve ahí).
+  const [linkRow, setLinkRow] = useState(null) // { id } del registro vinculado
+  const [draft, setDraft] = useState(null)     // borrador editable de sus campos
+  const [savedField, setSavedField] = useState(false)
+  const normTag = (s) => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+  useEffect(() => {
+    if (!objProps) { setLinkRow(null); setDraft(null); return }
+    const tagk = headers[0]
+    const target = normTag(objProps.name)
+    const row = target
+      ? rows.find((r) => normTag(r[tagk]) === target)
+        || rows.find((r) => normTag(r[tagk]) && target.includes(normTag(r[tagk])))
+      : null
+    if (row) { setLinkRow({ id: row._id }); setDraft({ ...row }) }
+    else { setLinkRow(null); setDraft(null) }
+    setSavedField(false)
+    // Solo al cambiar de objeto (no en cada edición), para no pisar lo escrito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [objProps?.dbId])
+  function saveLinked() {
+    if (!linkRow || !draft || !onEditRecord) return
+    const patch = {}
+    headers.forEach((h) => { patch[h] = draft[h] ?? '' })
+    onEditRecord(linkRow.id, patch)
+    setSavedField(true)
+    setTimeout(() => setSavedField(false), 2000)
+  }
 
   useEffect(() => { if (!awpField && awpFields.length) setAwpField(awpFields[0]) }, [awpFields, awpField])
   // Al cambiar de campo AWP, limpia la selección.
@@ -675,6 +707,31 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
             <button onClick={() => setShowProps(false)} className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            {/* Datos de ingeniería (planilla), editables y vinculados por TAG */}
+            {draft ? (
+              <div className="mb-3 rounded-lg border border-brand-200 bg-brand-50/60 p-2 dark:border-accent/20 dark:bg-accent/5">
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-accent">Datos de ingeniería</p>
+                <div className="space-y-1.5">
+                  {headers.map((h) => (
+                    <label key={h} className="block">
+                      <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">{h.replace(/_/g, ' ')}</span>
+                      <input
+                        value={draft[h] ?? ''}
+                        onChange={(e) => setDraft((d) => ({ ...d, [h]: e.target.value }))}
+                        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') saveLinked() }}
+                        className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-100"
+                      />
+                    </label>
+                  ))}
+                </div>
+                <button onClick={saveLinked} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+                  {savedField ? <><Check className="h-3.5 w-3.5" /> Guardado</> : <><Save className="h-3.5 w-3.5" /> Guardar en planilla</>}
+                </button>
+              </div>
+            ) : (
+              <p className="mb-3 rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-400 dark:bg-white/5">Sin registro en la planilla para este objeto (el TAG no coincide).</p>
+            )}
+            {objProps.groups.length > 0 && <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Propiedades del modelo (solo lectura)</p>}
             {objProps.groups.length === 0 && <p className="py-3 text-center text-xs text-slate-400">Este objeto no tiene propiedades.</p>}
             {objProps.groups.map((g) => (
               <div key={g.category} className="mb-3">

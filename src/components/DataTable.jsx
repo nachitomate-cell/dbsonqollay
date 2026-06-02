@@ -334,8 +334,11 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const handleApsSelect = useCallback((tag) => {
     const row = filteredRef.current.find((r) => String(r[headers[0]]) === String(tag))
     if (row) {
+      // Solo activa (resalta) la fila. La edición se hace en el panel del visor
+      // (ApsViewer → "Datos de ingeniería"), que funciona también en pantalla
+      // completa, donde el drawer lateral de la tabla no es visible. La ficha
+      // completa sigue disponible con doble clic en la tabla.
       setActiveId(row._id)
-      setEditingId(row._id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers[0]])
@@ -829,6 +832,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   headers={headers}
                   selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
                   onSelect={handleApsSelect}
+                  onEditRecord={(id, patch) => { updateRecord(id, patch); logAction('Editó un registro') }}
                   dataKey={subcategory.dataKey}
                   isFiltered={activeFilters.length > 0 || query.trim() !== ''}
                 />
