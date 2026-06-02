@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronDown, Check, FolderOpen, Layers, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Layers, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 import { getApsViewer } from './apsViewerSingleton.js'
 
@@ -222,6 +222,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const [bulkField, setBulkField] = useState('')
   const [bulkValue, setBulkValue] = useState('')
   const [bulkSaved, setBulkSaved] = useState(false)
+  // Conjunto a editar elegido por filtro/paquete (sin clic en 3D): { ids, tags, label }.
+  const [bulkSet, setBulkSet] = useState(null)
+  // Modo "selección por área" (arrastre): activa la extensión BoxSelection.
+  const [areaMode, setAreaMode] = useState(false)
   const multiRows = useMemo(() => {
     if (!multiNames || multiNames.length < 2) return null
     const tagk = headers[0]
@@ -236,12 +240,6 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     return { ids: [...map.keys()], tags: [...map.values()] }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiNames, rows, headers.join('|')])
-  function saveBulk() {
-    if (!multiRows || !multiRows.ids.length || !bulkField || !onEditRecords) return
-    onEditRecords(multiRows.ids, { [bulkField]: bulkValue })
-    setBulkSaved(true)
-    setTimeout(() => setBulkSaved(false), 2000)
-  }
 
   useEffect(() => { if (!awpField && awpFields.length) setAwpField(awpFields[0]) }, [awpFields, awpField])
   // Al cambiar de campo AWP, limpia la selección.
@@ -267,6 +265,55 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     return rows.filter((r) => set.has(String(r[awpField] ?? ''))).map((r) => String(r[tagKey] ?? '')).filter(Boolean)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, awpField, awpSel])
+
+  // Conjunto activo para edición masiva: el elegido por filtro/paquete tiene
+  // prioridad; si no, los objetos seleccionados en el 3D (Ctrl/Cmd+clic o área).
+  const activeBulk = bulkSet || multiRows
+  function saveBulk() {
+    if (!activeBulk || !activeBulk.ids.length || !bulkField || !onEditRecords) return
+    onEditRecords(activeBulk.ids, { [bulkField]: bulkValue })
+    setBulkSaved(true)
+    setTimeout(() => setBulkSaved(false), 2000)
+  }
+  function closeBulk() {
+    if (bulkSet) setBulkSet(null)
+    else { setMultiNames(null); safe(() => viewerRef.current?.clearSelection?.()) }
+  }
+  // Edita TODO el conjunto activo sin seleccionar a mano: el paquete AWP elegido,
+  // o si no, las filas actualmente filtradas en la planilla (lo que se ve).
+  function editActiveSet() {
+    const tagk = headers[0]
+    let target = rows
+    let label = isFiltered ? 'filtrados' : 'del modelo'
+    if (awpSel.length && packageTags.length) {
+      const set = new Set(packageTags.map(normTag))
+      target = rows.filter((r) => set.has(normTag(r[tagk])))
+      label = awpSel.length === 1 ? `paquete ${awpSel[0]}` : `${awpSel.length} paquetes`
+    }
+    if (!target.length) return
+    setObjProps(null); setMultiNames(null)
+    setBulkField(''); setBulkValue('')
+    setBulkSet({ ids: target.map((r) => r._id), tags: target.map((r) => String(r[tagk] ?? '')), label })
+    setShowProps(true)
+  }
+  // Selección por área: arrastrar un rectángulo selecciona todo lo que toca
+  // (incluidos los elementos pequeños). Usa la extensión oficial BoxSelection;
+  // su resultado dispara SELECTION_CHANGED → el panel de edición múltiple.
+  async function toggleArea() {
+    const v = viewerRef.current
+    if (!v) return
+    try {
+      if (!ctxRef.current.boxExt) ctxRef.current.boxExt = await v.loadExtension('Autodesk.BoxSelection')
+      const ext = ctxRef.current.boxExt
+      const next = !areaMode
+      if (next) { ext.activate ? ext.activate() : v.toolController?.activateTool?.('box-selection') }
+      else { ext.deactivate ? ext.deactivate() : v.toolController?.deactivateTool?.('box-selection') }
+      setAreaMode(next)
+    } catch (e) {
+      console.warn('[APS] Selección por área no disponible:', e?.message || e)
+      setMessage('La selección por área no está disponible en este visor.')
+    }
+  }
 
   // Callback siempre fresco sin re-disparar efectos.
   const onSelectRef = useRef(onSelect)
@@ -728,6 +775,20 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
               )}
             </div>
             <button
+              onClick={toggleArea}
+              title="Selección por área: arrastrá un rectángulo sobre el modelo para seleccionar varios elementos (incluidos los pequeños)"
+              className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', areaMode ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+            >
+              <BoxSelect className="h-3.5 w-3.5" /> Área
+            </button>
+            <button
+              onClick={editActiveSet}
+              title={awpSel.length ? 'Editar en masa todos los elementos del paquete seleccionado' : isFiltered ? 'Editar en masa todos los elementos filtrados en la planilla' : 'Editar en masa todos los elementos del modelo'}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:text-brand-600 dark:border-white/10 dark:text-slate-300"
+            >
+              <ListChecks className="h-3.5 w-3.5" /> Editar {awpSel.length && packageTags.length ? `paquete` : isFiltered ? `filtrados` : 'todos'}
+            </button>
+            <button
               onClick={() => setHq((v) => !v)}
               title={hq ? 'Calidad alta (sombras, AO, bordes) — clic para priorizar rendimiento' : 'Modo rendimiento — clic para alta calidad'}
               className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', hq ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
@@ -751,19 +812,19 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         </div>
       )}
 
-      {/* Panel de edición múltiple (Ctrl/Cmd+clic selecciona varios objetos) */}
-      {ready && multiRows && showProps && (
+      {/* Panel de edición múltiple (Ctrl/Cmd+clic, arrastre por área o por filtro) */}
+      {ready && activeBulk && showProps && (
         <div className={`absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden ${glass}`}>
           <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-500">Edición múltiple</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-white">{multiRows.ids.length} elemento{multiRows.ids.length === 1 ? '' : 's'} de la planilla</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-500">Edición múltiple{bulkSet?.label ? ` · ${bulkSet.label}` : ''}</p>
+              <p className="text-sm font-bold text-slate-800 dark:text-white">{activeBulk.ids.length} elemento{activeBulk.ids.length === 1 ? '' : 's'} de la planilla</p>
             </div>
-            <button onClick={() => setShowProps(false)} className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+            <button onClick={closeBulk} className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-            {multiRows.ids.length === 0 ? (
-              <p className="rounded-lg bg-slate-50 px-2 py-2 text-[10px] text-slate-400 dark:bg-white/5">Ninguno de los objetos seleccionados coincide con la planilla (TAG).</p>
+            {activeBulk.ids.length === 0 ? (
+              <p className="rounded-lg bg-slate-50 px-2 py-2 text-[10px] text-slate-400 dark:bg-white/5">Ninguno de los elementos coincide con la planilla (TAG).</p>
             ) : (
               <>
                 <label className="block">
@@ -783,11 +844,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                   />
                 </label>
                 <button onClick={saveBulk} disabled={!bulkField} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
-                  {bulkSaved ? <><Check className="h-3.5 w-3.5" /> Aplicado</> : <><Save className="h-3.5 w-3.5" /> Aplicar a {multiRows.ids.length}</>}
+                  {bulkSaved ? <><Check className="h-3.5 w-3.5" /> Aplicado</> : <><Save className="h-3.5 w-3.5" /> Aplicar a {activeBulk.ids.length}</>}
                 </button>
                 <p className="mt-2 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Elementos</p>
                 <div className="flex flex-wrap gap-1">
-                  {multiRows.tags.map((t, i) => (
+                  {activeBulk.tags.slice(0, 80).map((t, i) => (
                     <span key={i} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-white/5 dark:text-slate-300">{t}</span>
                   ))}
                 </div>
@@ -850,9 +911,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           </div>
         </div>
       )}
-      {ready && (objProps || multiRows) && !showProps && (
+      {ready && (objProps || activeBulk) && !showProps && (
         <button onClick={() => setShowProps(true)} className="absolute bottom-3 left-3 z-10 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200">
-          {multiRows ? `Ver edición múltiple (${multiRows.ids.length})` : 'Ver propiedades'}
+          {activeBulk ? `Ver edición múltiple (${activeBulk.ids.length})` : 'Ver propiedades'}
         </button>
       )}
 
