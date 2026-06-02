@@ -1,20 +1,16 @@
-// SonqollaySync — plugin de Navisworks que trae los datos editados en la web
-// Sonqollay (GET /api/datasets/:key) y los escribe como propiedades custom en
-// los elementos del modelo, vinculando por TAG.
+// SonqollaySync — plugin de Navisworks 2026 que trae los datos editados en la
+// web Sonqollay (GET /api/datasets/:key) y los escribe como propiedades custom
+// en los elementos del modelo, vinculando por TAG.
 //
-// Compilar como Class Library (.NET Framework de tu Navisworks). Referencias:
-//   Autodesk.Navisworks.Api.dll
-//   Autodesk.Navisworks.ComApi.dll
-//   Autodesk.Navisworks.Interop.ComApi.dll
-//
+// SIN dependencias externas (NuGet): usa WebClient + JavaScriptSerializer, ambos
+// del .NET Framework 4.8. Compilar con SonqollaySync.csproj (net48 / x64).
 // Ver README.md para instalación y configuración.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text.Json;
+using System.Net;
+using System.Web.Script.Serialization; // System.Web.Extensions (framework)
 using System.Windows.Forms;
 
 using Autodesk.Navisworks.Api;
@@ -32,19 +28,21 @@ namespace Sonqollay
     public class SonqollaySync : AddInPlugin
     {
         // ----- CONFIGURACIÓN (editar) -------------------------------------
-        private const string BaseUrl     = "https://basesonqollay.synaptechspa.cl";
-        private const string ApiToken    = "PEGAR_EL_MISMO_SQY_API_TOKEN";
-        private const string DatasetKey  = "PEGAR_LA_KEY_QUE_MOSTRO_LA_WEB";
+        private const string BaseUrl      = "https://basesonqollay.synaptechspa.cl";
+        private const string ApiToken     = "PEGAR_EL_MISMO_SQY_API_TOKEN";
+        private const string DatasetKey   = "PEGAR_LA_KEY_QUE_MOSTRO_LA_WEB";
         // Propiedad del modelo que contiene el TAG (en tus DWG suele ser la capa).
         private const string LinkProperty = "Layer";
         // Pestaña de propiedades custom que se agrega a los elementos.
-        private const string TabName = "Sonqollay";
+        private const string TabName      = "Sonqollay";
         // ------------------------------------------------------------------
-
-        private static readonly HttpClient Http = new HttpClient();
 
         public override int Execute(params string[] parameters)
         {
+            // Vercel exige TLS 1.2+. En net48 suele estar por defecto, pero lo
+            // forzamos para evitar errores de handshake en máquinas viejas.
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
             Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
             if (doc == null || doc.Models.Count == 0)
             {
@@ -63,7 +61,9 @@ namespace Sonqollay
                 return 0;
             }
 
-            string tagField = data.tagField ?? (data.headers != null && data.headers.Count > 0 ? data.headers[0] : null);
+            string tagField = !string.IsNullOrEmpty(data.tagField)
+                ? data.tagField
+                : (data.headers.Count > 0 ? data.headers[0] : null);
             if (string.IsNullOrEmpty(tagField))
             {
                 MessageBox.Show("El dataset no define la columna de TAG (tagField).");
@@ -74,7 +74,8 @@ namespace Sonqollay
 
             foreach (var row in data.rows)
             {
-                if (!row.TryGetValue(tagField, out string tag) || string.IsNullOrWhiteSpace(tag))
+                string tag;
+                if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag))
                     continue;
 
                 ModelItemCollection items = FindByTag(doc, tag);
@@ -88,9 +89,12 @@ namespace Sonqollay
             }
 
             MessageBox.Show(
-                $"Sonqollay Sync\n\nDataset: {data.name}\nFilas: {data.rows.Count}\n" +
-                $"TAGs encontrados: {matched}\nElementos actualizados: {applied}\n" +
-                $"TAGs sin geometría: {missing}\n\n" +
+                "Sonqollay Sync\n\n" +
+                "Dataset: " + data.name + "\n" +
+                "Filas: " + data.rows.Count + "\n" +
+                "TAGs encontrados: " + matched + "\n" +
+                "Elementos actualizados: " + applied + "\n" +
+                "TAGs sin geometría: " + missing + "\n\n" +
                 "Guardá el archivo (.nwf/.nwd) para conservar las propiedades.");
             return 0;
         }
@@ -98,43 +102,56 @@ namespace Sonqollay
         // ---- 1) Descargar el dataset por HTTP ----------------------------
         private Dataset FetchDataset()
         {
-            string url = $"{BaseUrl}/api/datasets/{Uri.EscapeDataString(DatasetKey)}";
-            var req = new HttpRequestMessage(HttpMethod.Get, url);
-            if (!string.IsNullOrEmpty(ApiToken))
-                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ApiToken);
-
-            HttpResponseMessage res = Http.SendAsync(req).GetAwaiter().GetResult();
-            string json = res.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            if (!res.IsSuccessStatusCode)
-                throw new Exception($"HTTP {(int)res.StatusCode}: {json}");
-
+            string url = BaseUrl.TrimEnd('/') + "/api/datasets/" + Uri.EscapeDataString(DatasetKey);
+            string json;
+            using (var wc = new WebClient())
+            {
+                wc.Encoding = System.Text.Encoding.UTF8;
+                if (!string.IsNullOrEmpty(ApiToken))
+                    wc.Headers[HttpRequestHeader.Authorization] = "Bearer " + ApiToken;
+                try
+                {
+                    json = wc.DownloadString(url);
+                }
+                catch (WebException wex)
+                {
+                    string body = "";
+                    if (wex.Response != null)
+                        using (var sr = new System.IO.StreamReader(wex.Response.GetResponseStream()))
+                            body = sr.ReadToEnd();
+                    throw new Exception(wex.Message + (body.Length > 0 ? "\n" + body : ""));
+                }
+            }
             return ParseDataset(json);
         }
 
         private Dataset ParseDataset(string json)
         {
-            using var d = JsonDocument.Parse(json);
-            var root = d.RootElement;
+            var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var root = ser.DeserializeObject(json) as Dictionary<string, object>;
             var ds = new Dataset
             {
-                name = root.TryGetProperty("name", out var n) ? n.GetString() : DatasetKey,
-                tagField = root.TryGetProperty("tagField", out var tf) ? tf.GetString() : null,
+                name = root != null && root.ContainsKey("name") ? Convert.ToString(root["name"]) : DatasetKey,
+                tagField = root != null && root.ContainsKey("tagField") ? Convert.ToString(root["tagField"]) : null,
                 headers = new List<string>(),
                 rows = new List<Dictionary<string, string>>(),
             };
-            if (root.TryGetProperty("headers", out var hs))
-                foreach (var h in hs.EnumerateArray()) ds.headers.Add(h.GetString());
+            if (root == null) return ds;
 
-            if (root.TryGetProperty("rows", out var rows))
+            if (root.ContainsKey("headers") && root["headers"] is object[] hs)
+                foreach (var h in hs) ds.headers.Add(Convert.ToString(h));
+
+            if (root.ContainsKey("rows") && root["rows"] is object[] rows)
             {
-                foreach (var r in rows.EnumerateArray())
+                foreach (var item in rows)
                 {
-                    var dict = new Dictionary<string, string>();
-                    foreach (var prop in r.EnumerateObject())
-                        dict[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
-                            ? prop.Value.GetString()
-                            : prop.Value.ToString();
-                    ds.rows.Add(dict);
+                    if (item is Dictionary<string, object> obj)
+                    {
+                        var dict = new Dictionary<string, string>();
+                        foreach (var kv in obj)
+                            dict[kv.Key] = kv.Value == null ? "" : Convert.ToString(kv.Value);
+                        ds.rows.Add(dict);
+                    }
                 }
             }
             return ds;
@@ -142,7 +159,7 @@ namespace Sonqollay
 
         // ---- 2) Matchear por TAG -----------------------------------------
         // Busca items cuya propiedad de vínculo == tag. Si no encuentra por esa
-        // propiedad, hace un escaneo amplio (cualquier propiedad), como la web.
+        // propiedad, hace un fallback por el nombre del item.
         private ModelItemCollection FindByTag(Document doc, string tag)
         {
             var search = new Search();
@@ -154,7 +171,6 @@ namespace Sonqollay
             var found = search.FindAll(doc, false);
             if (found.Count > 0) return found;
 
-            // Fallback: escaneo amplio por nombre del item.
             var s2 = new Search();
             s2.Selection.SelectAll();
             s2.Locations = SearchLocations.DescendantsAndSelf;
@@ -185,8 +201,6 @@ namespace Sonqollay
             }
 
             // Aplica la pestaña a la selección actual (los items de este TAG).
-            // TODO verificar la firma exacta según la versión del SDK:
-            //   SetUserDefined(int index, string name, string internalName, InwOaPropertyVec vec)
             state.SetUserDefined(0, TabName, Sanitize(TabName), vec);
         }
 
