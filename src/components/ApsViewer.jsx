@@ -20,9 +20,11 @@ import { getApsViewer } from './apsViewerSingleton.js'
  *   selectedTag             — TAG activo (cross-selection desde la planilla)
  *   onSelect(tag)           — clic en geometría -> notifica el TAG
  */
-// Base del backend APS. En dev usa el server local; en producción, mismo origen
-// (el backend sirve el frontend) salvo que se defina VITE_APS_API.
-const API = import.meta.env.VITE_APS_API ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')
+// Base del backend APS. Prioridad: localStorage > VITE_APS_API > mismo origen.
+const getAPI = () =>
+  localStorage.getItem('sqy-api-url') ||
+  import.meta.env.VITE_APS_API ||
+  (import.meta.env.DEV ? 'http://localhost:3000' : '')
 
 // Agrupa las propiedades del objeto por su "displayCategory" (como en Navisworks).
 function groupProps(properties) {
@@ -189,8 +191,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     let cancelled = false
     setStatus('loadingSdk')
     getApsViewer(() =>
-      fetch(`${API}/api/aps/token`)
-        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${API}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
+      fetch(`\${getAPI()}/api/aps/token`)
+        .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then((r) => {
           if (!r.ok) throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
           return r.json()
@@ -314,7 +316,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       const connErr = () => { throw new Error(`No se pudo conectar al backend APS. Verifica el despliegue (VITE_APS_API o las funciones /api).`) }
 
       // 1) Pedir URL firmada al backend (paquete pequeño, no el archivo).
-      const { objectKey, uploadKey, urls } = await fetch(`${API}/api/aps/upload-url`, {
+      const { objectKey, uploadKey, urls } = await fetch(`\${getAPI()}/api/aps/upload-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: file.name }),
@@ -331,7 +333,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       // 3) Confirmar y lanzar la traducción.
       setMessage('Procesando modelo…')
-      const { urn: newUrn } = await fetch(`${API}/api/aps/complete`, {
+      const { urn: newUrn } = await fetch(`\${getAPI()}/api/aps/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ objectKey, uploadKey }),
@@ -351,7 +353,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setStatus('translating')
     const tick = async () => {
       try {
-        const s = await fetch(`${API}/api/aps/status/${theUrn}`).then((r) => r.json())
+        const s = await fetch(`\${getAPI()}/api/aps/status/${theUrn}`).then((r) => r.json())
         if (s.status === 'success') return loadDocument(theUrn)
         if (s.status === 'failed') { setStatus('error'); setMessage('La traducción del modelo falló.'); return }
         setMessage(`Traduciendo… ${s.progress || ''}`)

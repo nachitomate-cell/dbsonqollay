@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
+import SettingsPanel from './components/SettingsPanel.jsx'
 import { datasets as baseDatasets, disciplines as baseDisciplines, defaultColumns, emptyDataset } from './data/disciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
@@ -20,6 +21,7 @@ import { exportProjectToExcel } from './utils/projectExport.js'
  */
 export default function App() {
   const [collapsed, setCollapsed] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeDiscipline, setActiveDiscipline] = useState('electrico')
   const [openSubs, setOpenSubs] = useState([])
   const [activeSub, setActiveSub] = useState(null)
@@ -34,7 +36,7 @@ export default function App() {
     localStorage.setItem('sqy-created-sheets-v2', JSON.stringify(createdSheets))
   }, [createdSheets])
 
-  const { datasets: importedDatasets, extraSubs, importFile, removeImported, importing, error } = useImportedDatasets()
+  const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets()
 
   useEffect(() => {
     const root = document.documentElement
@@ -142,6 +144,22 @@ export default function App() {
     })
   }
 
+  function clearCreatedSheets() {
+    setOpenSubs((prev) => prev.filter((id) => !createdSheets[id]))
+    setActiveSub((cur) => (createdSheets[cur] ? null : cur))
+    setCreatedSheets({})
+  }
+
+  function handleClearImports() {
+    const importedSubIds = new Set(Object.values(extraSubs).flat().map((s) => s.id))
+    setOpenSubs((prev) => {
+      const next = prev.filter((id) => !importedSubIds.has(id))
+      if (activeSub && importedSubIds.has(activeSub)) setActiveSub(next[next.length - 1] ?? null)
+      return next
+    })
+    clearImports()
+  }
+
   async function exportProject() {
     setNotice('Generando Excel del proyecto…')
     try {
@@ -171,6 +189,7 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
         <main className="min-h-0 flex-1 overflow-hidden">
@@ -208,6 +227,15 @@ export default function App() {
       )}
 
       <PwaPrompt />
+
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={theme}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onClearSheets={clearCreatedSheets}
+        onClearImports={handleClearImports}
+      />
     </div>
   )
 }

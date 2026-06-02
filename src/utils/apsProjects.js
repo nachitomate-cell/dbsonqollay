@@ -45,7 +45,10 @@ export function removeProject(urn) {
  * dispositivo) y los fusiona con los guardados localmente. Si el backend no
  * responde, devuelve solo los locales.
  */
-const apiBase = () => import.meta.env.VITE_APS_API ?? (import.meta.env.DEV ? 'http://localhost:3000' : '')
+const apiBase = () =>
+  localStorage.getItem('sqy-api-url') ||
+  import.meta.env.VITE_APS_API ||
+  (import.meta.env.DEV ? 'http://localhost:3000' : '')
 
 export async function fetchAllProjects() {
   const local = listProjects()

@@ -126,6 +126,10 @@ export function useImportedDatasets() {
     }
   }, [])
 
+  const clearAll = useCallback(() => {
+    setState({ datasets: {}, subs: {} })
+  }, [])
+
   const removeImported = useCallback((subId) => {
     setState((prev) => {
       const subsCopy = {}
@@ -143,5 +147,5 @@ export function useImportedDatasets() {
     })
   }, [])
 
-  return { datasets, extraSubs: subs, importFile, removeImported, importing, error }
+  return { datasets, extraSubs: subs, importFile, removeImported, clearAll, importing, error }
 }
