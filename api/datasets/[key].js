@@ -1,15 +1,4 @@
-import { datasetObjectKey, putJsonObject, readJsonObject, send } from '../_lib/aps.js'
-
-// Verifica el token del plugin (solo para LECTURA). Si no se configuró
-// SQY_API_TOKEN en el entorno, la lectura queda abierta (modo dev).
-function readAuthorized(req) {
-  const expected = process.env.SQY_API_TOKEN
-  if (!expected) return true
-  const auth = req.headers.authorization || ''
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  const qtok = req.query?.token
-  return bearer === expected || qtok === expected
-}
+import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, pluginAuthorized, send } from '../_lib/aps.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -37,11 +26,12 @@ export default async function handler(req, res) {
         updatedAt: new Date().toISOString(),
       }
       await putJsonObject(objectKey, payload)
+      await upsertDatasetIndex({ key, name: payload.name, count: rows.length, updatedAt: payload.updatedAt })
       return send(res, 200, { ok: true, key, count: rows.length, url: `/api/datasets/${encodeURIComponent(key)}` })
     }
 
     if (req.method === 'GET') {
-      if (!readAuthorized(req)) {
+      if (!pluginAuthorized(req)) {
         return send(res, 401, { error: 'No autorizado: falta o no coincide el token (Authorization: Bearer <SQY_API_TOKEN>).' })
       }
       const data = await readJsonObject(objectKey)

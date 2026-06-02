@@ -28,7 +28,12 @@ Plugin Navisworks (.NET)  ── matchea por TAG y escribe propiedades custom
 Body JSON: `{ name, tagField, headers: [...], rows: [{col: val, ...}] }`.
 Respuesta: `{ ok: true, key, count, url }`.
 
-### `GET /api/datasets/:key` (lo usa el plugin)
+### `GET /api/datasets` (lo usa el plugin para listar)
+Header: `Authorization: Bearer <SQY_API_TOKEN>` (o `?token=<...>`).
+Respuesta: `{ datasets: [ { key, name, count, updatedAt } ] }`.
+El plugin usa esto para mostrar el cuadro de selección de planillas.
+
+### `GET /api/datasets/:key` (lo usa el plugin para descargar una)
 Header: `Authorization: Bearer <SQY_API_TOKEN>` (o `?token=<...>`).
 Respuesta:
 ```json
@@ -103,19 +108,24 @@ que el DLL dentro de `Plugins`:
 (o `C:\Program Files\Autodesk\Navisworks Manage 2026\Plugins\SonqollaySync\`).
 El `-p:DeployToNavisworks=true` de arriba ya hace esta copia.
 
-### Configurar el plugin
+### Configurar el plugin (una sola vez)
 Editá las constantes al inicio de `SonqollaySync.cs`:
 - `BaseUrl` = `https://basesonqollay.synaptechspa.cl`
 - `ApiToken` = el mismo valor de `SQY_API_TOKEN`
-- `DatasetKey` = la `key` que mostró la web al publicar
 - `LinkProperty` = propiedad del modelo que tiene el TAG (por defecto `"Layer"`;
   en tus DWG podría ser la **Capa**).
 
-### Usar
-1. En la web: editá la planilla → **"Publicar para Navisworks"** (anotá la `key`).
-2. En Navisworks: abrí el modelo → pestaña **Add-ins** → **Sonqollay Sync**.
-3. El plugin descarga, matchea y agrega la pestaña **"Sonqollay"** a los
-   elementos. **Guardá** como `.nwf`/`.nwd` para persistir las propiedades.
+> La planilla a sincronizar **NO** se configura acá: se elige al ejecutar. Por
+> eso compilás una sola vez aunque manejes muchas planillas.
 
-> Los nombres exactos de algunos métodos COM pueden variar según la versión del
-> SDK; están señalados con `// TODO verificar` en el código.
+### Usar
+1. En la web: editá cada planilla → **"Publicar para Navisworks"** (una vez por
+   planilla; al re-editar, volvés a publicar y se sobrescribe).
+2. En Navisworks: abrí el modelo → pestaña **Add-ins** → **Sonqollay Sync**.
+3. Aparece la **lista de planillas publicadas** con checkboxes → marcá las que
+   quieras (vienen todas marcadas) → **Sincronizar**.
+4. El plugin descarga las elegidas, matchea por TAG y agrega la pestaña
+   **"Sonqollay"** a los elementos. **Guardá** como `.nwf`/`.nwd` para persistir.
+
+> No hace falta recompilar para cambiar de planilla ni cuando cambia su `key`:
+> el plugin siempre lista lo que haya publicado.

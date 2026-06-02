@@ -1,13 +1,18 @@
 // SonqollaySync — plugin de Navisworks 2026 que trae los datos editados en la
-// web Sonqollay (GET /api/datasets/:key) y los escribe como propiedades custom
-// en los elementos del modelo, vinculando por TAG.
+// web Sonqollay y los escribe como propiedades custom en los elementos del
+// modelo, vinculando por TAG.
 //
-// SIN dependencias externas (NuGet): usa WebClient + JavaScriptSerializer, ambos
-// del .NET Framework 4.8. Compilar con SonqollaySync.csproj (net48 / x64).
+// Al ejecutarlo, lista las planillas publicadas (GET /api/datasets) y te deja
+// ELEGIR cuáles sincronizar (una, varias o todas). NO hay que recompilar para
+// cambiar de planilla.
+//
+// SIN dependencias externas (NuGet): WebClient + JavaScriptSerializer, ambos del
+// .NET Framework 4.8. Compilar con SonqollaySync.csproj (net48 / x64).
 // Ver README.md para instalación y configuración.
 
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Net;
 using System.Web.Script.Serialization; // System.Web.Extensions (framework)
@@ -27,14 +32,14 @@ namespace Sonqollay
             ToolTip = "Trae los datos editados en Sonqollay y los escribe en el modelo")]
     public class SonqollaySync : AddInPlugin
     {
-        // ----- CONFIGURACIÓN (editar) -------------------------------------
+        // ----- CONFIGURACIÓN (editar una sola vez) ------------------------
         private const string BaseUrl      = "https://basesonqollay.synaptechspa.cl";
         private const string ApiToken     = "PEGAR_EL_MISMO_SQY_API_TOKEN";
-        private const string DatasetKey   = "PEGAR_LA_KEY_QUE_MOSTRO_LA_WEB";
         // Propiedad del modelo que contiene el TAG (en tus DWG suele ser la capa).
         private const string LinkProperty = "Layer";
         // Pestaña de propiedades custom que se agrega a los elementos.
         private const string TabName      = "Sonqollay";
+        // NOTA: la planilla (DatasetKey) NO se configura acá: se elige al correr.
         // ------------------------------------------------------------------
 
         public override int Execute(params string[] parameters)
@@ -50,27 +55,72 @@ namespace Sonqollay
                 return 0;
             }
 
-            Dataset data;
+            // 1) Listar las planillas publicadas.
+            List<DatasetInfo> index;
             try
             {
-                data = FetchDataset();
+                index = FetchIndex();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("No se pudo descargar el dataset:\n" + ex.Message);
+                MessageBox.Show("No se pudo obtener la lista de planillas:\n" + ex.Message);
+                return 0;
+            }
+            if (index.Count == 0)
+            {
+                MessageBox.Show("No hay planillas publicadas todavía.\n\n" +
+                                "En la web Sonqollay, abrí cada planilla y apretá \"Publicar para Navisworks\".");
                 return 0;
             }
 
+            // 2) Elegir cuáles sincronizar.
+            List<DatasetInfo> chosen = ShowPicker(index);
+            if (chosen.Count == 0) return 0; // canceló o no marcó ninguna
+
+            // 3) Aplicar cada una.
+            int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0;
+            var errores = new List<string>();
+            foreach (var info in chosen)
+            {
+                try
+                {
+                    Dataset data = FetchDataset(info.key);
+                    var res = ApplyDataset(doc, data);
+                    totalRows += data.rows.Count;
+                    totalMatched += res.matched;
+                    totalApplied += res.applied;
+                    totalMissing += res.missing;
+                }
+                catch (Exception ex)
+                {
+                    errores.Add(info.name + ": " + ex.Message);
+                }
+            }
+
+            string msg =
+                "Sonqollay Sync\n\n" +
+                "Planillas: " + chosen.Count + "\n" +
+                "Filas: " + totalRows + "\n" +
+                "TAGs encontrados: " + totalMatched + "\n" +
+                "Elementos actualizados: " + totalApplied + "\n" +
+                "TAGs sin geometría: " + totalMissing + "\n\n" +
+                "Guardá el archivo (.nwf/.nwd) para conservar las propiedades.";
+            if (errores.Count > 0)
+                msg += "\n\nErrores:\n - " + string.Join("\n - ", errores);
+            MessageBox.Show(msg);
+            return 0;
+        }
+
+        // ---- Aplicar un dataset al modelo --------------------------------
+        private struct ApplyResult { public int matched, applied, missing; }
+
+        private ApplyResult ApplyDataset(Document doc, Dataset data)
+        {
             string tagField = !string.IsNullOrEmpty(data.tagField)
                 ? data.tagField
                 : (data.headers.Count > 0 ? data.headers[0] : null);
-            if (string.IsNullOrEmpty(tagField))
-            {
-                MessageBox.Show("El dataset no define la columna de TAG (tagField).");
-                return 0;
-            }
-
-            int matched = 0, applied = 0, missing = 0;
+            var res = new ApplyResult();
+            if (string.IsNullOrEmpty(tagField)) return res;
 
             foreach (var row in data.rows)
             {
@@ -79,31 +129,19 @@ namespace Sonqollay
                     continue;
 
                 ModelItemCollection items = FindByTag(doc, tag);
-                if (items.Count == 0) { missing++; continue; }
-                matched++;
+                if (items.Count == 0) { res.missing++; continue; }
+                res.matched++;
 
-                // Selecciona los items de este TAG y les escribe la pestaña custom.
                 doc.CurrentSelection.CopyFrom(items);
                 WriteCustomTab(row, tagField);
-                applied += items.Count;
+                res.applied += items.Count;
             }
-
-            MessageBox.Show(
-                "Sonqollay Sync\n\n" +
-                "Dataset: " + data.name + "\n" +
-                "Filas: " + data.rows.Count + "\n" +
-                "TAGs encontrados: " + matched + "\n" +
-                "Elementos actualizados: " + applied + "\n" +
-                "TAGs sin geometría: " + missing + "\n\n" +
-                "Guardá el archivo (.nwf/.nwd) para conservar las propiedades.");
-            return 0;
+            return res;
         }
 
-        // ---- 1) Descargar el dataset por HTTP ----------------------------
-        private Dataset FetchDataset()
+        // ---- HTTP --------------------------------------------------------
+        private string HttpGet(string url)
         {
-            string url = BaseUrl.TrimEnd('/') + "/api/datasets/" + Uri.EscapeDataString(DatasetKey);
-            string json;
             using (var wc = new WebClient())
             {
                 wc.Encoding = System.Text.Encoding.UTF8;
@@ -111,7 +149,7 @@ namespace Sonqollay
                     wc.Headers[HttpRequestHeader.Authorization] = "Bearer " + ApiToken;
                 try
                 {
-                    json = wc.DownloadString(url);
+                    return wc.DownloadString(url);
                 }
                 catch (WebException wex)
                 {
@@ -122,6 +160,37 @@ namespace Sonqollay
                     throw new Exception(wex.Message + (body.Length > 0 ? "\n" + body : ""));
                 }
             }
+        }
+
+        // Lista de planillas publicadas: GET /api/datasets -> { datasets: [...] }
+        private List<DatasetInfo> FetchIndex()
+        {
+            string json = HttpGet(BaseUrl.TrimEnd('/') + "/api/datasets");
+            var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+            var root = ser.DeserializeObject(json) as Dictionary<string, object>;
+            var list = new List<DatasetInfo>();
+            if (root != null && root.ContainsKey("datasets") && root["datasets"] is object[] arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (item is Dictionary<string, object> o)
+                    {
+                        list.Add(new DatasetInfo
+                        {
+                            key = o.ContainsKey("key") ? Convert.ToString(o["key"]) : "",
+                            name = o.ContainsKey("name") ? Convert.ToString(o["name"]) : "",
+                            count = o.ContainsKey("count") ? Convert.ToInt32(o["count"]) : 0,
+                        });
+                    }
+                }
+            }
+            return list.Where(d => !string.IsNullOrEmpty(d.key)).ToList();
+        }
+
+        // Un dataset puntual: GET /api/datasets/:key
+        private Dataset FetchDataset(string key)
+        {
+            string json = HttpGet(BaseUrl.TrimEnd('/') + "/api/datasets/" + Uri.EscapeDataString(key));
             return ParseDataset(json);
         }
 
@@ -131,7 +200,7 @@ namespace Sonqollay
             var root = ser.DeserializeObject(json) as Dictionary<string, object>;
             var ds = new Dataset
             {
-                name = root != null && root.ContainsKey("name") ? Convert.ToString(root["name"]) : DatasetKey,
+                name = root != null && root.ContainsKey("name") ? Convert.ToString(root["name"]) : "",
                 tagField = root != null && root.ContainsKey("tagField") ? Convert.ToString(root["tagField"]) : null,
                 headers = new List<string>(),
                 rows = new List<Dictionary<string, string>>(),
@@ -157,9 +226,39 @@ namespace Sonqollay
             return ds;
         }
 
-        // ---- 2) Matchear por TAG -----------------------------------------
-        // Busca items cuya propiedad de vínculo == tag. Si no encuentra por esa
-        // propiedad, hace un fallback por el nombre del item.
+        // ---- UI: elegir planillas ----------------------------------------
+        private static List<DatasetInfo> ShowPicker(List<DatasetInfo> all)
+        {
+            var form = new Form
+            {
+                Text = "Sonqollay — elegí las planillas a sincronizar",
+                ClientSize = new Size(460, 380),
+                StartPosition = FormStartPosition.CenterScreen,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MinimizeBox = false,
+                MaximizeBox = false,
+            };
+            var clb = new CheckedListBox
+            {
+                Left = 12, Top = 12, Width = 436, Height = 300,
+                CheckOnClick = true,
+                IntegralHeight = false,
+            };
+            foreach (var d in all) clb.Items.Add(d, true); // todas marcadas por defecto
+
+            var ok = new Button { Text = "Sincronizar", Left = 268, Top = 324, Width = 90, Height = 30, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Cancelar", Left = 364, Top = 324, Width = 84, Height = 30, DialogResult = DialogResult.Cancel };
+            form.Controls.Add(clb);
+            form.Controls.Add(ok);
+            form.Controls.Add(cancel);
+            form.AcceptButton = ok;
+            form.CancelButton = cancel;
+
+            if (form.ShowDialog() != DialogResult.OK) return new List<DatasetInfo>();
+            return clb.CheckedItems.Cast<DatasetInfo>().ToList();
+        }
+
+        // ---- Matchear por TAG --------------------------------------------
         private ModelItemCollection FindByTag(Document doc, string tag)
         {
             var search = new Search();
@@ -180,12 +279,11 @@ namespace Sonqollay
             return s2.FindAll(doc, false);
         }
 
-        // ---- 3) Escribir propiedades custom (COM API) --------------------
+        // ---- Escribir propiedades custom (COM API) -----------------------
         private void WriteCustomTab(Dictionary<string, string> row, string tagField)
         {
             ComApi.InwOpState10 state = ComApiBridge.State;
 
-            // Vector de propiedades con los campos editados (omite el propio TAG).
             ComApi.InwOaPropertyVec vec = (ComApi.InwOaPropertyVec)state.ObjectFactory(
                 ComApi.nwEObjectType.eObjectType_nwOaPropertyVec, null, null);
 
@@ -200,7 +298,6 @@ namespace Sonqollay
                 vec.Properties().Add(p);
             }
 
-            // Aplica la pestaña a la selección actual (los items de este TAG).
             state.SetUserDefined(0, TabName, Sanitize(TabName), vec);
         }
 
@@ -209,7 +306,18 @@ namespace Sonqollay
             return new string((s ?? "").Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
         }
 
-        // DTO del JSON del endpoint.
+        // ---- DTOs --------------------------------------------------------
+        private class DatasetInfo
+        {
+            public string key;
+            public string name;
+            public int count;
+            public override string ToString()
+            {
+                return (string.IsNullOrEmpty(name) ? key : name) + "   (" + count + ")";
+            }
+        }
+
         private class Dataset
         {
             public string name;

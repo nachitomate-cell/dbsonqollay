@@ -142,6 +142,36 @@ export async function readJsonObject(objectKey) {
   return file.json()
 }
 
+// Índice de datasets publicados, para que el plugin liste las planillas por
+// nombre sin tener que leerlas todas. Se mantiene en un objeto aparte.
+const INDEX_OBJECT_KEY = 'datasets/__index__.json'
+
+/** Devuelve la lista de datasets publicados: [{ key, name, count, updatedAt }]. */
+export async function readDatasetIndex() {
+  const idx = await readJsonObject(INDEX_OBJECT_KEY)
+  return Array.isArray(idx?.datasets) ? idx.datasets : []
+}
+
+/** Agrega o actualiza una entrada del índice. */
+export async function upsertDatasetIndex(entry) {
+  const list = await readDatasetIndex()
+  const i = list.findIndex((e) => e.key === entry.key)
+  if (i >= 0) list[i] = entry
+  else list.push(entry)
+  await putJsonObject(INDEX_OBJECT_KEY, { datasets: list })
+}
+
+/** Token compartido del plugin (Authorization: Bearer o ?token=). Solo lectura.
+ *  Si SQY_API_TOKEN no está definido, la lectura queda abierta (modo dev). */
+export function pluginAuthorized(req) {
+  const expected = process.env.SQY_API_TOKEN
+  if (!expected) return true
+  const auth = req.headers.authorization || ''
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+  const qtok = req.query?.token
+  return bearer === expected || qtok === expected
+}
+
 /** Helper de respuesta JSON con manejo de errores. */
 export function send(res, status, body) {
   res.status(status)
