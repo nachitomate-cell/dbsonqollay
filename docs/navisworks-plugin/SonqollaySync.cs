@@ -35,8 +35,10 @@ namespace Sonqollay
         // ----- CONFIGURACIÓN (editar una sola vez) ------------------------
         private const string BaseUrl      = "https://basesonqollay.synaptechspa.cl";
         private const string ApiToken     = "PEGAR_EL_MISMO_SQY_API_TOKEN";
-        // Propiedad del modelo que contiene el TAG (en tus DWG suele ser la capa).
-        private const string LinkProperty = "Layer";
+        // Dónde vive el TAG en el modelo (visto en el panel Propiedades):
+        // pestaña (categoría) y nombre de la propiedad.
+        private const string LinkCategory = "BIM";
+        private const string LinkProperty = "TAG/Commodity";
         // Pestaña de propiedades custom que se agrega a los elementos.
         private const string TabName      = "Sonqollay";
         // NOTA: la planilla (DatasetKey) NO se configura acá: se elige al correr.
@@ -127,6 +129,7 @@ namespace Sonqollay
                 string tag;
                 if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag))
                     continue;
+                tag = tag.Trim();
 
                 ModelItemCollection items = FindByTag(doc, tag);
                 if (items.Count == 0) { res.missing++; continue; }
@@ -264,18 +267,9 @@ namespace Sonqollay
             search.Selection.SelectAll();
             search.Locations = SearchLocations.DescendantsAndSelf;
             search.SearchConditions.Add(
-                SearchCondition.HasPropertyByDisplayName("Item", LinkProperty)
+                SearchCondition.HasPropertyByDisplayName(LinkCategory, LinkProperty)
                                .EqualValue(VariantData.FromDisplayString(tag)));
-            var found = search.FindAll(doc, false);
-            if (found.Count > 0) return found;
-
-            var s2 = new Search();
-            s2.Selection.SelectAll();
-            s2.Locations = SearchLocations.DescendantsAndSelf;
-            s2.SearchConditions.Add(
-                SearchCondition.HasPropertyByDisplayName("Item", "Name")
-                               .EqualValue(VariantData.FromDisplayString(tag)));
-            return s2.FindAll(doc, false);
+            return search.FindAll(doc, false);
         }
 
         // ---- Escribir propiedades custom (COM API) -----------------------
