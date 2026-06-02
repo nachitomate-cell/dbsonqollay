@@ -30,7 +30,13 @@ import Icon from './Icon.jsx'
 export default function DisciplineView({ discipline, onOpenSubcategory, onImport, importing, importError, onRemoveImported, createdSheets, onCreateSheet, columnTemplates = [], defaultColumns = [] }) {
   const [selected, setSelected] = useState(() => new Set())
   const [creatingFor, setCreatingFor] = useState(null) // subId para el que se elige plantilla
+  const [soon, setSoon] = useState(false)
   const fileInput = useRef(null)
+
+  function showSoon() {
+    setSoon(true)
+    setTimeout(() => setSoon(false), 2200)
+  }
 
   useEffect(() => {
     if (discipline) setSelected(new Set(discipline.subcategories.map((s) => s.id)))
@@ -95,10 +101,15 @@ export default function DisciplineView({ discipline, onOpenSubcategory, onImport
         <div className="lg:sticky lg:top-6 lg:self-start">
           <SummaryPanel hasData={hasData} total={total} items={selectedSubs} />
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <SpaceButton primary icon={FolderPlus}>Nuevo espacio</SpaceButton>
-            <SpaceButton icon={FolderSync}>Agregar a espacio existente</SpaceButton>
+          <div className="relative mt-4 flex flex-wrap gap-2">
+            <SpaceButton primary icon={FolderPlus} onClick={showSoon}>Nuevo espacio</SpaceButton>
+            <SpaceButton icon={FolderSync} onClick={showSoon}>Agregar a espacio existente</SpaceButton>
             <SpaceButton icon={Trash2} onClick={() => setSelected(new Set())}>Limpiar espacio</SpaceButton>
+            {soon && (
+              <span className="absolute -top-7 left-0 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-white shadow dark:bg-ink-700">
+                Próximamente
+              </span>
+            )}
           </div>
 
           {/* Importación de datos */}
