@@ -111,6 +111,37 @@ export async function deleteObject(objectKey) {
   return { ok: true }
 }
 
+/** Clave de objeto en el bucket para un dataset publicado (planilla editada). */
+export function datasetObjectKey(key) {
+  return `datasets/${String(key).replace(/[^\w.\-]/g, '_')}.json`
+}
+
+/** Guarda un objeto JSON pequeño en el bucket (mismo flujo S3 firmado que los modelos). */
+export async function putJsonObject(objectKey, obj) {
+  await ensureBucket()
+  const { uploadKey, urls } = await getSignedUpload(objectKey)
+  const put = await fetch(urls[0], { method: 'PUT', body: JSON.stringify(obj) })
+  if (!put.ok) throw new Error(`Subida de JSON falló (${put.status}): ${await put.text()}`)
+  await completeUpload(objectKey, uploadKey)
+}
+
+/** Lee un objeto JSON del bucket. Devuelve null si no existe. */
+export async function readJsonObject(objectKey) {
+  const { access_token } = await getToken('data:read')
+  const enc = encodeURIComponent(objectKey)
+  const res = await fetch(`${BASE}/oss/v2/buckets/${BUCKET}/objects/${enc}/signeds3download`, {
+    headers: { Authorization: `Bearer ${access_token}` },
+  })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`signeds3download GET falló (${res.status}): ${await res.text()}`)
+  const { url } = await res.json()
+  if (!url) return null
+  const file = await fetch(url)
+  if (file.status === 404) return null
+  if (!file.ok) throw new Error(`Descarga de JSON falló (${file.status})`)
+  return file.json()
+}
+
 /** Helper de respuesta JSON con manejo de errores. */
 export function send(res, status, body) {
   res.status(status)

@@ -24,6 +24,7 @@ import {
   RotateCcw,
   RotateCw,
   Search,
+  Share2,
   Tag,
   Trash2,
   Upload,
@@ -144,6 +145,33 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       /* ignore */
     }
   }, [colWidths, subcategory.dataKey])
+
+  // Publica la planilla editada en el backend para que el plugin de Navisworks
+  // la lea por HTTP (GET /api/datasets/:key). La key es el dataKey de la
+  // subcategoría. Ver docs/navisworks-plugin/.
+  async function publishForNavisworks() {
+    const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+    try {
+      flash('Publicando para Navisworks…')
+      const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: subcategory.name,
+          tagField: headers[0],
+          headers,
+          rows: rows.map(({ _id, ...r }) => r),
+        }),
+      })
+      const ct = res.headers.get('content-type') || ''
+      const j = ct.includes('application/json') ? await res.json() : {}
+      if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
+      flash(`Publicado ✓ ${j.count} elementos — key: ${subcategory.dataKey}`)
+      logAction('Publicó la planilla para Navisworks')
+    } catch (e) {
+      flash(`No se pudo publicar: ${e.message}`)
+    }
+  }
 
   // Exporta la vista actual (columnas visibles + filas filtradas) a CSV o Excel.
   async function handleExport(format) {
@@ -525,6 +553,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ExportMenu onExport={handleExport} />
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={importFile} />
               <ToolIcon icon={Upload} title="Importar (CSV / Excel)" onClick={() => fileRef.current?.click()} />
+              <ToolIcon icon={Share2} title="Publicar para Navisworks (API en vivo)" onClick={publishForNavisworks} />
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
