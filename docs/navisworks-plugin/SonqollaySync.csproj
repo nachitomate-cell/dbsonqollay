@@ -50,6 +50,7 @@
   <!-- Ensamblados del framework usados por el plugin (sin NuGet). -->
   <ItemGroup>
     <Reference Include="System.Net" />
+    <Reference Include="System.Drawing" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
