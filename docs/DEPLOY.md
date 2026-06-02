@@ -31,6 +31,14 @@ Endpoints (funciones): `GET /api/aps/token`, `GET /api/aps/models`,
 > y sube el archivo **directo a Autodesk (S3)**; luego `/api/aps/complete`
 > confirma y lanza la traducción. Por eso funciona pese al tamaño.
 
+> ⚠️ **Si `/api/aps/token` devuelve `200` con HTML (el `index.html`) en vez de
+> JSON:** la reescritura SPA estaba capturando `/api/*` y sirviendo el app shell.
+> En `vercel.json` la regla de `rewrites` **excluye** `/api/` con
+> `"source": "/((?!api/).*)"`, de modo que `/api/*` siempre se enruta a las
+> funciones serverless (nunca a `index.html`). Si una función falta o falla,
+> verás `404`/`500` con JSON claro, no HTML. Tras cambiar variables de entorno
+> en Vercel hay que **volver a desplegar** para que tomen efecto.
+
 ---
 
 ## ⚠️ Causa del 404 en `/api/*`
