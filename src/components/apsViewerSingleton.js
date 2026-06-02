@@ -99,7 +99,13 @@ export function getApsViewer(getToken) {
       throw new Error('Tu navegador/GPU agotó los contextos WebGL disponibles. Cierra otras pestañas con 3D/mapas y recarga la página.')
     }
     await loadSdk()
-    const token = await getToken()
+    let token
+    try {
+      token = await getToken()
+    } catch (err) {
+      initPromise = null
+      throw err
+    }
     await new Promise((resolve) => {
       window.Autodesk.Viewing.Initializer(
         { env: 'AutodeskProduction', api: 'streamingV2', getAccessToken: (cb) => cb(token.access_token, token.expires_in) },

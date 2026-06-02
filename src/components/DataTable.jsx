@@ -126,11 +126,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && !editingId && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onBack()
+      if (e.key === 'Escape' && !editingId && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+        if (viewMode === 'bim' || viewMode === 'split') setViewMode('grid')
+        else onBack()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, editingId])
+  }, [onBack, editingId, viewMode])
 
   // Persiste el ancho de columnas por dataset.
   useEffect(() => {

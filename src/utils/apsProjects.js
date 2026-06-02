@@ -53,7 +53,10 @@ const apiBase = () =>
 export async function fetchAllProjects() {
   const local = listProjects()
   try {
-    const remote = await fetch(`${apiBase()}/api/aps/models`).then((r) => (r.ok ? r.json() : []))
+    const remote = await fetch(`${apiBase()}/api/aps/models`).then((r) => {
+      if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) return []
+      return r.json()
+    })
     const byUrn = new Map()
     for (const p of local) byUrn.set(p.urn, { ...p })
     for (const r of remote) {
