@@ -132,8 +132,7 @@ namespace Sonqollay
                 if (items.Count == 0) { res.missing++; continue; }
                 res.matched++;
 
-                doc.CurrentSelection.CopyFrom(items);
-                WriteCustomTab(row, tagField);
+                WriteCustomTab(items, row, tagField);
                 res.applied += items.Count;
             }
             return res;
@@ -280,25 +279,36 @@ namespace Sonqollay
         }
 
         // ---- Escribir propiedades custom (COM API) -----------------------
-        private void WriteCustomTab(Dictionary<string, string> row, string tagField)
+        // En el SDK de Navisworks, SetUserDefined va por cada elemento, sobre su
+        // nodo de propiedades (InwGUIPropertyNode2), no sobre el estado global.
+        private void WriteCustomTab(ModelItemCollection items, Dictionary<string, string> row, string tagField)
         {
             ComApi.InwOpState10 state = ComApiBridge.State;
+            ComApi.InwOpSelection comSel = ComApiBridge.ToInwOpSelection(items);
 
-            ComApi.InwOaPropertyVec vec = (ComApi.InwOaPropertyVec)state.ObjectFactory(
-                ComApi.nwEObjectType.eObjectType_nwOaPropertyVec, null, null);
-
-            foreach (var kv in row)
+            foreach (ComApi.InwOaPath path in comSel.Paths())
             {
-                if (kv.Key == tagField) continue;
-                ComApi.InwOaProperty p = (ComApi.InwOaProperty)state.ObjectFactory(
-                    ComApi.nwEObjectType.eObjectType_nwOaProperty, null, null);
-                p.name = Sanitize(kv.Key);   // nombre interno
-                p.UserName = kv.Key;          // nombre visible
-                p.value = kv.Value ?? "";
-                vec.Properties().Add(p);
-            }
+                // Nodo de propiedades del elemento (true = crear si no existe).
+                ComApi.InwGUIPropertyNode2 node =
+                    (ComApi.InwGUIPropertyNode2)state.GetGUIPropertyNode(path, true);
 
-            state.SetUserDefined(0, TabName, Sanitize(TabName), vec);
+                ComApi.InwOaPropertyVec vec = (ComApi.InwOaPropertyVec)state.ObjectFactory(
+                    ComApi.nwEObjectType.eObjectType_nwOaPropertyVec, null, null);
+
+                foreach (var kv in row)
+                {
+                    if (kv.Key == tagField) continue;
+                    ComApi.InwOaProperty p = (ComApi.InwOaProperty)state.ObjectFactory(
+                        ComApi.nwEObjectType.eObjectType_nwOaProperty, null, null);
+                    p.name = Sanitize(kv.Key);   // nombre interno
+                    p.UserName = kv.Key;          // nombre visible
+                    p.value = kv.Value ?? "";
+                    vec.Properties().Add(p);
+                }
+
+                // Agrega/reemplaza la pestaña custom en ESTE elemento.
+                node.SetUserDefined(0, TabName, Sanitize(TabName), vec);
+            }
         }
 
         private static string Sanitize(string s)
