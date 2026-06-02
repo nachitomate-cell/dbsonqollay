@@ -24,7 +24,7 @@ import { getApsViewer } from './apsViewerSingleton.js'
 const getAPI = () =>
   localStorage.getItem('sqy-api-url') ||
   import.meta.env.VITE_APS_API ||
-  (import.meta.env.DEV ? 'http://localhost:3000' : '')
+  ''
 
 // Agrupa las propiedades del objeto por su "displayCategory" (como en Navisworks).
 function groupProps(properties) {
