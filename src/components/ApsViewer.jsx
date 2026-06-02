@@ -191,14 +191,18 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     let cancelled = false
     setStatus('loadingSdk')
     getApsViewer(() =>
-      fetch(`\${getAPI()}/api/aps/token`)
+      fetch(`\${getAPI()}/api/aps/token`, { cache: 'no-store' })
         .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then(async (r) => {
-          const isJson = r.headers.get('content-type')?.includes('application/json')
-          if (!isJson) throw new Error(
-            `El backend APS devolvió HTML en lugar de JSON (${getAPI() || 'mismo origen'}). ` +
-            'Si configuraste una URL de backend en Ajustes, vacíala para usar el servidor de Vercel.'
-          )
+          const ct = r.headers.get('content-type') || ''
+          const isJson = ct.includes('application/json')
+          if (!isJson) {
+            const preview = await r.text().then((t) => t.slice(0, 120)).catch(() => '?')
+            throw new Error(
+              `El backend APS devolvió ${r.status} con content-type "${ct}" — esperaba JSON.\n` +
+              `URL: ${getAPI() || '(mismo origen)'}/api/aps/token\nRespuesta: ${preview}`
+            )
+          }
           const data = await r.json()
           if (!r.ok) throw new Error(data.error || `Error ${r.status} del backend APS`)
           return data
