@@ -135,8 +135,8 @@ export const disciplines = [
         name: 'Equipos (ELE)',
         icon: 'Server',
         description: 'Modelos y elementos relacionados con los equipos de suministro eléctrico.',
-        count: realCount('ele_mock'),
-        dataKey: 'ele_mock',
+        count: realCount('ele'),
+        dataKey: 'ele',
       },
       {
         id: 'ele-alumbrado',
