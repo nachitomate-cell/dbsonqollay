@@ -46,6 +46,15 @@ function safe(fn) {
   try { fn() } catch { /* ajuste no disponible aún o no soportado */ }
 }
 
+// El visor solo acepta theming/aislado cuando ya tiene un modelo cargado y su
+// `impl` interno listo. Llamarlo antes (o tras perder el contexto WebGL) lanza
+// "Cannot read properties of undefined (reading 'clearThemingColors')", que el
+// ErrorBoundary captura y reemplaza el visor por la pantalla de error. Este
+// guard evita esa caída: si el visor no está listo, la operación es un no-op.
+function viewerHasModel(v) {
+  try { return !!(v && v.impl && (v.model || v.getVisibleModels?.().length)) } catch { return false }
+}
+
 function applyViewerStyle(viewer, hq = true) {
   const dark = document.documentElement.classList.contains('dark')
   // Fondo en degradé (top, bottom) en RGB 0-255 — más luminoso y "estudio".
@@ -388,7 +397,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     return new Promise((resolve) => {
       if (!text) { resolve([]); return }
       // Sin lista de atributos → Forge busca en displayName y todas las props string.
-      viewer.search(String(text), (ids) => resolve(ids || []), () => resolve([]))
+      try { viewer.search(String(text), (ids) => resolve(ids || []), () => resolve([])) }
+      catch { resolve([]) }
     })
   }
   function tagVariants(v) {
@@ -420,7 +430,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   // Un "token" evita que un search asíncrono viejo pise un filtro más nuevo.
   async function isolatePackage() {
     const viewer = viewerRef.current
-    if (!viewer || !packageTags.length) return
+    if (!viewer || !packageTags.length || !viewerHasModel(viewer)) return
     const token = ++ctxRef.current.awpToken
     ctxRef.current.filterActive = false // el paquete AWP tiene prioridad sobre el filtro de planilla
     setMessage('Aislando paquete…')
@@ -433,13 +443,15 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     // Ghosting nativo: el resto del modelo queda como "fantasma" gris tenue que
     // SÍ da contexto sobre cualquier fondo (no blanco invisible). `isolate`
     // mantiene el paquete a color pleno y atenúa lo demás.
-    viewer.setGhosting(true)
-    viewer.isolate(dbIds)
-    // Resalta el paquete elegido en naranja de marca para que destaque.
-    const ORANGE = new window.THREE.Vector4(0.97, 0.44, 0, 1)
-    viewer.clearThemingColors()
-    dbIds.forEach((id) => viewer.setThemingColor(id, ORANGE))
-    viewer.fitToView(dbIds)
+    safe(() => {
+      viewer.setGhosting(true)
+      viewer.isolate(dbIds)
+      // Resalta el paquete elegido en naranja de marca para que destaque.
+      const ORANGE = new window.THREE.Vector4(0.97, 0.44, 0, 1)
+      viewer.clearThemingColors()
+      dbIds.forEach((id) => viewer.setThemingColor(id, ORANGE))
+      viewer.fitToView(dbIds)
+    })
     setMessage('')
   }
 
@@ -449,7 +461,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   async function isolateFilteredRows() {
     const viewer = viewerRef.current
     const tags = rows.map((r) => String(r[tagKey] ?? '')).filter(Boolean)
-    if (!viewer || !tags.length) return
+    if (!viewer || !tags.length || !viewerHasModel(viewer)) return
     const token = ++ctxRef.current.awpToken
     ctxRef.current.awpActive = false
     setMessage('Aislando elementos filtrados…')
@@ -457,10 +469,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     if (token !== ctxRef.current.awpToken || !viewerRef.current) return
     if (!dbIds.length) { setMessage('No se encontraron en el modelo los elementos filtrados (revisa el campo de vínculo).'); return }
     ctxRef.current.filterActive = true
-    viewer.setGhosting(true)
-    viewer.clearThemingColors()
-    viewer.isolate(dbIds)
-    viewer.fitToView(dbIds)
+    safe(() => {
+      viewer.setGhosting(true)
+      viewer.clearThemingColors()
+      viewer.isolate(dbIds)
+      viewer.fitToView(dbIds)
+    })
     setMessage('')
   }
 
@@ -470,9 +484,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     ctxRef.current.awpActive = false
     ctxRef.current.filterActive = false
     ctxRef.current.awpToken = (ctxRef.current.awpToken || 0) + 1 // invalida searches en curso
-    viewer.clearThemingColors()
-    viewer.isolate([])
-    viewer.showAll?.()
+    if (!viewerHasModel(viewer)) return // sin modelo no hay nada que limpiar (y el SDK tiraría)
+    safe(() => {
+      viewer.clearThemingColors()
+      viewer.isolate([])
+      viewer.showAll?.()
+    })
   }
 
   // Exportar imagen 16:9 del estado actual.
@@ -501,7 +518,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     ctxRef.current.lastTag = selectedTag
     findDbIds([selectedTag]).then((ids) => {
       if (ctxRef.current.awpActive || ctxRef.current.filterActive || !viewerRef.current) return
-      if (ids.length) { viewer.isolate(ids); viewer.fitToView(ids) }
+      if (ids.length) safe(() => { viewer.isolate(ids); viewer.fitToView(ids) })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
