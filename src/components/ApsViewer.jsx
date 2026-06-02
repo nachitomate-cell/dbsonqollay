@@ -55,21 +55,47 @@ function viewerHasModel(v) {
   try { return !!(v && v.impl && (v.model || v.getVisibleModels?.().length)) } catch { return false }
 }
 
-// Resuelve los nombres (TAG) de varios dbId a la vez. Usa getBulkProperties si
-// está (rápido, una sola pasada); si no, cae a getProperties uno por uno.
-function resolveNames(viewer, ids, cb) {
+const normTagStr = (s) => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+
+// Índice TAG→fila de la planilla (normalizado) para matchear rápido.
+function buildTagSet(rows, tagk) {
+  const set = new Map()
+  rows.forEach((r) => { const k = normTagStr(r?.[tagk]); if (k) set.set(k, r[tagk]) })
+  return set
+}
+
+// Busca, entre el nombre y TODAS las propiedades del objeto, un valor que
+// coincida con un TAG de la planilla. Es lo mismo que hace viewer.search (mira
+// todas las props), por eso el aislado por TAG funciona aunque el nombre del
+// objeto sea genérico ("Conjunto de caras 3D"). Devuelve el TAG o null.
+function matchTagInSet(name, properties, set) {
+  if (set.has(normTagStr(name))) return set.get(normTagStr(name))
+  for (const p of properties || []) {
+    const hit = set.get(normTagStr(p.displayValue))
+    if (hit) return hit
+  }
+  return null
+}
+
+// Resuelve, para varios dbId, los TAG de planilla que les corresponden mirando
+// TODAS sus propiedades (no solo el nombre). getBulkProperties (rápido) con
+// fallback a getProperties uno por uno.
+function resolveMatchedTags(viewer, ids, rows, tagk, cb) {
+  const set = buildTagSet(rows, tagk)
+  const done = (vals) => cb([...new Set(vals.filter(Boolean))])
+  const viaOneByOne = () => Promise.all(ids.map((id) => new Promise((res) => {
+    try { viewer.getProperties(id, (p) => res(matchTagInSet(p?.name, p?.properties, set)), () => res(null)) } catch { res(null) }
+  }))).then(done)
   const model = viewer?.model
   try {
     if (model?.getBulkProperties) {
-      model.getBulkProperties(ids, { propFilter: ['name'] },
-        (res) => cb((res || []).map((r) => r.name).filter(Boolean)),
-        () => cb([]))
+      model.getBulkProperties(ids, { ignoreHidden: false },
+        (res) => done((res || []).map((o) => matchTagInSet(o.name, o.properties, set))),
+        () => viaOneByOne())
       return
     }
-  } catch { /* cae al método uno-a-uno */ }
-  Promise.all(ids.map((id) => new Promise((res) => {
-    try { viewer.getProperties(id, (p) => res(p?.name), () => res(null)) } catch { res(null) }
-  }))).then((names) => cb(names.filter(Boolean)))
+  } catch { /* fallback */ }
+  viaOneByOne()
 }
 
 function applyViewerStyle(viewer, hq = true) {
@@ -126,6 +152,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
   const ctxRef = useRef({}) // estado interno persistente (initStarted, urn cargado…)
+  // Refs siempre frescas para el handler de selección (vive en un efecto que se
+  // monta una sola vez y no debe capturar rows/headers viejos).
+  const rowsRef = useRef(rows); rowsRef.current = rows
+  const headersRef = useRef(headers); headersRef.current = headers
   const [status, setStatus] = useState('idle') // idle|loadingSdk|uploading|translating|ready|error
   const [message, setMessage] = useState('')
   // El último modelo cargado se recuerda por subcategoría (localStorage), así
@@ -193,13 +223,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const [savedField, setSavedField] = useState(false)
   const normTag = (s) => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
   useEffect(() => {
-    if (!objProps) { setLinkRow(null); setDraft(null); return }
+    // objProps.tag = TAG de la planilla resuelto al pinchar (buscado en TODAS
+    // las propiedades del objeto, no solo el nombre).
+    if (!objProps || !objProps.tag) { setLinkRow(null); setDraft(null); return }
     const tagk = headers[0]
-    const target = normTag(objProps.name)
-    const row = target
-      ? rows.find((r) => normTag(r[tagk]) === target)
-        || rows.find((r) => normTag(r[tagk]) && target.includes(normTag(r[tagk])))
-      : null
+    const target = normTag(objProps.tag)
+    const row = rows.find((r) => normTag(r[tagk]) === target)
     if (row) { setLinkRow({ id: row._id }); setDraft({ ...row }) }
     else { setLinkRow(null); setDraft(null) }
     setSavedField(false)
@@ -361,14 +390,17 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
             const id = ids[0]
             viewer.getProperties(id, (props) => {
               onSelectRef.current?.(props.name || String(id))
-              setObjProps({ name: props.name || `Objeto ${id}`, dbId: id, groups: groupProps(props.properties || []) })
+              // El TAG de la planilla puede estar en cualquier propiedad (no solo
+              // el nombre): se busca en todas para vincular el registro a editar.
+              const tag = matchTagInSet(props.name, props.properties, buildTagSet(rowsRef.current, headersRef.current[0]))
+              setObjProps({ name: props.name || `Objeto ${id}`, tag, dbId: id, groups: groupProps(props.properties || []) })
             })
             return
           }
-          // Selección múltiple (Ctrl/Cmd+clic): panel de edición masiva. Se ocultan
-          // las propiedades de un solo objeto y se resuelven los TAG de todos.
+          // Selección múltiple (Ctrl/Cmd+clic o área): panel de edición masiva.
+          // Se resuelven los TAG de todos los objetos mirando todas sus props.
           setObjProps(null)
-          resolveNames(viewer, ids, (names) => setMultiNames(names))
+          resolveMatchedTags(viewer, ids, rowsRef.current, headersRef.current[0], (tags) => setMultiNames(tags))
         }
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSel)
         ctxRef.current.onSel = onSel
