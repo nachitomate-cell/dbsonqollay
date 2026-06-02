@@ -198,9 +198,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
           const isJson = ct.includes('application/json')
           if (!isJson) {
             const preview = await r.text().then((t) => t.slice(0, 120)).catch(() => '?')
+            const fullUrl = `${location.origin}${getAPI() ? '' : ''}/api/aps/token`
             throw new Error(
               `El backend APS devolvió ${r.status} con content-type "${ct}" — esperaba JSON.\n` +
-              `URL: ${getAPI() || '(mismo origen)'}/api/aps/token\nRespuesta: ${preview}`
+              `URL real: ${getAPI() || location.origin}/api/aps/token\n` +
+              `SW activo: ${navigator.serviceWorker?.controller ? 'SÍ (' + (navigator.serviceWorker.controller.scriptURL) + ')' : 'NO'}\n` +
+              `Respuesta: ${preview}`
             )
           }
           const data = await r.json()
