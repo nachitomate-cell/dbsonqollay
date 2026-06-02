@@ -354,7 +354,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     setStatus('loadingSdk')
     getApsViewer(() =>
       fetch(`${getAPI()}/api/aps/token`, { cache: 'no-store' })
-        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
+        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${getAPI() || location.origin}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then(async (r) => {
           const ct = r.headers.get('content-type') || ''
           const isJson = ct.includes('application/json')
