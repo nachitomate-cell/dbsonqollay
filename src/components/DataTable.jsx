@@ -369,9 +369,9 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       {/* Sub-tabs */}
       <div className="flex gap-1 border-b border-slate-200 px-3 pt-2 dark:border-white/10">
         {[
-          { id: 'elements', label: 'Elements' },
+          { id: 'elements', label: 'Elementos' },
           { id: 'awp', label: 'AWP' },
-          { id: 'commodity', label: 'Commodity Code' },
+          { id: 'commodity', label: 'Código de mercancía' },
         ].map((t) => (
           <button
             key={t.id}
@@ -411,7 +411,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ViewToggle active={viewMode === 'grid'} icon={List} label="Planilla" onClick={() => setViewMode('grid')} />
               <ViewToggle active={viewMode === 'cards'} icon={LayoutGrid} label="Fichas" onClick={() => setViewMode('cards')} />
               <ViewToggle active={viewMode === 'bim'} icon={Box} label="3D" onClick={() => setViewMode('bim')} />
-              <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Split" onClick={() => setViewMode('split')} />
+              <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Dividido" onClick={() => setViewMode('split')} />
             </div>
 
             {/* Motor 3D: esquemático/glTF (sin backend) o APS (modelo real NWD/RVT/IFC) */}
@@ -427,7 +427,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search..."
+                placeholder="Buscar..."
                 className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
               />
               {query && (
@@ -437,7 +437,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               )}
             </div>
 
-            <Labeled label="Order By">
+            <Labeled label="Ordenar por">
               <Select value={sort.key ?? ''} onChange={(v) => setSort((s) => ({ key: v || null, dir: s.dir }))}>
                 <option value="">—</option>
                 {headers.map((h) => (
@@ -445,7 +445,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 ))}
               </Select>
             </Labeled>
-            <Labeled label="Sort">
+            <Labeled label="Orden">
               <Select value={sort.dir} onChange={(v) => setSort((s) => ({ ...s, dir: v }))}>
                 <option value="asc">Ascendente</option>
                 <option value="desc">Descendente</option>
@@ -470,7 +470,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
           {/* Filter row */}
           <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
-            <Labeled label="Filter By">
+            <Labeled label="Filtrar por">
               <Select value={filterByCol} onChange={setFilterByCol}>
                 <option value="">— Elegir columna —</option>
                 {headers.map((h) => (
@@ -490,7 +490,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               />
             )}
             <div className="ml-auto">
-              <Labeled label="Property Change">
+              <Labeled label="Cambio de propiedad">
                 <Select value={propertyChange} onChange={setPropertyChange}>
                   <option value="">—</option>
                   {headers.map((h) => (
@@ -503,8 +503,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
           {/* Update buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-3">
-            <UpdateButton icon={Link2} disabled={selected.size === 0}>Update AWP Relationship</UpdateButton>
-            <UpdateButton icon={Tag} disabled={selected.size === 0}>Update Commodity Code Relationship</UpdateButton>
+            <UpdateButton icon={Link2} disabled={selected.size === 0}>Actualizar relación AWP</UpdateButton>
+            <UpdateButton icon={Tag} disabled={selected.size === 0}>Actualizar relación de código de mercancía</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -524,9 +524,9 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
           {/* Stats bar */}
           <div className="mx-4 mb-3 flex flex-wrap gap-x-8 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-            <span>Total Elements : <b className="tabular-nums text-brand-600 dark:text-accent">{rows.length}</b></span>
-            <span>Total Elements Selected : <b className="tabular-nums text-brand-600 dark:text-accent">{selected.size}</b></span>
-            <span>Total Elements Deleted : <b className="tabular-nums">0</b></span>
+            <span>Total de elementos : <b className="tabular-nums text-brand-600 dark:text-accent">{rows.length}</b></span>
+            <span>Total de elementos seleccionados : <b className="tabular-nums text-brand-600 dark:text-accent">{selected.size}</b></span>
+            <span>Total de elementos eliminados : <b className="tabular-nums">0</b></span>
             {filtered.length !== rows.length && (
               <span className="text-slate-500 dark:text-slate-400">Mostrando : <b className="tabular-nums">{filtered.length}</b></span>
             )}
@@ -950,11 +950,11 @@ function UpdateButton({ icon: IconCmp, children, disabled }) {
 }
 
 function RelationshipPlaceholder({ kind, count }) {
-  const title = kind === 'awp' ? 'Relación AWP (CWA / CWP / EWP / IWP)' : 'Relación de Commodity Code'
+  const title = kind === 'awp' ? 'Relación AWP (CWA / CWP / EWP / IWP)' : 'Relación de código de mercancía'
   const desc =
     kind === 'awp'
       ? 'Gestiona el empaquetamiento de trabajo (Advanced Work Packaging) de los elementos seleccionados: asignación a CWA, CWP, EWP e IWP.'
-      : 'Asigna y normaliza el código de commodity de los elementos seleccionados según el catálogo de materiales del proyecto.'
+      : 'Asigna y normaliza el código de mercancía de los elementos seleccionados según el catálogo de materiales del proyecto.'
   return (
     <div className="grid flex-1 place-items-center p-10 text-center">
       <div className="max-w-md">

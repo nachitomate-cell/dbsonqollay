@@ -21,7 +21,7 @@ export default function GridWorkspace({ tabs, activeSub, onSwitch, onClose, onRe
         className="mx-auto mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition hover:underline dark:text-accent"
       >
         <ArrowLeft className="h-4 w-4" />
-        Return To Engineering Element Selection.
+        Volver a la selección de elementos de ingeniería.
       </button>
 
       {/* Tab strip */}
