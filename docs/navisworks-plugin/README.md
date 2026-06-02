@@ -101,19 +101,26 @@ dotnet build SonqollaySync.csproj -c Release -p:DeployToNavisworks=true
 
 ### Instalar
 Copiá el `SonqollaySync.dll` compilado a una subcarpeta con el **mismo nombre**
-que el DLL dentro de `Plugins`:
+que el DLL dentro de `Plugins` (ubicación per-usuario, sin admin):
 ```
-%PROGRAMDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
+%APPDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
 ```
-(o `C:\Program Files\Autodesk\Navisworks Manage 2026\Plugins\SonqollaySync\`).
-El `-p:DeployToNavisworks=true` de arriba ya hace esta copia.
+(alternativa, requiere admin: `<carpeta de instalación>\Navisworks Manage 2026\Plugins\SonqollaySync\`).
+El `-p:DeployToNavisworks=true` de arriba ya hace esta copia a `%APPDATA%`.
 
 ### Configurar el plugin (una sola vez)
 Editá las constantes al inicio de `SonqollaySync.cs`:
 - `BaseUrl` = `https://basesonqollay.synaptechspa.cl`
 - `ApiToken` = el mismo valor de `SQY_API_TOKEN`
-- `LinkProperty` = propiedad del modelo que tiene el TAG (por defecto `"Layer"`;
-  en tus DWG podría ser la **Capa**).
+- `LinkCategory` / `LinkProperty` = dónde vive el TAG en el modelo: la pestaña
+  (categoría) y la propiedad. Por defecto `BIM` / `TAG/Commodity` (visto en el
+  panel Propiedades del modelo). Para confirmarlo: seleccioná un elemento en
+  Navisworks y mirá qué pestaña/propiedad tiene el código del TAG.
+
+> Importante: el **valor** del TAG debe coincidir entre la planilla y el modelo.
+> Si el modelo numera `06940-BAT-011` y la planilla `230-BAT-011`, no hay match
+> aunque la propiedad sea la correcta: es la misma numeración la que debe usarse
+> de ambos lados.
 
 > La planilla a sincronizar **NO** se configura acá: se elige al ejecutar. Por
 > eso compilás una sola vez aunque manejes muchas planillas.

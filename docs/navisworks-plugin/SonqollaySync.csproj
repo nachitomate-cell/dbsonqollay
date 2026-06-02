@@ -26,7 +26,7 @@
 
     <!-- Poné true para copiar el DLL a la carpeta de plugins al compilar. -->
     <DeployToNavisworks>false</DeployToNavisworks>
-    <NavisworksPluginsDir>$(ProgramData)\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\</NavisworksPluginsDir>
+    <NavisworksPluginsDir>$(AppData)\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\</NavisworksPluginsDir>
   </PropertyGroup>
 
   <!-- DLLs de la API (vienen con la instalación de Navisworks). -->
