@@ -62,7 +62,7 @@ En Vercel → Environment Variables (Production), agregá:
 
 Ver [`SonqollaySync.cs`](./SonqollaySync.cs). Hace tres cosas:
 
-1. **Descarga** el dataset (`HttpClient` + `System.Text.Json`).
+1. **Descarga** el dataset (`WebClient` + `JavaScriptSerializer`, sin NuGet).
 2. **Matchea por TAG**: para cada fila busca los `ModelItem` cuya propiedad de
    vínculo (por defecto la **capa**, p. ej. `06940-LUM-001`) coincide con
    `row[tagField]`. Es el mismo criterio que usa la web.
@@ -70,16 +70,38 @@ Ver [`SonqollaySync.cs`](./SonqollaySync.cs). Hace tres cosas:
    usando el **COM API** (`ComApiBridge` + `InwOpState10.SetUserDefined`), ya
    que el API .NET es de solo lectura para propiedades.
 
-### Compilar
-- Proyecto **Class Library (.NET Framework)** — la versión la marca tu
-  Navisworks (p. ej. 4.8).
-- Referencias (en `C:\Program Files\Autodesk\Navisworks Manage <año>\`):
-  - `Autodesk.Navisworks.Api.dll`
-  - `Autodesk.Navisworks.ComApi.dll`
-  - `Autodesk.Navisworks.Interop.ComApi.dll`
-- Copiá el `.dll` compilado a:
-  `%PROGRAMDATA%\Autodesk Navisworks Manage <año>\Plugins\SonqollaySync\`
-  (o la carpeta `Plugins` de la instalación).
+### Compilar (Navisworks 2026)
+Navisworks 2026 apunta a **.NET Framework 4.8 (x64)**. El proyecto
+[`SonqollaySync.csproj`](./SonqollaySync.csproj) ya está armado y **no usa
+NuGet** (solo `WebClient` + `JavaScriptSerializer` del framework), así que el
+deploy es un único `.dll`.
+
+Requisitos en la PC que compila:
+- **Navisworks Manage o Simulate 2026** instalado (el visor gratis *Freedom* no
+  sirve: no tiene API). Las DLLs de la API vienen con la instalación.
+- **Visual Studio 2022** (o `dotnet` SDK) con el targeting pack de .NET
+  Framework 4.8.
+
+Compilar:
+```powershell
+# Si Navisworks está en la ruta por defecto:
+dotnet build SonqollaySync.csproj -c Release
+
+# Si está en otra ruta, pasala:
+dotnet build SonqollaySync.csproj -c Release -p:NavisworksPath="D:\...\Navisworks Manage 2026\"
+
+# Para copiar el DLL directo a la carpeta de plugins al compilar:
+dotnet build SonqollaySync.csproj -c Release -p:DeployToNavisworks=true
+```
+
+### Instalar
+Copiá el `SonqollaySync.dll` compilado a una subcarpeta con el **mismo nombre**
+que el DLL dentro de `Plugins`:
+```
+%PROGRAMDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
+```
+(o `C:\Program Files\Autodesk\Navisworks Manage 2026\Plugins\SonqollaySync\`).
+El `-p:DeployToNavisworks=true` de arriba ya hace esta copia.
 
 ### Configurar el plugin
 Editá las constantes al inicio de `SonqollaySync.cs`:

@@ -1,0 +1,68 @@
+<!-- Proyecto del plugin Sonqollay Sync para Navisworks Manage/Simulate 2026.
+     Navisworks 2026 apunta a .NET Framework 4.8 (x64).
+
+     Compilar:
+       dotnet build -c Release
+     o abrir en Visual Studio 2022 (carga de .NET Framework instalada).
+
+     Si Navisworks está en otra ruta, pasá la propiedad:
+       dotnet build -c Release -p:NavisworksPath="D:\...\Navisworks Manage 2026\"
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>SonqollaySync</AssemblyName>
+    <RootNamespace>Sonqollay</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+
+    <!-- Ruta de instalación de Navisworks 2026 (ajustá si difiere). -->
+    <NavisworksPath Condition="'$(NavisworksPath)' == ''">C:\Program Files\Autodesk\Navisworks Manage 2026\</NavisworksPath>
+
+    <!-- Poné true para copiar el DLL a la carpeta de plugins al compilar. -->
+    <DeployToNavisworks>false</DeployToNavisworks>
+    <NavisworksPluginsDir>$(ProgramData)\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\</NavisworksPluginsDir>
+  </PropertyGroup>
+
+  <!-- DLLs de la API (vienen con la instalación de Navisworks). -->
+  <ItemGroup>
+    <Reference Include="Autodesk.Navisworks.Api">
+      <HintPath>$(NavisworksPath)Autodesk.Navisworks.Api.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Autodesk.Navisworks.ComApi">
+      <HintPath>$(NavisworksPath)Autodesk.Navisworks.ComApi.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Autodesk.Navisworks.Interop.ComApi">
+      <HintPath>$(NavisworksPath)Autodesk.Navisworks.Interop.ComApi.dll</HintPath>
+      <Private>false</Private>
+      <!-- IMPORTANTE: no embeber los tipos COM. -->
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Ensamblados del framework usados por el plugin (sin NuGet). -->
+  <ItemGroup>
+    <Reference Include="System.Net" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+
+  <!-- Solo compilar el .cs del plugin de esta carpeta. -->
+  <ItemGroup>
+    <Compile Remove="**/*.cs" />
+    <Compile Include="SonqollaySync.cs" />
+  </ItemGroup>
+
+  <!-- Copia opcional del DLL a la carpeta de plugins de Navisworks. -->
+  <Target Name="DeploySonqollay" AfterTargets="Build" Condition="'$(DeployToNavisworks)' == 'true'">
+    <MakeDir Directories="$(NavisworksPluginsDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NavisworksPluginsDir)" />
+  </Target>
+
+</Project>
