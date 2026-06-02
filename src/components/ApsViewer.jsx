@@ -363,21 +363,40 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
   // ---- utilidades de geometría ----
   // Busca los dbIds cuyo nombre/propiedad coincide con alguno de los valores.
-  function findDbIds(values) {
-    const viewer = viewerRef.current
-    if (!viewer || !values.length) return Promise.resolve([])
+  // El vínculo dato↔geometría se hace por TAG, pero los modelos nombran/etiquetan
+  // distinto, así que: (1) se busca en TODAS las propiedades (no solo "name") y
+  // (2) se prueban variantes del TAG por si en el modelo aparece sin el prefijo
+  // de área o sin separadores (p. ej. "230-AIR-011" ↔ "AIR-011" ↔ "230AIR011").
+  function searchOne(viewer, text) {
     return new Promise((resolve) => {
-      const all = new Set()
-      let pending = values.length
-      values.forEach((v) => {
-        viewer.search(
-          String(v),
-          (ids) => { (ids || []).forEach((id) => all.add(id)); if (--pending === 0) resolve([...all]) },
-          () => { if (--pending === 0) resolve([...all]) },
-          ['name'],
-        )
-      })
+      if (!text) { resolve([]); return }
+      // Sin lista de atributos → Forge busca en displayName y todas las props string.
+      viewer.search(String(text), (ids) => resolve(ids || []), () => resolve([]))
     })
+  }
+  function tagVariants(v) {
+    const s = String(v).trim()
+    if (!s) return []
+    const out = new Set([s])
+    out.add(s.replace(/[\s_]+/g, '-')) // normaliza separadores a guion
+    out.add(s.replace(/[^A-Za-z0-9]/g, '')) // sin separadores
+    const seg = s.split(/[-_\s]/).filter(Boolean)
+    if (seg.length > 1) out.add(seg.slice(1).join('-')) // sin el primer bloque (área)
+    return [...out].filter(Boolean)
+  }
+  async function findDbIds(values) {
+    const viewer = viewerRef.current
+    if (!viewer || !values.length) return []
+    const all = new Set()
+    // Para cada valor, intenta sus variantes y se queda con la PRIMERA que matchea
+    // (evita falsos positivos de variantes demasiado cortas si la exacta ya sirvió).
+    await Promise.all(values.map(async (v) => {
+      for (const variant of tagVariants(v)) {
+        const ids = await searchOne(viewer, variant)
+        if (ids.length) { ids.forEach((id) => all.add(id)); break }
+      }
+    }))
+    return [...all]
   }
 
   // Comportamiento de la lámina: aislar el paquete, resto en blanco + 75% transp.
