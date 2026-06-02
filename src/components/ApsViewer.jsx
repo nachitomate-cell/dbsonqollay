@@ -55,6 +55,23 @@ function viewerHasModel(v) {
   try { return !!(v && v.impl && (v.model || v.getVisibleModels?.().length)) } catch { return false }
 }
 
+// Resuelve los nombres (TAG) de varios dbId a la vez. Usa getBulkProperties si
+// está (rápido, una sola pasada); si no, cae a getProperties uno por uno.
+function resolveNames(viewer, ids, cb) {
+  const model = viewer?.model
+  try {
+    if (model?.getBulkProperties) {
+      model.getBulkProperties(ids, { propFilter: ['name'] },
+        (res) => cb((res || []).map((r) => r.name).filter(Boolean)),
+        () => cb([]))
+      return
+    }
+  } catch { /* cae al método uno-a-uno */ }
+  Promise.all(ids.map((id) => new Promise((res) => {
+    try { viewer.getProperties(id, (p) => res(p?.name), () => res(null)) } catch { res(null) }
+  }))).then((names) => cb(names.filter(Boolean)))
+}
+
 function applyViewerStyle(viewer, hq = true) {
   const dark = document.documentElement.classList.contains('dark')
   // Fondo en degradé (top, bottom) en RGB 0-255 — más luminoso y "estudio".
@@ -104,7 +121,7 @@ function frameModel(viewer) {
   requestAnimationFrame(fit)
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, dataKey = 'default', isFiltered = false }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
@@ -198,6 +215,34 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     setTimeout(() => setSavedField(false), 2000)
   }
 
+  // ---- edición múltiple: Ctrl/Cmd+clic en el 3D selecciona varios ----
+  // `multiNames` = TAGs de los objetos seleccionados (null si hay <2). Se
+  // matchean contra la planilla por TAG para obtener los registros a editar.
+  const [multiNames, setMultiNames] = useState(null)
+  const [bulkField, setBulkField] = useState('')
+  const [bulkValue, setBulkValue] = useState('')
+  const [bulkSaved, setBulkSaved] = useState(false)
+  const multiRows = useMemo(() => {
+    if (!multiNames || multiNames.length < 2) return null
+    const tagk = headers[0]
+    const map = new Map() // _id → TAG (deduplica si dos objetos mapean al mismo registro)
+    multiNames.forEach((nm) => {
+      const t = normTag(nm)
+      if (!t) return
+      const row = rows.find((r) => normTag(r[tagk]) === t)
+        || rows.find((r) => normTag(r[tagk]) && t.includes(normTag(r[tagk])))
+      if (row) map.set(row._id, row[tagk])
+    })
+    return { ids: [...map.keys()], tags: [...map.values()] }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiNames, rows, headers.join('|')])
+  function saveBulk() {
+    if (!multiRows || !multiRows.ids.length || !bulkField || !onEditRecords) return
+    onEditRecords(multiRows.ids, { [bulkField]: bulkValue })
+    setBulkSaved(true)
+    setTimeout(() => setBulkSaved(false), 2000)
+  }
+
   useEffect(() => { if (!awpField && awpFields.length) setAwpField(awpFields[0]) }, [awpFields, awpField])
   // Al cambiar de campo AWP, limpia la selección.
   useEffect(() => { setAwpSel([]) }, [awpField])
@@ -261,12 +306,22 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
 
         // Handlers propios de esta instancia (se quitan al desmontar).
         const onSel = (e) => {
-          const id = e.dbIdArray?.[0]
-          if (id == null) { setObjProps(null); return }
-          viewer.getProperties(id, (props) => {
-            onSelectRef.current?.(props.name || String(id))
-            setObjProps({ name: props.name || `Objeto ${id}`, dbId: id, groups: groupProps(props.properties || []) })
-          })
+          const ids = e.dbIdArray || []
+          if (ids.length === 0) { setObjProps(null); setMultiNames(null); return }
+          if (ids.length === 1) {
+            // Selección simple: ficha + edición de un registro (comportamiento normal).
+            setMultiNames(null)
+            const id = ids[0]
+            viewer.getProperties(id, (props) => {
+              onSelectRef.current?.(props.name || String(id))
+              setObjProps({ name: props.name || `Objeto ${id}`, dbId: id, groups: groupProps(props.properties || []) })
+            })
+            return
+          }
+          // Selección múltiple (Ctrl/Cmd+clic): panel de edición masiva. Se ocultan
+          // las propiedades de un solo objeto y se resuelven los TAG de todos.
+          setObjProps(null)
+          resolveNames(viewer, ids, (names) => setMultiNames(names))
         }
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSel)
         ctxRef.current.onSel = onSel
@@ -696,6 +751,52 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         </div>
       )}
 
+      {/* Panel de edición múltiple (Ctrl/Cmd+clic selecciona varios objetos) */}
+      {ready && multiRows && showProps && (
+        <div className={`absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden ${glass}`}>
+          <div className="flex items-start justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-white/10">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-500">Edición múltiple</p>
+              <p className="text-sm font-bold text-slate-800 dark:text-white">{multiRows.ids.length} elemento{multiRows.ids.length === 1 ? '' : 's'} de la planilla</p>
+            </div>
+            <button onClick={() => setShowProps(false)} className="shrink-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            {multiRows.ids.length === 0 ? (
+              <p className="rounded-lg bg-slate-50 px-2 py-2 text-[10px] text-slate-400 dark:bg-white/5">Ninguno de los objetos seleccionados coincide con la planilla (TAG).</p>
+            ) : (
+              <>
+                <label className="block">
+                  <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Campo a cambiar</span>
+                  <select value={bulkField} onChange={(e) => setBulkField(e.target.value)} className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-100">
+                    <option value="">— Elegir campo —</option>
+                    {headers.map((h) => <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </label>
+                <label className="mt-2 block">
+                  <span className="mb-0.5 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Nuevo valor (igual para todos)</span>
+                  <input
+                    value={bulkValue}
+                    onChange={(e) => setBulkValue(e.target.value)}
+                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') saveBulk() }}
+                    className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-100"
+                  />
+                </label>
+                <button onClick={saveBulk} disabled={!bulkField} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
+                  {bulkSaved ? <><Check className="h-3.5 w-3.5" /> Aplicado</> : <><Save className="h-3.5 w-3.5" /> Aplicar a {multiRows.ids.length}</>}
+                </button>
+                <p className="mt-2 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Elementos</p>
+                <div className="flex flex-wrap gap-1">
+                  {multiRows.tags.map((t, i) => (
+                    <span key={i} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:bg-white/5 dark:text-slate-300">{t}</span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Panel de propiedades del objeto pinchado */}
       {ready && objProps && showProps && (
         <div className={`absolute bottom-3 left-3 z-10 flex max-h-[55%] w-72 flex-col overflow-hidden ${glass}`}>
@@ -749,9 +850,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           </div>
         </div>
       )}
-      {ready && objProps && !showProps && (
+      {ready && (objProps || multiRows) && !showProps && (
         <button onClick={() => setShowProps(true)} className="absolute bottom-3 left-3 z-10 rounded-lg border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow backdrop-blur transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-200">
-          Ver propiedades
+          {multiRows ? `Ver edición múltiple (${multiRows.ids.length})` : 'Ver propiedades'}
         </button>
       )}
 
