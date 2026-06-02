@@ -78,7 +78,7 @@ function formatValue(header, value) {
 /* --------------------------- component ----------------------------- */
 
 export default function DataTable({ dataset, subcategory, onBack }) {
-  const { columns, rows, addColumn, removeColumn, toggleColumn, updateRecord, addRecord, deleteRecord, reset, dirty } =
+  const { columns, rows, addColumn, removeColumn, toggleColumn, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, reset, dirty } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
@@ -339,10 +339,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   function newRecord() {
     const id = addRecord()
     openFicha(id)
+    logAction('Nuevo registro')
   }
   function saveRecord(patch) {
     updateRecord(editingId, patch)
     setEditingId(null)
+    logAction('Editó un registro')
   }
   function removeRecord() {
     deleteRecord(editingId)
@@ -352,11 +354,125 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       return n
     })
     setEditingId(null)
+    logAction('Eliminó un registro')
   }
   function addField() {
+    if (newField.trim()) logAction(`Agregó columna “${newField.trim()}”`)
     addColumn(newField)
     setNewField('')
   }
+
+  // ---- Feedback efímero (toast) + historial de sesión ----
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef(null)
+  function flash(msg) {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 2800)
+  }
+  const [history, setHistory] = useState([]) // acciones de la sesión (se reinicia al recargar)
+  function logAction(text) {
+    setHistory((h) => [{ t: Date.now(), text }, ...h].slice(0, 50))
+  }
+  const fileRef = useRef(null)
+  const [showStats, setShowStats] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+
+  // Filas sobre las que actúan Copiar/edición: las seleccionadas o, si no hay, las filtradas.
+  const rowsForAction = () => {
+    const sel = filtered.filter((r) => selected.has(r._id))
+    return sel.length ? sel : filtered
+  }
+  // Copiar al portapapeles en formato TSV (se pega directo en Excel/Sheets).
+  async function copySelection() {
+    const data = rowsForAction()
+    if (!data.length) { flash('No hay filas para copiar.'); return }
+    const tsv = [headers.join('\t'), ...data.map((r) => headers.map((h) => String(r[h] ?? '')).join('\t'))].join('\n')
+    try {
+      await navigator.clipboard.writeText(tsv)
+      flash(`Copiadas ${data.length} fila(s) al portapapeles.`)
+      logAction(`Copió ${data.length} fila(s)`)
+    } catch { flash('No se pudo copiar (permiso del navegador).') }
+  }
+  // Editar: abre la ficha de la fila seleccionada (o la activa).
+  function editSelected() {
+    const id = selected.size === 1 ? [...selected][0] : activeId
+    if (id) { setActiveId(id); setEditingId(id) }
+    else flash('Selecciona una fila (o haz clic en una) para editarla.')
+  }
+  // Parser CSV sencillo (maneja comillas y separador coma o punto y coma).
+  function parseCsv(text) {
+    const rowsArr = []
+    const firstLine = text.slice(0, text.indexOf('\n') >= 0 ? text.indexOf('\n') : text.length)
+    const delim = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ';' : ','
+    let field = '', row = [], inQ = false
+    const pushField = () => { row.push(field); field = '' }
+    const pushRow = () => { rowsArr.push(row); row = [] }
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i]
+      if (inQ) {
+        if (c === '"' && text[i + 1] === '"') { field += '"'; i++ }
+        else if (c === '"') inQ = false
+        else field += c
+      } else if (c === '"') inQ = true
+      else if (c === delim) pushField()
+      else if (c === '\n') { pushField(); pushRow() }
+      else if (c === '\r') { /* ignora */ }
+      else field += c
+    }
+    if (field.length || row.length) { pushField(); pushRow() }
+    const head = (rowsArr.shift() || []).map((h) => h.trim())
+    return rowsArr.filter((r) => r.some((v) => v !== '')).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])))
+  }
+  // Importar CSV o Excel → agrega las filas al dataset (crea columnas que falten).
+  async function importFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    flash('Importando…')
+    try {
+      let parsed = []
+      if (/\.csv$/i.test(file.name)) parsed = parseCsv(await file.text())
+      else {
+        const XLSX = await import('xlsx')
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+        parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+      }
+      const n = addRecords(parsed)
+      flash(n ? `Importadas ${n} fila(s) desde ${file.name}.` : 'No se encontraron filas en el archivo.')
+      if (n) logAction(`Importó ${n} fila(s) (${file.name})`)
+    } catch { flash('No se pudo leer el archivo (formato no válido).') }
+  }
+  // Edición múltiple: asigna un valor a una columna en las filas seleccionadas.
+  // El AWP usa una columna CWA/CWP/EWP/IWP; el código de mercancía, una de código.
+  function bulkUpdate(kind) {
+    const ids = [...selected]
+    if (!ids.length) { flash('Selecciona elementos primero.'); return }
+    const re = kind === 'awp' ? /CWA|CWP|EWP|IWP|SWP|AWP|WBS/i : /COMMODITY|MERCANC|C[ÓO]DIGO|COMM/i
+    const col = propertyChange || headers.find((h) => re.test(h))
+    if (!col) { flash('Elige la columna a actualizar en “Cambio de propiedad”.'); return }
+    const value = window.prompt(`Nuevo valor de “${col.replace(/_/g, ' ')}” para ${ids.length} elemento(s):`, '')
+    if (value == null) return
+    updateRecords(ids, { [col]: value })
+    flash(`Actualizado “${col.replace(/_/g, ' ')}” en ${ids.length} elemento(s).`)
+    logAction(`${kind === 'awp' ? 'Relación AWP' : 'Código de mercancía'}: ${col}=“${value}” en ${ids.length}`)
+  }
+
+  // Estadísticas de la vista filtrada (para el panel de Estadísticas).
+  const stats = useMemo(() => {
+    const statusH = headers.find((h) => isStatusHeader(h))
+    const costH = headers.find(isCostHeader)
+    const weightH = headers.find(isWeightHeader)
+    const byStatus = new Map()
+    let cost = 0, weight = 0
+    filtered.forEach((r) => {
+      if (statusH) { const k = String(r[statusH] ?? '').trim() || '—'; byStatus.set(k, (byStatus.get(k) || 0) + 1) }
+      if (costH) { const n = Number(r[costH]); if (!Number.isNaN(n)) cost += n }
+      if (weightH) { const n = Number(r[weightH]); if (!Number.isNaN(n)) weight += n }
+    })
+    return { total: filtered.length, statusH, byStatus: [...byStatus.entries()].sort((a, b) => b[1] - a[1]), costH, cost, weightH, weight }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, headers.join('|')])
 
   const activeFilters = Object.entries(colFilters).filter(([, v]) => v)
   const editingRecord = editingId ? rows.find((r) => r._id === editingId) : null
@@ -397,13 +513,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
               <ToolIcon icon={Plus} title="Nuevo registro" onClick={newRecord} />
-              <ToolIcon icon={Copy} title="Copiar" />
-              <ToolIcon icon={Pencil} title="Editar (clic en una fila)" />
+              <ToolIcon icon={Copy} title="Copiar filas (seleccionadas o filtradas)" onClick={copySelection} />
+              <ToolIcon icon={Pencil} title="Editar la fila seleccionada" onClick={editSelected} />
               <ExportMenu onExport={handleExport} />
-              <ToolIcon icon={Upload} title="Importar" />
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={importFile} />
+              <ToolIcon icon={Upload} title="Importar (CSV / Excel)" onClick={() => fileRef.current?.click()} />
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
-              <ToolIcon icon={PieChart} title="Estadísticas" />
-              <ToolIcon icon={History} title="Historial" />
+              <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
+              <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
             </div>
 
             {/* View mode toggle */}
@@ -452,6 +569,54 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               </Select>
             </Labeled>
           </div>
+
+          {/* Panel de estadísticas */}
+          {showStats && (
+            <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-ink-900/40">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-700 dark:text-slate-200"><PieChart className="h-4 w-4 text-brand-500" /> Estadísticas de la vista</h4>
+                <button onClick={() => setShowStats(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg bg-white p-3 dark:bg-ink-800"><p className="text-[11px] uppercase tracking-wide text-slate-400">Elementos</p><p className="text-xl font-bold tabular-nums text-slate-800 dark:text-white">{stats.total}</p></div>
+                {stats.costH && <div className="rounded-lg bg-white p-3 dark:bg-ink-800"><p className="text-[11px] uppercase tracking-wide text-slate-400">{stats.costH.replace(/_/g, ' ')}</p><p className="text-xl font-bold tabular-nums text-slate-800 dark:text-white">{fmtCost(stats.cost)}</p></div>}
+                {stats.weightH && <div className="rounded-lg bg-white p-3 dark:bg-ink-800"><p className="text-[11px] uppercase tracking-wide text-slate-400">{stats.weightH.replace(/_/g, ' ')}</p><p className="text-xl font-bold tabular-nums text-slate-800 dark:text-white">{fmtWeight(stats.weight)}</p></div>}
+                <div className="rounded-lg bg-white p-3 dark:bg-ink-800"><p className="text-[11px] uppercase tracking-wide text-slate-400">Seleccionados</p><p className="text-xl font-bold tabular-nums text-brand-600 dark:text-accent">{selected.size}</p></div>
+              </div>
+              {stats.statusH && stats.byStatus.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-400">Por {stats.statusH.replace(/_/g, ' ')}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {stats.byStatus.map(([k, n]) => (
+                      <span key={k} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${statusStyles(k)}`}>{k} <b className="tabular-nums">{n}</b></span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Panel de historial de la sesión */}
+          {showHistory && (
+            <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-ink-900/40">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-700 dark:text-slate-200"><History className="h-4 w-4 text-brand-500" /> Historial de la sesión</h4>
+                <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+              </div>
+              {history.length === 0 ? (
+                <p className="py-2 text-center text-xs text-slate-400">Aún no hay acciones registradas en esta sesión.</p>
+              ) : (
+                <ul className="max-h-56 space-y-1 overflow-y-auto">
+                  {history.map((h, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-1.5 text-xs dark:bg-ink-800">
+                      <span className="text-slate-700 dark:text-slate-200">{h.text}</span>
+                      <span className="shrink-0 tabular-nums text-slate-400">{new Date(h.t).toLocaleTimeString('es-CL')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* Column manager */}
           {showColumns && (
@@ -503,8 +668,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
           {/* Update buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-3">
-            <UpdateButton icon={Link2} disabled={selected.size === 0}>Actualizar relación AWP</UpdateButton>
-            <UpdateButton icon={Tag} disabled={selected.size === 0}>Actualizar relación de código de mercancía</UpdateButton>
+            <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => bulkUpdate('awp')}>Actualizar relación AWP</UpdateButton>
+            <UpdateButton icon={Tag} disabled={selected.size === 0} onClick={() => bulkUpdate('commodity')}>Actualizar relación de código de mercancía</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -670,6 +835,13 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           onDelete={removeRecord}
           onClose={() => setEditingId(null)}
         />
+      )}
+
+      {/* Aviso efímero de acciones (copiar, importar, edición múltiple…) */}
+      {toast && (
+        <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-ink-900 px-4 py-2 text-sm font-medium text-white shadow-lg ring-1 ring-black/10 dark:bg-white dark:text-ink-900">
+          {toast}
+        </div>
       )}
     </div>
   )
@@ -932,9 +1104,10 @@ function Select({ value, onChange, children, disabled }) {
   )
 }
 
-function UpdateButton({ icon: IconCmp, children, disabled }) {
+function UpdateButton({ icon: IconCmp, children, disabled, onClick }) {
   return (
     <button
+      onClick={onClick}
       disabled={disabled}
       className={[
         'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition',

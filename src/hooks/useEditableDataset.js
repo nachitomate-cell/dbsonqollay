@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from 'react'
  * persiste en localStorage por `dataKey` para sobrevivir recargas.
  *
  * Retorna: { columns, rows, addColumn, removeColumn, toggleColumn,
- *            updateRecord, addRecord, deleteRecord, reset, dirty }
+ *            updateRecord, updateRecords, addRecord, addRecords, deleteRecord,
+ *            reset, dirty }
  *   - columns: [{ key, visible }]
  */
 const lsKey = (dataKey) => `sqy-ds-${dataKey}`
@@ -81,6 +82,32 @@ export function useEditableDataset(dataKey, dataset) {
           return { ...s, rows: [blank, ...s.rows] }
         })
         return blank._id
+      },
+      // Importación masiva: agrega varias filas y crea las columnas que falten.
+      addRecords(incoming) {
+        const list = Array.isArray(incoming) ? incoming : []
+        if (!list.length) return 0
+        mutate((s) => {
+          const known = new Set(s.columns.map((c) => c.key))
+          const newCols = []
+          list.forEach((r) => Object.keys(r).forEach((k) => {
+            if (k !== '_id' && !known.has(k)) { known.add(k); newCols.push({ key: k, visible: true }) }
+          }))
+          const columns = [...s.columns, ...newCols]
+          const rows = list.map((r) => {
+            const row = { _id: genId() }
+            columns.forEach((c) => (row[c.key] = r[c.key] ?? ''))
+            return row
+          })
+          return { ...s, columns, rows: [...rows, ...s.rows] }
+        })
+        return list.length
+      },
+      // Edición múltiple: aplica el mismo patch a varias filas por _id.
+      updateRecords(ids, patch) {
+        const set = new Set(ids || [])
+        if (!set.size) return
+        mutate((s) => ({ ...s, rows: s.rows.map((r) => (set.has(r._id) ? { ...r, ...patch } : r)) }))
       },
       deleteRecord(id) {
         mutate((s) => ({ ...s, rows: s.rows.filter((r) => r._id !== id) }))
