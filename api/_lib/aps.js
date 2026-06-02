@@ -113,6 +113,11 @@ export async function deleteObject(objectKey) {
 
 /** Helper de respuesta JSON con manejo de errores. */
 export function send(res, status, body) {
-  res.status(status).setHeader('Content-Type', 'application/json')
+  res.status(status)
+  res.setHeader('Content-Type', 'application/json')
+  // Las respuestas de la API son dinámicas (token efímero, estado de traducción):
+  // nunca deben cachearse. Sin esto, el edge/CDN puede servir una respuesta vieja
+  // para /api/* (p. ej. un index.html cacheado de antes del fix de routing).
+  res.setHeader('Cache-Control', 'no-store, max-age=0')
   res.end(JSON.stringify(body))
 }
