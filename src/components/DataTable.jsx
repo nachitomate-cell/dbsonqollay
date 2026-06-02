@@ -833,6 +833,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   selectedTag={activeId ? filtered.find((r) => r._id === activeId)?.[headers[0]] : null}
                   onSelect={handleApsSelect}
                   onEditRecord={(id, patch) => { updateRecord(id, patch); logAction('Editó un registro') }}
+                  onEditRecords={(ids, patch) => { updateRecords(ids, patch); logAction(`Editó ${ids.length} registros`) }}
                   dataKey={subcategory.dataKey}
                   isFiltered={activeFilters.length > 0 || query.trim() !== ''}
                 />
