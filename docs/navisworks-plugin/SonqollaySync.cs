@@ -79,7 +79,10 @@ namespace Sonqollay
             List<DatasetInfo> chosen = ShowPicker(index);
             if (chosen.Count == 0) return 0; // canceló o no marcó ninguna
 
-            // 3) Aplicar cada una.
+            // 3) Índice TAG -> elementos del modelo (una sola pasada).
+            Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(doc);
+
+            // 4) Aplicar cada planilla.
             int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0;
             var errores = new List<string>();
             foreach (var info in chosen)
@@ -87,7 +90,7 @@ namespace Sonqollay
                 try
                 {
                     Dataset data = FetchDataset(info.key);
-                    var res = ApplyDataset(doc, data);
+                    var res = ApplyDataset(tagIndex, data);
                     totalRows += data.rows.Count;
                     totalMatched += res.matched;
                     totalApplied += res.applied;
@@ -116,7 +119,7 @@ namespace Sonqollay
         // ---- Aplicar un dataset al modelo --------------------------------
         private struct ApplyResult { public int matched, applied, missing; }
 
-        private ApplyResult ApplyDataset(Document doc, Dataset data)
+        private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data)
         {
             string tagField = !string.IsNullOrEmpty(data.tagField)
                 ? data.tagField
@@ -131,8 +134,8 @@ namespace Sonqollay
                     continue;
                 tag = tag.Trim();
 
-                ModelItemCollection items = FindByTag(doc, tag);
-                if (items.Count == 0) { res.missing++; continue; }
+                ModelItemCollection items;
+                if (!tagIndex.TryGetValue(tag, out items) || items.Count == 0) { res.missing++; continue; }
                 res.matched++;
 
                 WriteCustomTab(items, row, tagField);
@@ -261,15 +264,48 @@ namespace Sonqollay
         }
 
         // ---- Matchear por TAG --------------------------------------------
-        private ModelItemCollection FindByTag(Document doc, string tag)
+        // Recorre todos los elementos una vez y arma un índice TAG -> elementos,
+        // leyendo la propiedad de vínculo directamente (sin distinción de
+        // mayúsculas ni dependencia del idioma del Search API).
+        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc)
         {
-            var search = new Search();
-            search.Selection.SelectAll();
-            search.Locations = SearchLocations.DescendantsAndSelf;
-            search.SearchConditions.Add(
-                SearchCondition.HasPropertyByDisplayName(LinkCategory, LinkProperty)
-                               .EqualValue(VariantData.FromDisplayString(tag)));
-            return search.FindAll(doc, false);
+            var map = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
+            foreach (Model m in doc.Models)
+            {
+                foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
+                {
+                    string tag = GetTagValue(item);
+                    if (string.IsNullOrWhiteSpace(tag)) continue;
+                    tag = tag.Trim();
+                    ModelItemCollection coll;
+                    if (!map.TryGetValue(tag, out coll)) { coll = new ModelItemCollection(); map[tag] = coll; }
+                    coll.Add(item);
+                }
+            }
+            return map;
+        }
+
+        // Devuelve el valor de la propiedad de vínculo del elemento (TAG/Commodity).
+        // Si LinkCategory está vacío, busca la propiedad en cualquier pestaña.
+        private string GetTagValue(ModelItem item)
+        {
+            string fallback = null;
+            foreach (PropertyCategory cat in item.PropertyCategories)
+            {
+                foreach (DataProperty p in cat.Properties)
+                {
+                    if (!string.Equals(p.DisplayName, LinkProperty, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    string v = p.Value != null ? p.Value.ToDisplayString() : null;
+                    if (string.IsNullOrWhiteSpace(v)) continue;
+                    // Preferimos la pestaña configurada; si no, servimos cualquiera.
+                    if (string.IsNullOrEmpty(LinkCategory) ||
+                        string.Equals(cat.DisplayName, LinkCategory, StringComparison.OrdinalIgnoreCase))
+                        return v;
+                    if (fallback == null) fallback = v;
+                }
+            }
+            return fallback;
         }
 
         // ---- Escribir propiedades custom (COM API) -----------------------
