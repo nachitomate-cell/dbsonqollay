@@ -195,7 +195,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
         .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then(async (r) => {
           const isJson = r.headers.get('content-type')?.includes('application/json')
-          if (!isJson) throw new Error('El backend APS devolvió HTML en lugar de JSON. Verifica que el servidor esté corriendo en http://localhost:3000.')
+          if (!isJson) throw new Error(
+            `El backend APS devolvió HTML en lugar de JSON (${getAPI() || 'mismo origen'}). ` +
+            'Si configuraste una URL de backend en Ajustes, vacíala para usar el servidor de Vercel.'
+          )
           const data = await r.json()
           if (!r.ok) throw new Error(data.error || `Error ${r.status} del backend APS`)
           return data
