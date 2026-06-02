@@ -93,7 +93,7 @@ function frameModel(viewer) {
   requestAnimationFrame(fit)
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default' }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
@@ -386,6 +386,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     const viewer = viewerRef.current
     if (!viewer || !packageTags.length) return
     const token = ++ctxRef.current.awpToken
+    ctxRef.current.filterActive = false // el paquete AWP tiene prioridad sobre el filtro de planilla
     setMessage('Aislando paquete…')
     const dbIds = await findDbIds(packageTags)
     // Si llegó tarde (cambió el filtro o se limpió), descartar este resultado.
@@ -406,10 +407,32 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setMessage('')
   }
 
+  // Aísla en el 3D los elementos que están en la planilla filtrada (resto en
+  // fantasma). Se dispara solo cuando hay un filtro de planilla activo y NO hay
+  // un paquete AWP seleccionado (ese tiene prioridad).
+  async function isolateFilteredRows() {
+    const viewer = viewerRef.current
+    const tags = rows.map((r) => String(r[tagKey] ?? '')).filter(Boolean)
+    if (!viewer || !tags.length) return
+    const token = ++ctxRef.current.awpToken
+    ctxRef.current.awpActive = false
+    setMessage('Aislando elementos filtrados…')
+    const dbIds = await findDbIds(tags)
+    if (token !== ctxRef.current.awpToken || !viewerRef.current) return
+    if (!dbIds.length) { setMessage('No se encontraron en el modelo los elementos filtrados (revisa el campo de vínculo).'); return }
+    ctxRef.current.filterActive = true
+    viewer.setGhosting(true)
+    viewer.clearThemingColors()
+    viewer.isolate(dbIds)
+    viewer.fitToView(dbIds)
+    setMessage('')
+  }
+
   function clearIsolation() {
     const viewer = viewerRef.current
     if (!viewer) return
     ctxRef.current.awpActive = false
+    ctxRef.current.filterActive = false
     ctxRef.current.awpToken = (ctxRef.current.awpToken || 0) + 1 // invalida searches en curso
     viewer.clearThemingColors()
     viewer.isolate([])
@@ -436,23 +459,28 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !selectedTag || status !== 'ready') return
-    if (ctxRef.current.awpActive) return
+    // No pisa el aislado del paquete AWP ni el de la planilla filtrada.
+    if (ctxRef.current.awpActive || ctxRef.current.filterActive) return
     if (ctxRef.current.lastTag === selectedTag) return
     ctxRef.current.lastTag = selectedTag
     findDbIds([selectedTag]).then((ids) => {
-      if (ctxRef.current.awpActive || !viewerRef.current) return
+      if (ctxRef.current.awpActive || ctxRef.current.filterActive || !viewerRef.current) return
       if (ids.length) { viewer.isolate(ids); viewer.fitToView(ids) }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
 
-  // aplicar filtro AWP automáticamente al cambiar la selección
+  // Aislamiento automático del 3D, por prioridad:
+  //   1) paquete AWP elegido en el visor  → aísla el paquete (naranja)
+  //   2) planilla filtrada (sin paquete)   → aísla los elementos filtrados
+  //   3) sin filtro ni paquete             → muestra todo
   useEffect(() => {
     if (status !== 'ready') return
     if (awpSel.length) isolatePackage()
+    else if (isFiltered) isolateFilteredRows()
     else clearIsolation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awpSel])
+  }, [awpSel, isFiltered, rows, status])
 
   const busy = ['loadingSdk', 'uploading', 'translating'].includes(status)
   const ready = status === 'ready'
