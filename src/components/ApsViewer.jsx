@@ -193,10 +193,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     getApsViewer(() =>
       fetch(`\${getAPI()}/api/aps/token`)
         .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
-        .then((r) => {
-          if (!r.ok || !r.headers.get('content-type')?.includes('application/json'))
-            throw new Error('Backend APS respondió con error. Revisa las credenciales del servidor.')
-          return r.json()
+        .then(async (r) => {
+          const isJson = r.headers.get('content-type')?.includes('application/json')
+          if (!isJson) throw new Error('El backend APS devolvió HTML en lugar de JSON. Verifica que el servidor esté corriendo en http://localhost:3000.')
+          const data = await r.json()
+          if (!r.ok) throw new Error(data.error || `Error ${r.status} del backend APS`)
+          return data
         }),
     )
       .then(({ viewer, container }) => {
