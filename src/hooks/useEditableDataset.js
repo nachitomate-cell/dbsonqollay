@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
+import { loadWorking, removeWorking, saveWorking } from '../utils/datastore'
 
 /**
  * Capa editable sobre un dataset (headers + rows). Permite editar valores,
  * agregar/quitar/ocultar columnas y agregar/eliminar registros. Cada fila
  * recibe un `_id` estable para identificarla pese a orden/filtros. El estado se
- * persiste en localStorage por `dataKey` para sobrevivir recargas.
+ * persiste vía datastore (hoy localStorage; ver utils/datastore.js).
  *
  * Retorna: { columns, rows, addColumn, removeColumn, toggleColumn,
  *            updateRecord, updateRecords, addRecord, addRecords, deleteRecord,
  *            reset, dirty }
  *   - columns: [{ key, visible }]
  */
-const lsKey = (dataKey) => `sqy-ds-${dataKey}`
-
 let _seq = 0
 const genId = () => `r${Date.now().toString(36)}_${(_seq++).toString(36)}`
 
@@ -23,15 +22,8 @@ function build(dataset) {
 }
 
 function init(dataKey, dataset) {
-  try {
-    const raw = localStorage.getItem(lsKey(dataKey))
-    if (raw) {
-      const p = JSON.parse(raw)
-      if (p?.columns && p?.rows) return { ...p, dirty: true }
-    }
-  } catch {
-    /* ignore */
-  }
+  const p = loadWorking(dataKey)
+  if (p) return { ...p, dirty: true }
   return build(dataset)
 }
 
@@ -39,11 +31,7 @@ export function useEditableDataset(dataKey, dataset) {
   const [state, setState] = useState(() => init(dataKey, dataset))
 
   useEffect(() => {
-    try {
-      if (state.dirty) localStorage.setItem(lsKey(dataKey), JSON.stringify(state))
-    } catch {
-      /* cuota excedida */
-    }
+    if (state.dirty) saveWorking(dataKey, state)
   }, [dataKey, state])
 
   const mutate = (fn) => setState((s) => ({ ...fn(s), dirty: true }))
@@ -113,11 +101,7 @@ export function useEditableDataset(dataKey, dataset) {
         mutate((s) => ({ ...s, rows: s.rows.filter((r) => r._id !== id) }))
       },
       reset() {
-        try {
-          localStorage.removeItem(lsKey(dataKey))
-        } catch {
-          /* ignore */
-        }
+        removeWorking(dataKey)
         setState(build(dataset))
       },
     }),

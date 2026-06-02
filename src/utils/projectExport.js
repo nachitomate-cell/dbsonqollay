@@ -2,22 +2,16 @@
  * Exportación de todo el proyecto a un único Excel multi-hoja: una hoja por
  * cada subcategoría con datos (incluyendo importadas y las planillas nuevas
  * creadas por el usuario que ya tengan registros). Refleja las ediciones
- * guardadas en localStorage (`sqy-ds-<dataKey>`) cuando existen; si no, usa el
- * dataset base. `xlsx` se importa de forma dinámica para no inflar el bundle.
+ * guardadas vía datastore cuando existen; si no, usa el dataset base. `xlsx` se
+ * importa de forma dinámica para no inflar el bundle.
  */
+import { loadWorking } from './datastore'
 
 function resolveWorking(dataKey, base) {
-  try {
-    const raw = localStorage.getItem(`sqy-ds-${dataKey}`)
-    if (raw) {
-      const p = JSON.parse(raw)
-      if (p?.columns && p?.rows) {
-        const headers = p.columns.filter((c) => c.visible).map((c) => c.key)
-        return { headers, rows: p.rows }
-      }
-    }
-  } catch {
-    /* ignore */
+  const p = loadWorking(dataKey)
+  if (p) {
+    const headers = p.columns.filter((c) => c.visible).map((c) => c.key)
+    return { headers, rows: p.rows }
   }
   return base ? { headers: base.headers, rows: base.rows } : null
 }
