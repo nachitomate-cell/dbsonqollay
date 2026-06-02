@@ -191,8 +191,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     let cancelled = false
     setStatus('loadingSdk')
     getApsViewer(() =>
-      fetch(`\${getAPI()}/api/aps/token`, { cache: 'no-store' })
-        .catch(() => { throw new Error(`No se pudo conectar al backend APS (\${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
+      fetch(`${getAPI()}/api/aps/token`, { cache: 'no-store' })
+        .catch(() => { throw new Error(`No se pudo conectar al backend APS (${getAPI()}). En el sitio publicado, configura VITE_APS_API con la URL del backend desplegado.`) })
         .then(async (r) => {
           const ct = r.headers.get('content-type') || ''
           const isJson = ct.includes('application/json')
@@ -328,7 +328,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
       const connErr = () => { throw new Error(`No se pudo conectar al backend APS. Verifica el despliegue (VITE_APS_API o las funciones /api).`) }
 
       // 1) Pedir URL firmada al backend (paquete pequeño, no el archivo).
-      const { objectKey, uploadKey, urls } = await fetch(`\${getAPI()}/api/aps/upload-url`, {
+      const { objectKey, uploadKey, urls } = await fetch(`${getAPI()}/api/aps/upload-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: file.name }),
@@ -345,7 +345,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
 
       // 3) Confirmar y lanzar la traducción.
       setMessage('Procesando modelo…')
-      const { urn: newUrn } = await fetch(`\${getAPI()}/api/aps/complete`, {
+      const { urn: newUrn } = await fetch(`${getAPI()}/api/aps/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ objectKey, uploadKey }),
@@ -365,7 +365,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, dataKey = '
     setStatus('translating')
     const tick = async () => {
       try {
-        const s = await fetch(`\${getAPI()}/api/aps/status/${theUrn}`).then((r) => {
+        const s = await fetch(`${getAPI()}/api/aps/status/${theUrn}`).then((r) => {
           if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) throw new Error('status fetch error')
           return r.json()
         })
