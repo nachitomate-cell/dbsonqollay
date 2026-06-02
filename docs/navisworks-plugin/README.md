@@ -101,12 +101,12 @@ dotnet build SonqollaySync.csproj -c Release -p:DeployToNavisworks=true
 
 ### Instalar
 Copiá el `SonqollaySync.dll` compilado a una subcarpeta con el **mismo nombre**
-que el DLL dentro de `Plugins`:
+que el DLL dentro de `Plugins` (ubicación per-usuario, sin admin):
 ```
-%PROGRAMDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
+%APPDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
 ```
-(o `C:\Program Files\Autodesk\Navisworks Manage 2026\Plugins\SonqollaySync\`).
-El `-p:DeployToNavisworks=true` de arriba ya hace esta copia.
+(alternativa, requiere admin: `<carpeta de instalación>\Navisworks Manage 2026\Plugins\SonqollaySync\`).
+El `-p:DeployToNavisworks=true` de arriba ya hace esta copia a `%APPDATA%`.
 
 ### Configurar el plugin (una sola vez)
 Editá las constantes al inicio de `SonqollaySync.cs`:
