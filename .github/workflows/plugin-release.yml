@@ -47,6 +47,7 @@ jobs:
           if (-not $dll) { throw "No se encontro SonqollaySync.dll compilado" }
           Copy-Item $dll.FullName $stage
           Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
+          Copy-Item assets/sonqollay.png,assets/synaptech.png $stage   # logos del instalador grafico
           $cfg = Get-Content instalador/SonqollaySync.config.json -Raw
           $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
           Set-Content -Path (Join-Path $stage 'SonqollaySync.config.json') -Value $cfg -NoNewline

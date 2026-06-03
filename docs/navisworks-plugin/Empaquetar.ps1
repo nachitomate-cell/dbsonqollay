@@ -32,6 +32,9 @@ Copy-Item $dll.FullName $stage
 foreach ($f in 'SonqollaySync.config.json','Instalar.bat','install.ps1','LEEME.txt') {
   Copy-Item (Join-Path $dist $f) $stage
 }
+# Logos para el instalador grafico.
+Copy-Item (Join-Path $root 'assets\sonqollay.png') $stage
+Copy-Item (Join-Path $root 'assets\synaptech.png') $stage
 
 $out = Join-Path $root 'SonqollaySync-instalador.zip'
 Remove-Item $out -Force -ErrorAction SilentlyContinue
