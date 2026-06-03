@@ -68,62 +68,48 @@ En Vercel → Environment Variables (Production), agregá:
 Ver [`SonqollaySync.cs`](./SonqollaySync.cs). Hace tres cosas:
 
 1. **Descarga** el dataset (`WebClient` + `JavaScriptSerializer`, sin NuGet).
-2. **Matchea por TAG**: para cada fila busca los `ModelItem` cuya propiedad de
-   vínculo (por defecto la **capa**, p. ej. `06940-LUM-001`) coincide con
-   `row[tagField]`. Es el mismo criterio que usa la web.
+2. **Matchea por TAG**: arma un índice recorriendo los elementos y leyendo la
+   propiedad de vínculo (por defecto `BIM` / `TAG/Commodity`, p. ej.
+   `06940-BAT-011`) y la compara con `row[tagField]`. Es el mismo criterio que la web.
 3. **Escribe** los campos como una pestaña de propiedades custom ("Sonqollay")
-   usando el **COM API** (`ComApiBridge` + `InwOpState10.SetUserDefined`), ya
+   usando el **COM API** (`InwGUIPropertyNode2.SetUserDefined` por elemento), ya
    que el API .NET es de solo lectura para propiedades.
 
-### Compilar (Navisworks 2026)
-Navisworks 2026 apunta a **.NET Framework 4.8 (x64)**. El proyecto
-[`SonqollaySync.csproj`](./SonqollaySync.csproj) ya está armado y **no usa
-NuGet** (solo `WebClient` + `JavaScriptSerializer` del framework), así que el
-deploy es un único `.dll`.
+## Distribución a clientes (lo simple)
 
-Requisitos en la PC que compila:
-- **Navisworks Manage o Simulate 2026** instalado (el visor gratis *Freedom* no
-  sirve: no tiene API). Las DLLs de la API vienen con la instalación.
-- **Visual Studio 2022** (o `dotnet` SDK) con el targeting pack de .NET
-  Framework 4.8.
+El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
 
-Compilar:
-```powershell
-# Si Navisworks está en la ruta por defecto:
-dotnet build SonqollaySync.csproj -c Release
+### A) Vos: compilar y empaquetar (una sola vez)
+1. **Compilá** el DLL (PC con Navisworks 2024-2026 + Visual Studio 2022,
+   .NET Framework 4.8 x64):
+   ```powershell
+   dotnet build SonqollaySync.csproj -c Release
+   # si Navisworks está en otra ruta:
+   #   ... -p:NavisworksPath="D:\Program Files\Autodesk\Navisworks Manage 2026\"
+   ```
+2. **Poné el token** una vez en [`dist/SonqollaySync.config.json`](./dist/SonqollaySync.config.json)
+   (`apiToken` = el mismo valor de `SQY_API_TOKEN` de Vercel). No va al repo.
+3. **Empaquetá**: clic derecho en `Empaquetar.ps1` → *Ejecutar con PowerShell*
+   (o `powershell -ExecutionPolicy Bypass -File Empaquetar.ps1`).
+   Genera **`SonqollaySync-instalador.zip`** listo para enviar.
 
-# Si está en otra ruta, pasala:
-dotnet build SonqollaySync.csproj -c Release -p:NavisworksPath="D:\...\Navisworks Manage 2026\"
+### B) El cliente: instalar (1 clic)
+1. Descomprime el `.zip`.
+2. Doble clic en **`Instalar.bat`** (copia el plugin a la carpeta de Navisworks
+   de su usuario — detecta Manage/Simulate 2024-2026, sin permisos de admin).
+3. Abre Navisworks → pestaña **Add-ins** (*Complementos*) → **Sonqollay Sync**.
 
-# Para copiar el DLL directo a la carpeta de plugins al compilar:
-dotnet build SonqollaySync.csproj -c Release -p:DeployToNavisworks=true
-```
+> La configuración (URL + token + propiedad de vínculo) vive en
+> **`SonqollaySync.config.json`** junto al DLL. Para cambiar el token **no hace
+> falta recompilar**: editás el `.json` y reempaquetás (o se lo reemplazás al
+> cliente en su carpeta de plugins).
 
-### Instalar
-Copiá el `SonqollaySync.dll` compilado a una subcarpeta con el **mismo nombre**
-que el DLL dentro de `Plugins` (ubicación per-usuario, sin admin):
-```
-%APPDATA%\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\SonqollaySync.dll
-```
-(alternativa, requiere admin: `<carpeta de instalación>\Navisworks Manage 2026\Plugins\SonqollaySync\`).
-El `-p:DeployToNavisworks=true` de arriba ya hace esta copia a `%APPDATA%`.
+> **Vínculo por TAG**: el plugin matchea `linkCategory`/`linkProperty` (por
+> defecto `BIM` / `TAG/Commodity`) contra el TAG de la planilla. El **valor** del
+> TAG debe coincidir entre planilla y modelo (misma numeración, p. ej. `06940-`).
 
-### Configurar el plugin (una sola vez)
-Editá las constantes al inicio de `SonqollaySync.cs`:
-- `BaseUrl` = `https://basesonqollay.synaptechspa.cl`
-- `ApiToken` = el mismo valor de `SQY_API_TOKEN`
-- `LinkCategory` / `LinkProperty` = dónde vive el TAG en el modelo: la pestaña
-  (categoría) y la propiedad. Por defecto `BIM` / `TAG/Commodity` (visto en el
-  panel Propiedades del modelo). Para confirmarlo: seleccioná un elemento en
-  Navisworks y mirá qué pestaña/propiedad tiene el código del TAG.
-
-> Importante: el **valor** del TAG debe coincidir entre la planilla y el modelo.
-> Si el modelo numera `06940-BAT-011` y la planilla `230-BAT-011`, no hay match
-> aunque la propiedad sea la correcta: es la misma numeración la que debe usarse
-> de ambos lados.
-
-> La planilla a sincronizar **NO** se configura acá: se elige al ejecutar. Por
-> eso compilás una sola vez aunque manejes muchas planillas.
+> La planilla a sincronizar se elige al ejecutar (no se configura): el mismo DLL
+> sirve para todas.
 
 ### Usar
 1. En la web: editá cada planilla → **"Publicar para Navisworks"** (una vez por
