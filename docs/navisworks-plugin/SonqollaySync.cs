@@ -423,7 +423,7 @@ namespace Sonqollay
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
                 TopMost = true;
-                BackColor = Color.White;
+                BackColor = System.Drawing.Color.White;
                 ClientSize = new Size(380, 290);
 
                 var sqy = LoadLogo("sonqollay.png");   // ~86x104
@@ -444,7 +444,7 @@ namespace Sonqollay
                     AutoSize = false,
                     TextAlign = ContentAlignment.MiddleCenter,
                     Left = 20, Top = 140, Width = ClientSize.Width - 40, Height = 20,
-                    ForeColor = Color.FromArgb(80, 90, 100),
+                    ForeColor = System.Drawing.Color.FromArgb(80, 90, 100),
                 };
 
                 _bar = new ProgressBar
@@ -466,7 +466,7 @@ namespace Sonqollay
                     Text = "Desarrollado por",
                     AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
                     Left = 20, Top = 238, Width = ClientSize.Width - 40, Height = 14,
-                    ForeColor = Color.FromArgb(150, 155, 160),
+                    ForeColor = System.Drawing.Color.FromArgb(150, 155, 160),
                     Font = new Font(Font.FontFamily, 7.5f),
                 };
                 var pbSyn = new PictureBox
