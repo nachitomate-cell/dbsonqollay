@@ -36,7 +36,7 @@ namespace Sonqollay
     {
         // La configuración (URL, token, propiedad de vínculo) se lee de
         // SonqollaySync.config.json, ubicado junto al DLL. Ver clase Cfg al final
-        // y el archivo de ejemplo en dist/. Así NO hay que recompilar para
+        // y el archivo de ejemplo en instalador/. Así NO hay que recompilar para
         // cambiar el token o la URL: se distribuye el mismo DLL para todos.
 
         public override int Execute(params string[] parameters)

@@ -87,7 +87,7 @@ El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
    # si Navisworks está en otra ruta:
    #   ... -p:NavisworksPath="D:\Program Files\Autodesk\Navisworks Manage 2026\"
    ```
-2. **Poné el token** una vez en [`dist/SonqollaySync.config.json`](./dist/SonqollaySync.config.json)
+2. **Poné el token** una vez en [`instalador/SonqollaySync.config.json`](./instalador/SonqollaySync.config.json)
    (`apiToken` = el mismo valor de `SQY_API_TOKEN` de Vercel). No va al repo.
 3. **Empaquetá**: clic derecho en `Empaquetar.ps1` → *Ejecutar con PowerShell*
    (o `powershell -ExecutionPolicy Bypass -File Empaquetar.ps1`).

@@ -1,0 +1,25 @@
+SONQOLLAY SYNC  —  Plugin para Autodesk Navisworks (Manage / Simulate 2024-2026)
+================================================================================
+
+QUE HACE
+  Trae a Navisworks los datos editados en la plataforma Sonqollay y los escribe
+  como propiedades (pestania "Sonqollay") en los elementos del modelo, vinculando
+  por TAG.
+
+INSTALACION (1 clic)
+  1. Cerra Navisworks si esta abierto.
+  2. Doble clic en  Instalar.bat
+  3. Abri Navisworks  ->  pestania "Add-ins" (o "Complementos")  ->  "Sonqollay Sync".
+
+REQUISITOS
+  - Navisworks Manage o Simulate (el visor gratis "Freedom" NO sirve: no tiene API).
+
+USO
+  1. Abri tu modelo.
+  2. Clic en "Sonqollay Sync".
+  3. Marca las planillas a sincronizar  ->  Sincronizar.
+  4. Guarda el archivo (.nwf / .nwd) para conservar las propiedades.
+
+No hay nada que configurar: la URL y el token ya vienen en SonqollaySync.config.json.
+
+Soporte: synaptechspa.cl

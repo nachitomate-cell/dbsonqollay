@@ -2,7 +2,7 @@
 #   SonqollaySync.dll (compilado) + config + instalador 1-clic.
 #
 # Uso (una vez compilado en Visual Studio, en modo Release):
-#   - Editá dist\SonqollaySync.config.json con el token real (una sola vez).
+#   - Editá instalador\SonqollaySync.config.json con el token real (una sola vez).
 #   - Click derecho en este archivo -> "Ejecutar con PowerShell"
 #     (o:  powershell -ExecutionPolicy Bypass -File Empaquetar.ps1)
 #   - Se genera  SonqollaySync-instalador.zip  para enviar a los clientes.
@@ -17,10 +17,10 @@ if (!$dll) {
   exit 1
 }
 
-$dist  = Join-Path $root 'dist'
+$dist  = Join-Path $root 'instalador'
 $cfg   = Join-Path $dist 'SonqollaySync.config.json'
 if ((Get-Content $cfg -Raw) -match 'PEGAR_AQUI_EL_TOKEN') {
-  Write-Host "ADVERTENCIA: dist\SonqollaySync.config.json todavia tiene el token de ejemplo." -ForegroundColor Yellow
+  Write-Host "ADVERTENCIA: instalador\SonqollaySync.config.json todavia tiene el token de ejemplo." -ForegroundColor Yellow
   Write-Host "Edita ese archivo con el token real antes de entregar el ZIP." -ForegroundColor Yellow
 }
 
