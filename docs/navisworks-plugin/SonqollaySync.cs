@@ -13,8 +13,10 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Net;
+using System.Reflection;
 using System.Web.Script.Serialization; // System.Web.Extensions (framework)
 using System.Windows.Forms;
 
@@ -32,17 +34,10 @@ namespace Sonqollay
             ToolTip = "Trae los datos editados en Sonqollay y los escribe en el modelo")]
     public class SonqollaySync : AddInPlugin
     {
-        // ----- CONFIGURACIÓN (editar una sola vez) ------------------------
-        private const string BaseUrl      = "https://basesonqollay.synaptechspa.cl";
-        private const string ApiToken     = "PEGAR_EL_MISMO_SQY_API_TOKEN";
-        // Dónde vive el TAG en el modelo (visto en el panel Propiedades):
-        // pestaña (categoría) y nombre de la propiedad.
-        private const string LinkCategory = "BIM";
-        private const string LinkProperty = "TAG/Commodity";
-        // Pestaña de propiedades custom que se agrega a los elementos.
-        private const string TabName      = "Sonqollay";
-        // NOTA: la planilla (DatasetKey) NO se configura acá: se elige al correr.
-        // ------------------------------------------------------------------
+        // La configuración (URL, token, propiedad de vínculo) se lee de
+        // SonqollaySync.config.json, ubicado junto al DLL. Ver clase Cfg al final
+        // y el archivo de ejemplo en dist/. Así NO hay que recompilar para
+        // cambiar el token o la URL: se distribuye el mismo DLL para todos.
 
         public override int Execute(params string[] parameters)
         {
@@ -150,8 +145,8 @@ namespace Sonqollay
             using (var wc = new WebClient())
             {
                 wc.Encoding = System.Text.Encoding.UTF8;
-                if (!string.IsNullOrEmpty(ApiToken))
-                    wc.Headers[HttpRequestHeader.Authorization] = "Bearer " + ApiToken;
+                if (!string.IsNullOrEmpty(Cfg.ApiToken))
+                    wc.Headers[HttpRequestHeader.Authorization] = "Bearer " + Cfg.ApiToken;
                 try
                 {
                     return wc.DownloadString(url);
@@ -170,7 +165,7 @@ namespace Sonqollay
         // Lista de planillas publicadas: GET /api/datasets -> { datasets: [...] }
         private List<DatasetInfo> FetchIndex()
         {
-            string json = HttpGet(BaseUrl.TrimEnd('/') + "/api/datasets");
+            string json = HttpGet(Cfg.BaseUrl.TrimEnd('/') + "/api/datasets");
             var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
             var root = ser.DeserializeObject(json) as Dictionary<string, object>;
             var list = new List<DatasetInfo>();
@@ -195,7 +190,7 @@ namespace Sonqollay
         // Un dataset puntual: GET /api/datasets/:key
         private Dataset FetchDataset(string key)
         {
-            string json = HttpGet(BaseUrl.TrimEnd('/') + "/api/datasets/" + Uri.EscapeDataString(key));
+            string json = HttpGet(Cfg.BaseUrl.TrimEnd('/') + "/api/datasets/" + Uri.EscapeDataString(key));
             return ParseDataset(json);
         }
 
@@ -286,7 +281,7 @@ namespace Sonqollay
         }
 
         // Devuelve el valor de la propiedad de vínculo del elemento (TAG/Commodity).
-        // Si LinkCategory está vacío, busca la propiedad en cualquier pestaña.
+        // Si Cfg.LinkCategory está vacío, busca la propiedad en cualquier pestaña.
         private string GetTagValue(ModelItem item)
         {
             string fallback = null;
@@ -294,13 +289,13 @@ namespace Sonqollay
             {
                 foreach (DataProperty p in cat.Properties)
                 {
-                    if (!string.Equals(p.DisplayName, LinkProperty, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(p.DisplayName, Cfg.LinkProperty, StringComparison.OrdinalIgnoreCase))
                         continue;
                     string v = p.Value != null ? p.Value.ToDisplayString() : null;
                     if (string.IsNullOrWhiteSpace(v)) continue;
                     // Preferimos la pestaña configurada; si no, servimos cualquiera.
-                    if (string.IsNullOrEmpty(LinkCategory) ||
-                        string.Equals(cat.DisplayName, LinkCategory, StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrEmpty(Cfg.LinkCategory) ||
+                        string.Equals(cat.DisplayName, Cfg.LinkCategory, StringComparison.OrdinalIgnoreCase))
                         return v;
                     if (fallback == null) fallback = v;
                 }
@@ -337,13 +332,46 @@ namespace Sonqollay
                 }
 
                 // Agrega/reemplaza la pestaña custom en ESTE elemento.
-                node.SetUserDefined(0, TabName, Sanitize(TabName), vec);
+                node.SetUserDefined(0, Cfg.TabName, Sanitize(Cfg.TabName), vec);
             }
         }
 
         private static string Sanitize(string s)
         {
             return new string((s ?? "").Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+        }
+
+        // ---- Configuración (SonqollaySync.config.json junto al DLL) ------
+        // Valores por defecto embebidos; el config.json los pisa si existe.
+        // Así se distribuye el mismo DLL para todos y solo cambia el .json.
+        private static class Cfg
+        {
+            public static string BaseUrl = "https://basesonqollay.synaptechspa.cl";
+            public static string ApiToken = "";
+            public static string LinkCategory = "BIM";
+            public static string LinkProperty = "TAG/Commodity";
+            public static string TabName = "Sonqollay";
+
+            static Cfg() { Load(); }
+
+            private static void Load()
+            {
+                try
+                {
+                    string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                    string path = Path.Combine(dir, "SonqollaySync.config.json");
+                    if (!File.Exists(path)) return;
+                    var d = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path))
+                            as Dictionary<string, object>;
+                    if (d == null) return;
+                    if (d.ContainsKey("baseUrl")) BaseUrl = Convert.ToString(d["baseUrl"]);
+                    if (d.ContainsKey("apiToken")) ApiToken = Convert.ToString(d["apiToken"]);
+                    if (d.ContainsKey("linkCategory")) LinkCategory = Convert.ToString(d["linkCategory"]);
+                    if (d.ContainsKey("linkProperty")) LinkProperty = Convert.ToString(d["linkProperty"]);
+                    if (d.ContainsKey("tabName")) TabName = Convert.ToString(d["tabName"]);
+                }
+                catch { /* ante cualquier error, se usan los valores por defecto */ }
+            }
         }
 
         // ---- DTOs --------------------------------------------------------
