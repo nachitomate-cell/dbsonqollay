@@ -13,6 +13,7 @@ name: Plugin Navisworks — Release
 on:
   push:
     tags: ['plugin-v*']
+    branches: ['claude/inspiring-bardeen-FFE7j']  # TEMP: validar el build en CI (no publica Release)
   workflow_dispatch:
 
 permissions:
@@ -53,6 +54,7 @@ jobs:
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath SonqollaySync-instalador.zip -Force
 
       - name: Publicar Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: docs/navisworks-plugin/SonqollaySync-instalador.zip
