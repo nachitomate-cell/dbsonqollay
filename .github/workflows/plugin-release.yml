@@ -46,8 +46,8 @@ jobs:
                  Select-Object -First 1
           if (-not $dll) { throw "No se encontro SonqollaySync.dll compilado" }
           Copy-Item $dll.FullName $stage
-          Copy-Item dist/Instalar.bat,dist/install.ps1,dist/LEEME.txt $stage
-          $cfg = Get-Content dist/SonqollaySync.config.json -Raw
+          Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
+          $cfg = Get-Content instalador/SonqollaySync.config.json -Raw
           $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
           Set-Content -Path (Join-Path $stage 'SonqollaySync.config.json') -Value $cfg -NoNewline
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath SonqollaySync-instalador.zip -Force
