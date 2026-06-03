@@ -1,0 +1,61 @@
+name: Plugin Navisworks — Release
+
+# Compila el plugin en la nube (sin Navisworks instalado, vía paquetes NuGet) y
+# publica SonqollaySync-instalador.zip en una GitHub Release.
+#
+# Disparadores:
+#   - push de un tag  plugin-v*   (ej: git tag plugin-v1.0 && git push origin plugin-v1.0)
+#   - manualmente desde la pestaña Actions (workflow_dispatch)
+#
+# Requiere el secret de repo  SQY_API_TOKEN  (Settings -> Secrets -> Actions),
+# que se inyecta en el config.json del instalador.
+
+on:
+  push:
+    tags: ['plugin-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: docs/navisworks-plugin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Compilar (referencias NuGet)
+        run: dotnet build SonqollaySync.csproj -c Release -p:UseNugetRefs=true
+
+      - name: Armar el ZIP del instalador
+        shell: pwsh
+        env:
+          SQY_API_TOKEN: ${{ secrets.SQY_API_TOKEN }}
+        run: |
+          $stage = "package"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          $dll = Get-ChildItem -Recurse -Filter SonqollaySync.dll |
+                 Where-Object { $_.FullName -match '\\bin\\' } |
+                 Select-Object -First 1
+          if (-not $dll) { throw "No se encontro SonqollaySync.dll compilado" }
+          Copy-Item $dll.FullName $stage
+          Copy-Item dist/Instalar.bat,dist/install.ps1,dist/LEEME.txt $stage
+          $cfg = Get-Content dist/SonqollaySync.config.json -Raw
+          $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
+          Set-Content -Path (Join-Path $stage 'SonqollaySync.config.json') -Value $cfg -NoNewline
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath SonqollaySync-instalador.zip -Force
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: docs/navisworks-plugin/SonqollaySync-instalador.zip
+          fail_on_unmatched_files: true
+          name: Plugin Navisworks ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
