@@ -111,6 +111,41 @@ El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
 > La planilla a sincronizar se elige al ejecutar (no se configura): el mismo DLL
 > sirve para todas.
 
+## Publicar online (link estable + botón en la web)
+
+En vez de mandar el `.zip` por mano, se puede publicar en **GitHub Releases** y
+que el cliente lo baje siempre del mismo link (o desde el botón **"Descargar
+plugin Navisworks"** en Configuración de la web).
+
+**Link estable (latest):**
+`https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/SonqollaySync-instalador.zip`
+
+### Automático (GitHub Actions)
+El workflow [`.github/workflows/plugin-release.yml`](../../.github/workflows/plugin-release.yml)
+compila el plugin **en la nube** (sin Navisworks, vía paquetes NuGet) y publica
+el `.zip` en una Release.
+
+Configuración (una vez):
+1. En GitHub → **Settings → Secrets and variables → Actions → New repository
+   secret**: nombre `SQY_API_TOKEN`, valor = tu token. Se inyecta en el config
+   del instalador (no queda en el repo).
+2. Para publicar una versión, pusheá un tag:
+   ```bash
+   git tag plugin-v1.0
+   git push origin plugin-v1.0
+   ```
+   El workflow compila, arma el zip y crea la Release. El link *latest* y el
+   botón de la web pasan a apuntar a esa versión.
+
+### Manual (respaldo)
+Si preferís no usar CI: corré `Empaquetar.ps1` localmente y **subí el
+`SonqollaySync-instalador.zip` a una Release** a mano (GitHub → Releases → Draft
+a new release → adjuntá el zip con **ese mismo nombre**). El link *latest* y el
+botón funcionan igual.
+
+> El botón de la web da 404 hasta que exista la **primera** Release con el asset
+> `SonqollaySync-instalador.zip`.
+
 ### Usar
 1. En la web: editá cada planilla → **"Publicar para Navisworks"** (una vez por
    planilla; al re-editar, volvés a publicar y se sobrescribe).
