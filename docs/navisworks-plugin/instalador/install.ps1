@@ -1,5 +1,5 @@
-# Instalador de Sonqollay Sync. Copia el plugin a la carpeta de plugins de cada
-# Navisworks (Manage/Simulate 2024-2027) detectado, por usuario (sin admin).
+# Instalador de Sonqollay Sync. Copia el plugin a la carpeta de plugins por-usuario
+# de cada Navisworks (Manage/Simulate) detectado. Sin admin. A prueba de discos.
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dll  = Join-Path $here 'SonqollaySync.dll'
@@ -10,31 +10,41 @@ if (!(Test-Path $dll)) {
   exit 1
 }
 
-# Detectar versiones de Navisworks instaladas (cualquier disco).
-$found = @()
+# Conjunto de nombres "Autodesk Navisworks <Producto> <Año>" a instalar.
+$names = New-Object System.Collections.Generic.HashSet[string]
+
+# 1) Por las carpetas de usuario ya existentes (existen al haber abierto Navisworks).
+Get-ChildItem $env:APPDATA -Directory -Filter 'Autodesk Navisworks *' -ErrorAction SilentlyContinue |
+  ForEach-Object { if ($_.Name -match 'Navisworks (Manage|Simulate) \d{4}') { [void]$names.Add($_.Name) } }
+
+# 2) Por la instalación en Archivos de programa (filtrando discos que NO existen).
 $pfs = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, 'C:\Program Files', 'D:\Program Files') |
-       Where-Object { $_ } | Select-Object -Unique
+       Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 foreach ($pf in $pfs) {
   $base = Join-Path $pf 'Autodesk'
   if (Test-Path $base) {
     Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
       if ($_.Name -match 'Navisworks (Manage|Simulate) (\d{4})') {
-        $found += "Autodesk Navisworks $($matches[1]) $($matches[2])"
+        [void]$names.Add("Autodesk Navisworks $($matches[1]) $($matches[2])")
       }
     }
   }
 }
-$found = $found | Select-Object -Unique
 
-# Si no detecta instalación, usa Manage 2026 como objetivo por defecto.
-if ($found.Count -eq 0) { $found = @('Autodesk Navisworks Manage 2026') }
+# 3) Si no se detectó nada, usar los objetivos estándar más probables.
+if ($names.Count -eq 0) {
+  [void]$names.Add('Autodesk Navisworks Manage 2026')
+  [void]$names.Add('Autodesk Navisworks Simulate 2026')
+}
 
 $ok = 0
-foreach ($name in $found) {
-  $dest = Join-Path $env:APPDATA (Join-Path $name 'Plugins\SonqollaySync')
+foreach ($name in $names) {
+  $dest = Join-Path (Join-Path $env:APPDATA $name) 'Plugins\SonqollaySync'
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   Copy-Item $dll $dest -Force
   if (Test-Path $cfg) { Copy-Item $cfg $dest -Force }
+  # Desbloquear (Mark of the Web): si no, Navisworks no carga el DLL bajado de internet.
+  Get-ChildItem $dest | Unblock-File -ErrorAction SilentlyContinue
   Write-Host "Instalado en: $dest" -ForegroundColor Green
   $ok++
 }
