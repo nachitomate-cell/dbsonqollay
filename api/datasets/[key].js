@@ -1,4 +1,5 @@
 import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, pluginAuthorized, send } from '../_lib/aps.js'
+import { upsertDatasetToDb } from '../_lib/db.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -27,7 +28,18 @@ export default async function handler(req, res) {
       }
       await putJsonObject(objectKey, payload)
       await upsertDatasetIndex({ key, name: payload.name, count: rows.length, updatedAt: payload.updatedAt })
-      return send(res, 200, { ok: true, key, count: rows.length, url: `/api/datasets/${encodeURIComponent(key)}` })
+
+      // Aditivo: replicar a la base de datos (Postgres/Supabase) para que el
+      // modelo la lea en vivo por DataTools. Si falla o no está configurada,
+      // NO rompe el publish (el bucket APS ya quedó guardado arriba).
+      let db = { skipped: true }
+      try {
+        db = await upsertDatasetToDb(payload)
+      } catch (e) {
+        db = { error: e.message }
+      }
+
+      return send(res, 200, { ok: true, key, count: rows.length, db, url: `/api/datasets/${encodeURIComponent(key)}` })
     }
 
     if (req.method === 'GET') {
