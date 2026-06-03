@@ -50,11 +50,13 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(UseNugetRefs)' == 'true'">
-    <PackageReference Include="Chuongmep.Navis.Api.Autodesk.Navisworks.Api" Version="2026.0.0" />
-    <PackageReference Include="Chuongmep.Navis.Api.Autodesk.Navisworks.ComApi" Version="2026.0.0" />
-    <!-- El paquete de interop COM solo llega a 2023; los tipos COM son estables
-         entre versiones, así que compila junto a Api/ComApi 2026 sin problema. -->
-    <PackageReference Include="Chuongmep.Navis.Api.Autodesk.Navisworks.Interop.ComApi" Version="2023.0.5" />
+    <!-- Trae las tres DLLs de Autodesk 2026 (Api + ComApi + Interop.ComApi) en una
+         generación consistente (assembly v23), evitando el choque de versiones que
+         daban los paquetes sueltos. ExcludeAssets=runtime: se usa solo para compilar,
+         no se copian al lado del plugin (el Navisworks del cliente ya las tiene). -->
+    <PackageReference Include="Speckle.Navisworks.API" Version="2026.0.1">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- Ensamblados del framework usados por el plugin (sin NuGet). -->
