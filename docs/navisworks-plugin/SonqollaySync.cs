@@ -74,27 +74,39 @@ namespace Sonqollay
             List<DatasetInfo> chosen = ShowPicker(index);
             if (chosen.Count == 0) return 0; // canceló o no marcó ninguna
 
-            // 3) Índice TAG -> elementos del modelo (una sola pasada).
-            Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(doc);
-
-            // 4) Aplicar cada planilla.
+            // 3-4) Índice + aplicar, con barra de progreso de Navisworks: mantiene
+            // la UI viva (sin "no responde") y permite cancelar en modelos grandes.
             int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0;
             var errores = new List<string>();
-            foreach (var info in chosen)
+            var progress = Autodesk.Navisworks.Api.Application.BeginProgress("Sonqollay Sync");
+            try
             {
-                try
+                Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(doc, progress);
+
+                if (progress == null || !progress.IsCanceled)
                 {
-                    Dataset data = FetchDataset(info.key);
-                    var res = ApplyDataset(tagIndex, data);
-                    totalRows += data.rows.Count;
-                    totalMatched += res.matched;
-                    totalApplied += res.applied;
-                    totalMissing += res.missing;
+                    foreach (var info in chosen)
+                    {
+                        try
+                        {
+                            Dataset data = FetchDataset(info.key);
+                            var res = ApplyDataset(tagIndex, data, progress);
+                            totalRows += data.rows.Count;
+                            totalMatched += res.matched;
+                            totalApplied += res.applied;
+                            totalMissing += res.missing;
+                        }
+                        catch (Exception ex)
+                        {
+                            errores.Add(info.name + ": " + ex.Message);
+                        }
+                        if (progress != null && progress.IsCanceled) break;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    errores.Add(info.name + ": " + ex.Message);
-                }
+            }
+            finally
+            {
+                Autodesk.Navisworks.Api.Application.EndProgress();
             }
 
             string msg =
@@ -114,7 +126,8 @@ namespace Sonqollay
         // ---- Aplicar un dataset al modelo --------------------------------
         private struct ApplyResult { public int matched, applied, missing; }
 
-        private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data)
+        private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data,
+                                         Autodesk.Navisworks.Api.Progress progress)
         {
             string tagField = !string.IsNullOrEmpty(data.tagField)
                 ? data.tagField
@@ -122,8 +135,15 @@ namespace Sonqollay
             var res = new ApplyResult();
             if (string.IsNullOrEmpty(tagField)) return res;
 
+            int i = 0, total = data.rows.Count;
             foreach (var row in data.rows)
             {
+                if (progress != null && (++i % 25) == 0)
+                {
+                    progress.Update(0.80 + 0.20 * (i / (double)Math.Max(1, total)));
+                    if (progress.IsCanceled) return res;
+                }
+
                 string tag;
                 if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag))
                     continue;
@@ -262,13 +282,24 @@ namespace Sonqollay
         // Recorre todos los elementos una vez y arma un índice TAG -> elementos,
         // leyendo la propiedad de vínculo directamente (sin distinción de
         // mayúsculas ni dependencia del idioma del Search API).
-        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc)
+        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc,
+                                                                      Autodesk.Navisworks.Api.Progress progress)
         {
             var map = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
+            int n = 0;
             foreach (Model m in doc.Models)
             {
                 foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
                 {
+                    // Refresca la barra cada 1000 elementos: bombea la UI (evita
+                    // "no responde") y permite cancelar. Fracción asintótica 0..0.8
+                    // porque no sabemos el total de antemano.
+                    if (progress != null && (++n % 1000) == 0)
+                    {
+                        progress.Update(0.80 * (n / (double)(n + 20000)));
+                        if (progress.IsCanceled) return map;
+                    }
+
                     string tag = GetTagValue(item);
                     if (string.IsNullOrWhiteSpace(tag)) continue;
                     tag = tag.Trim();
@@ -284,6 +315,21 @@ namespace Sonqollay
         // Si Cfg.LinkCategory está vacío, busca la propiedad en cualquier pestaña.
         private string GetTagValue(ModelItem item)
         {
+            // Camino rápido: si la categoría está configurada (caso normal, BIM),
+            // búsqueda directa de la propiedad en vez de recorrer todo el elemento.
+            if (!string.IsNullOrEmpty(Cfg.LinkCategory))
+            {
+                DataProperty dp = item.PropertyCategories
+                    .FindPropertyByDisplayName(Cfg.LinkCategory, Cfg.LinkProperty);
+                if (dp != null && dp.Value != null)
+                {
+                    string val = dp.Value.ToDisplayString();
+                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                }
+                return null;
+            }
+
+            // Camino lento (solo si no se configuró categoría): buscar en cualquier pestaña.
             string fallback = null;
             foreach (PropertyCategory cat in item.PropertyCategories)
             {
