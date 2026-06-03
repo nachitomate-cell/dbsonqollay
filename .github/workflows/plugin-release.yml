@@ -13,6 +13,7 @@ name: Plugin Navisworks — Release
 on:
   push:
     tags: ['plugin-v*']
+    branches: ['claude/inspiring-bardeen-FFE7j']  # TEMP: validar build (no publica Release)
   workflow_dispatch:
 
 permissions:
