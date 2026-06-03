@@ -363,6 +363,21 @@ namespace Sonqollay
                 ComApi.InwGUIPropertyNode2 node =
                     (ComApi.InwGUIPropertyNode2)state.GetGUIPropertyNode(path, true);
 
+                // Quitar pestañas "Sonqollay" previas para no acumular duplicados al
+                // re-sincronizar. SetUserDefined(0,...) crea SIEMPRE una nueva; el índice
+                // de RemoveUserDefined es 1-based entre las pestañas "user-defined".
+                var toRemove = new List<int>();
+                int udx = 0;
+                foreach (ComApi.InwGUIAttribute2 att in node.GUIAttributes())
+                {
+                    if (!att.UserDefined) continue;
+                    udx++;
+                    if (string.Equals(att.ClassUserName, Cfg.TabName, StringComparison.OrdinalIgnoreCase))
+                        toRemove.Add(udx);
+                }
+                for (int i = toRemove.Count - 1; i >= 0; i--)
+                    node.RemoveUserDefined(toRemove[i]);
+
                 ComApi.InwOaPropertyVec vec = (ComApi.InwOaPropertyVec)state.ObjectFactory(
                     ComApi.nwEObjectType.eObjectType_nwOaPropertyVec, null, null);
 
@@ -377,7 +392,7 @@ namespace Sonqollay
                     vec.Properties().Add(p);
                 }
 
-                // Agrega/reemplaza la pestaña custom en ESTE elemento.
+                // Crea la pestaña custom fresca en ESTE elemento (0 = nueva).
                 node.SetUserDefined(0, Cfg.TabName, Sanitize(Cfg.TabName), vec);
             }
         }
