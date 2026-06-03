@@ -72,6 +72,16 @@
     <Compile Include="SonqollaySync.cs" />
   </ItemGroup>
 
+  <!-- Logos embebidos en el DLL para la ventana de progreso. -->
+  <ItemGroup>
+    <EmbeddedResource Include="assets\sonqollay.png">
+      <LogicalName>sonqollay.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="assets\synaptech.png">
+      <LogicalName>synaptech.png</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <!-- Copia opcional del DLL a la carpeta de plugins de Navisworks. -->
   <Target Name="DeploySonqollay" AfterTargets="Build" Condition="'$(DeployToNavisworks)' == 'true'">
     <MakeDir Directories="$(NavisworksPluginsDir)" />

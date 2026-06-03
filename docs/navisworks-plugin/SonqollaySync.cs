@@ -74,21 +74,24 @@ namespace Sonqollay
             List<DatasetInfo> chosen = ShowPicker(index);
             if (chosen.Count == 0) return 0; // canceló o no marcó ninguna
 
-            // 3-4) Índice + aplicar, con barra de progreso de Navisworks: mantiene
-            // la UI viva (sin "no responde") y permite cancelar en modelos grandes.
+            // 3-4) Índice + aplicar, con ventana de progreso propia (logos + barra +
+            // cancelar): mantiene la UI viva (sin "no responde") en modelos grandes.
             int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0;
             var errores = new List<string>();
-            var progress = Autodesk.Navisworks.Api.Application.BeginProgress("Sonqollay Sync");
+            var progress = new ProgressForm();
+            progress.Show();
+            progress.Refresh();
             try
             {
                 Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(doc, progress);
 
-                if (progress == null || !progress.IsCanceled)
+                if (!progress.Canceled)
                 {
                     foreach (var info in chosen)
                     {
                         try
                         {
+                            progress.Report(0.80, "Sincronizando: " + info.name);
                             Dataset data = FetchDataset(info.key);
                             var res = ApplyDataset(tagIndex, data, progress);
                             totalRows += data.rows.Count;
@@ -100,13 +103,14 @@ namespace Sonqollay
                         {
                             errores.Add(info.name + ": " + ex.Message);
                         }
-                        if (progress != null && progress.IsCanceled) break;
+                        if (progress.Canceled) break;
                     }
                 }
             }
             finally
             {
-                Autodesk.Navisworks.Api.Application.EndProgress();
+                progress.Close();
+                progress.Dispose();
             }
 
             string msg =
@@ -127,7 +131,7 @@ namespace Sonqollay
         private struct ApplyResult { public int matched, applied, missing; }
 
         private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data,
-                                         Autodesk.Navisworks.Api.Progress progress)
+                                         ProgressForm progress)
         {
             string tagField = !string.IsNullOrEmpty(data.tagField)
                 ? data.tagField
@@ -138,10 +142,11 @@ namespace Sonqollay
             int i = 0, total = data.rows.Count;
             foreach (var row in data.rows)
             {
-                if (progress != null && (++i % 25) == 0)
+                if ((++i % 25) == 0)
                 {
-                    progress.Update(0.80 + 0.20 * (i / (double)Math.Max(1, total)));
-                    if (progress.IsCanceled) return res;
+                    progress.Report(0.80 + 0.20 * (i / (double)Math.Max(1, total)),
+                                    "Escribiendo propiedades… (" + i + "/" + total + ")");
+                    if (progress.Canceled) return res;
                 }
 
                 string tag;
@@ -282,8 +287,7 @@ namespace Sonqollay
         // Recorre todos los elementos una vez y arma un índice TAG -> elementos,
         // leyendo la propiedad de vínculo directamente (sin distinción de
         // mayúsculas ni dependencia del idioma del Search API).
-        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc,
-                                                                      Autodesk.Navisworks.Api.Progress progress)
+        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc, ProgressForm progress)
         {
             var map = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
             int n = 0;
@@ -291,13 +295,14 @@ namespace Sonqollay
             {
                 foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
                 {
-                    // Refresca la barra cada 1000 elementos: bombea la UI (evita
+                    // Refresca la ventana cada 1000 elementos: bombea la UI (evita
                     // "no responde") y permite cancelar. Fracción asintótica 0..0.8
                     // porque no sabemos el total de antemano.
-                    if (progress != null && (++n % 1000) == 0)
+                    if ((++n % 1000) == 0)
                     {
-                        progress.Update(0.80 * (n / (double)(n + 20000)));
-                        if (progress.IsCanceled) return map;
+                        progress.Report(0.80 * (n / (double)(n + 20000)),
+                                        "Indexando modelo: " + n.ToString("N0") + " elementos…");
+                        if (progress.Canceled) return map;
                     }
 
                     string tag = GetTagValue(item);
@@ -400,6 +405,111 @@ namespace Sonqollay
         private static string Sanitize(string s)
         {
             return new string((s ?? "").Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
+        }
+
+        // ---- Ventana de progreso (logos + barra + cancelar) --------------
+        // Producto Sonqollay (arriba, protagonista); desarrollado por SynapTech
+        // (abajo, crédito). Reemplaza a la barra nativa para poder mostrar logos.
+        private sealed class ProgressForm : Form
+        {
+            private readonly ProgressBar _bar;
+            private readonly Label _status;
+            public bool Canceled { get; private set; }
+
+            public ProgressForm()
+            {
+                Text = "Sonqollay Sync";
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                TopMost = true;
+                BackColor = System.Drawing.Color.White;
+                ClientSize = new Size(380, 290);
+
+                var sqy = LoadLogo("sonqollay.png");   // ~86x104
+                var syn = LoadLogo("synaptech.png");   // ~146x40
+
+                // Logo Sonqollay, protagonista y centrado arriba.
+                var pbSqy = new PictureBox
+                {
+                    Image = sqy,
+                    SizeMode = PictureBoxSizeMode.AutoSize,
+                    Top = 18,
+                };
+                pbSqy.Left = (ClientSize.Width - (sqy?.Width ?? 86)) / 2;
+
+                _status = new Label
+                {
+                    Text = "Preparando…",
+                    AutoSize = false,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 140, Width = ClientSize.Width - 40, Height = 20,
+                    ForeColor = System.Drawing.Color.FromArgb(80, 90, 100),
+                };
+
+                _bar = new ProgressBar
+                {
+                    Left = 24, Top = 166, Width = ClientSize.Width - 48, Height = 18,
+                    Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous,
+                };
+
+                var btnCancel = new Button
+                {
+                    Text = "Cancelar", Width = 90, Height = 28,
+                    Top = 196, Left = (ClientSize.Width - 90) / 2,
+                };
+                btnCancel.Click += (s, e) => { Canceled = true; btnCancel.Enabled = false; _status.Text = "Cancelando…"; };
+
+                // Crédito "Desarrollado por" + logo SynapTech, abajo.
+                var lblBy = new Label
+                {
+                    Text = "Desarrollado por",
+                    AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 238, Width = ClientSize.Width - 40, Height = 14,
+                    ForeColor = System.Drawing.Color.FromArgb(150, 155, 160),
+                    Font = new Font(Font.FontFamily, 7.5f),
+                };
+                var pbSyn = new PictureBox
+                {
+                    Image = syn,
+                    SizeMode = PictureBoxSizeMode.AutoSize,
+                    Top = 252,
+                };
+                pbSyn.Left = (ClientSize.Width - (syn?.Width ?? 146)) / 2;
+
+                Controls.Add(pbSqy);
+                Controls.Add(_status);
+                Controls.Add(_bar);
+                Controls.Add(btnCancel);
+                Controls.Add(lblBy);
+                Controls.Add(pbSyn);
+
+                ControlBox = false; // sin botón cerrar: se usa Cancelar
+            }
+
+            // Actualiza barra + texto y bombea la UI (evita "no responde").
+            public void Report(double fraction, string text)
+            {
+                int v = (int)(Math.Max(0, Math.Min(1, fraction)) * 100);
+                if (_bar.Value != v) _bar.Value = v;
+                if (text != null) _status.Text = text;
+                System.Windows.Forms.Application.DoEvents();
+            }
+
+            private static Image LoadLogo(string resourceName)
+            {
+                try
+                {
+                    var asm = Assembly.GetExecutingAssembly();
+                    using (var s = asm.GetManifestResourceStream(resourceName))
+                    {
+                        if (s == null) return null;
+                        using (var tmp = Image.FromStream(s))
+                            return new Bitmap(tmp); // copia: la imagen sobrevive al stream
+                    }
+                }
+                catch { return null; }
+            }
         }
 
         // ---- Configuración (SonqollaySync.config.json junto al DLL) ------
