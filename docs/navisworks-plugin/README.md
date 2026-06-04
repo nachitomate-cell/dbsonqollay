@@ -151,7 +151,7 @@ botón funcionan igual.
 ### Usar
 1. En la web: editá cada planilla → **"Publicar para Navisworks"** (una vez por
    planilla; al re-editar, volvés a publicar y se sobrescribe).
-2. En Navisworks: abrí el modelo → pestaña **Add-ins** → **Sonqollay Sync**.
+2. En Navisworks: abrí el modelo → pestaña **Aura BIM** → botón **Asignar Propiedades**.
 3. Aparece la **lista de planillas publicadas** con checkboxes → marcá las que
    quieras (vienen todas marcadas) → **Sincronizar**.
 4. El plugin descarga las elegidas, matchea por TAG y agrega la pestaña

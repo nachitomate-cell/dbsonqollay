@@ -31,13 +31,19 @@ if ((Get-Content $cfg -Raw) -match 'PEGAR_AQUI_EL_TOKEN') {
 
 $stage = Join-Path $env:TEMP 'SonqollaySync-pkg'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force $stage | Out-Null
+$bundle = Join-Path $stage 'SonqollaySync.bundle'
+New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents\en-US') | Out-Null
 
-Copy-Item $dll.FullName $stage
-foreach ($f in 'SonqollaySync.config.json','Instalar.bat','install.ps1','LEEME.txt') {
+# Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM").
+Copy-Item (Join-Path $root 'bundle\PackageContents.xml') $bundle
+Copy-Item (Join-Path $root 'bundle\Contents\en-US\*') (Join-Path $bundle 'Contents\en-US')
+# DLL compilado + config (junto al DLL, en Contents).
+Copy-Item $dll.FullName (Join-Path $bundle 'Contents')
+Copy-Item $cfg (Join-Path $bundle 'Contents\SonqollaySync.config.json')
+# Instalador grafico en la raiz del zip (copia el bundle a ApplicationPlugins).
+foreach ($f in 'Instalar.bat','install.ps1','LEEME.txt') {
   Copy-Item (Join-Path $dist $f) $stage
 }
-# Logos para el instalador grafico.
 Copy-Item (Join-Path $root 'assets\sonqollay.png') $stage
 Copy-Item (Join-Path $root 'assets\synaptech.png') $stage
 

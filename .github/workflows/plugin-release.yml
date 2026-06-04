@@ -40,17 +40,24 @@ jobs:
           SQY_API_TOKEN: ${{ secrets.SQY_API_TOKEN }}
         run: |
           $stage = "package"
-          New-Item -ItemType Directory -Force $stage | Out-Null
+          $bundle = Join-Path $stage 'SonqollaySync.bundle'
+          New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents/en-US') | Out-Null
+          # Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM")
+          Copy-Item bundle/PackageContents.xml $bundle
+          Copy-Item bundle/Contents/en-US/* (Join-Path $bundle 'Contents/en-US')
+          # DLL compilado -> Contents
           $dll = Get-ChildItem -Recurse -Filter SonqollaySync.dll |
                  Where-Object { $_.FullName -match '\\bin\\' } |
                  Select-Object -First 1
           if (-not $dll) { throw "No se encontro SonqollaySync.dll compilado" }
-          Copy-Item $dll.FullName $stage
-          Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
-          Copy-Item assets/sonqollay.png,assets/synaptech.png $stage   # logos del instalador grafico
+          Copy-Item $dll.FullName (Join-Path $bundle 'Contents')
+          # config con el token inyectado (junto al DLL)
           $cfg = Get-Content instalador/SonqollaySync.config.example.json -Raw
           $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
-          Set-Content -Path (Join-Path $stage 'SonqollaySync.config.json') -Value $cfg -NoNewline
+          Set-Content -Path (Join-Path $bundle 'Contents/SonqollaySync.config.json') -Value $cfg -NoNewline
+          # Instalador grafico (en la raiz del zip; copia el bundle a ApplicationPlugins)
+          Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
+          Copy-Item assets/sonqollay.png,assets/synaptech.png $stage
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath SonqollaySync-instalador.zip -Force
 
       - name: Publicar Release

@@ -59,7 +59,7 @@ $tut.Text = @"
 Como usar (despues de instalar):
 
   1.  Abri Navisworks y tu modelo.
-  2.  Pestana "Complementos de la herramienta" -> "Sonqollay Sync".
+  2.  Pestana "Aura BIM" -> boton "Asignar Propiedades".
   3.  Marca las planillas a sincronizar -> Sincronizar.
   4.  Guarda el modelo (.nwf / .nwd) para conservar los datos.
 "@
@@ -109,49 +109,44 @@ if ($imgSyn) {
 $btnInstall.Add_Click({
   $status.ForeColor = $gray; $status.Text = 'Instalando...'; $form.Refresh()
 
-  $dll = Join-Path $here 'SonqollaySync.dll'
-  $cfg = Join-Path $here 'SonqollaySync.config.json'
-  if (-not (Test-Path $dll)) {
+  $bundleSrc = Join-Path $here 'SonqollaySync.bundle'
+  if (-not (Test-Path $bundleSrc)) {
     $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No encuentro SonqollaySync.dll junto al instalador.'; return
+    $status.Text = 'No encuentro SonqollaySync.bundle junto al instalador.'; return
   }
 
-  $installs = @()
-  $pfs = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, 'C:\Program Files') |
-         Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-  foreach ($pf in $pfs) {
-    $base = Join-Path $pf 'Autodesk'
-    if (Test-Path $base) {
-      Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -match 'Navisworks (Manage|Simulate) \d{4}') { $installs += $_.FullName }
+  try {
+    # 1) Instalar el bundle en ApplicationPlugins (sirve para todas las versiones
+    #    de Navisworks; ahi vive tambien AuraBIM). Da la pestana propia "Aura BIM".
+    $appPlugins = Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins'
+    New-Item -ItemType Directory -Force -Path $appPlugins | Out-Null
+    $dest = Join-Path $appPlugins 'SonqollaySync.bundle'
+    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+    Copy-Item $bundleSrc $dest -Recurse -Force
+    Get-ChildItem $dest -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+
+    # 2) Limpiar la version vieja (cuando el plugin se instalaba como DLL suelta en
+    #    Plugins\SonqollaySync de cada Navisworks) para no tener boton duplicado.
+    $pfs = @($env:ProgramFiles, ${env:ProgramFiles(x86)}, 'C:\Program Files') |
+           Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+    foreach ($pf in $pfs) {
+      $base = Join-Path $pf 'Autodesk'
+      if (Test-Path $base) {
+        Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+          if ($_.Name -match 'Navisworks (Manage|Simulate) \d{4}') {
+            $old = Join-Path $_.FullName 'Plugins\SonqollaySync'
+            if (Test-Path $old) { Remove-Item $old -Recurse -Force -ErrorAction SilentlyContinue }
+          }
+        }
       }
     }
-  }
-  $installs = $installs | Select-Object -Unique
 
-  if ($installs.Count -eq 0) {
-    $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No encontre Navisworks Manage/Simulate instalado.'; return
-  }
-
-  $ok = 0; $errMsg = $null
-  foreach ($ins in $installs) {
-    try {
-      $dest = Join-Path $ins 'Plugins\SonqollaySync'
-      New-Item -ItemType Directory -Force -Path $dest | Out-Null
-      Copy-Item $dll, $cfg $dest -Force
-      Get-ChildItem $dest | Unblock-File -ErrorAction SilentlyContinue
-      $ok++
-    } catch { $errMsg = $_.Exception.Message }
-  }
-
-  if ($ok -gt 0) {
     $status.ForeColor = [System.Drawing.Color]::FromArgb(30, 150, 70)
-    $status.Text = "Instalado OK en $ok version(es). Abri (o reinicia) Navisworks."
+    $status.Text = 'Instalado OK. Abri (o reinicia) Navisworks -> pestana "Aura BIM".'
     $btnInstall.Enabled = $false
-  } else {
+  } catch {
     $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No se pudo copiar. Cerra Navisworks y reintenta.  ' + $errMsg
+    $status.Text = 'No se pudo instalar. Cerra Navisworks y reintenta.  ' + $_.Exception.Message
   }
 })
 

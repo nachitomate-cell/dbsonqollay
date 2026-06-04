@@ -1,0 +1,16 @@
+<RibbonControl xmlns="clr-namespace:Autodesk.Windows;assembly=AdWindows"
+               xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+               xmlns:nw="clr-namespace:Autodesk.Navisworks.Gui.Roamer.AIRLook;assembly=navisworks.gui.roamer"
+               x:Uid="SonqollayRibbon">
+  <RibbonTab x:Uid="ID_TabAuraBIM" Id="ID_TabAuraBIM" Title="Aura BIM">
+    <RibbonPanel x:Uid="ID_PanelMain">
+      <RibbonPanelSource x:Uid="ID_PanelMain_Src" Title="Herramientas">
+        <nw:NWRibbonButton x:Uid="ID_AsignarProps" Id="ID_AsignarProps"
+                           Size="Large"
+                           ShowText="True"
+                           Text="Asignar&#xD;&#xA;Propiedades"
+                           Orientation="Vertical" />
+      </RibbonPanelSource>
+    </RibbonPanel>
+  </RibbonTab>
+</RibbonControl>

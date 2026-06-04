@@ -29,17 +29,36 @@ using ComApiBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
 
 namespace Sonqollay
 {
-    [Plugin("Sonqollay.Sync", "SQY",
-            DisplayName = "Asignar Propiedades",
+    // Ribbon propio: pestaña "Aura BIM" con botón "Asignar Propiedades" (definidos
+    // en SonqollaySync.xaml / .name del bundle). Modelado en el plugin AuraBIM.
+    [Plugin("SonqollaySync", "SQY",
+            DisplayName = "Aura BIM",
             ToolTip = "Trae los datos editados en Sonqollay y los escribe en el modelo")]
-    public class SonqollaySync : AddInPlugin
+    [Strings("SonqollaySync.name")]
+    [RibbonLayout("SonqollaySync.xaml")]
+    [RibbonTab("ID_TabAuraBIM", LoadForCanExecute = true)]
+    [Command("ID_AsignarProps", LoadForCanExecute = true)]
+    public class SonqollaySync : CommandHandlerPlugin
     {
+        // El ribbon invoca este método con el id del botón.
+        public override int ExecuteCommand(string commandId, params string[] parameters)
+        {
+            return commandId == "ID_AsignarProps" ? RunSync() : 0;
+        }
+
+        // El botón siempre está habilitado (la validación de "hay modelo abierto"
+        // ya está dentro de RunSync).
+        public override CommandState CanExecuteCommand(string commandId)
+        {
+            return new CommandState(true);
+        }
+
         // La configuración (URL, token, propiedad de vínculo) se lee de
         // SonqollaySync.config.json, ubicado junto al DLL. Ver clase Cfg al final
         // y el archivo de ejemplo en instalador/. Así NO hay que recompilar para
         // cambiar el token o la URL: se distribuye el mismo DLL para todos.
 
-        public override int Execute(params string[] parameters)
+        private int RunSync()
         {
             // Vercel exige TLS 1.2+. En net48 suele estar por defecto, pero lo
             // forzamos para evitar errores de handshake en máquinas viejas.
