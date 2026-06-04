@@ -87,8 +87,10 @@ El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
    # si Navisworks está en otra ruta:
    #   ... -p:NavisworksPath="D:\Program Files\Autodesk\Navisworks Manage 2026\"
    ```
-2. **Poné el token** una vez en [`instalador/SonqollaySync.config.json`](./instalador/SonqollaySync.config.json)
-   (`apiToken` = el mismo valor de `SQY_API_TOKEN` de Vercel). No va al repo.
+2. **Poné el token**: copiá [`instalador/SonqollaySync.config.example.json`](./instalador/SonqollaySync.config.example.json)
+   a `instalador/SonqollaySync.config.json` y completá `apiToken` (= el mismo valor
+   de `SQY_API_TOKEN` de Vercel). Ese `.json` con el token **está gitignored**: no va
+   al repo. (En CI no hace falta: el workflow inyecta el secret sobre el `.example`.)
 3. **Empaquetá**: clic derecho en `Empaquetar.ps1` → *Ejecutar con PowerShell*
    (o `powershell -ExecutionPolicy Bypass -File Empaquetar.ps1`).
    Genera **`SonqollaySync-instalador.zip`** listo para enviar.
@@ -100,9 +102,9 @@ El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
 3. Abre Navisworks → pestaña **Add-ins** (*Complementos*) → **Sonqollay Sync**.
 
 > La configuración (URL + token + propiedad de vínculo) vive en
-> **`SonqollaySync.config.json`** junto al DLL. Para cambiar el token **no hace
-> falta recompilar**: editás el `.json` y reempaquetás (o se lo reemplazás al
-> cliente en su carpeta de plugins).
+> **`SonqollaySync.config.json`** junto al DLL (gitignored; en el repo solo está el
+> `.example`). Para cambiar el token **no hace falta recompilar**: editás el `.json`
+> y reempaquetás (o se lo reemplazás al cliente en su carpeta de plugins).
 
 > **Vínculo por TAG**: el plugin matchea `linkCategory`/`linkProperty` (por
 > defecto `BIM` / `TAG/Commodity`) contra el TAG de la planilla. El **valor** del

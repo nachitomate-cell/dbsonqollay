@@ -19,6 +19,11 @@ if (!$dll) {
 
 $dist  = Join-Path $root 'instalador'
 $cfg   = Join-Path $dist 'SonqollaySync.config.json'
+# El config real (con token) es local y esta gitignored. Si no existe, lo creamos
+# desde el .example para que el ZIP no quede sin config.
+if (!(Test-Path $cfg)) {
+  Copy-Item (Join-Path $dist 'SonqollaySync.config.example.json') $cfg
+}
 if ((Get-Content $cfg -Raw) -match 'PEGAR_AQUI_EL_TOKEN') {
   Write-Host "ADVERTENCIA: instalador\SonqollaySync.config.json todavia tiene el token de ejemplo." -ForegroundColor Yellow
   Write-Host "Edita ese archivo con el token real antes de entregar el ZIP." -ForegroundColor Yellow
