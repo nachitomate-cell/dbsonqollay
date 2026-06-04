@@ -30,7 +30,7 @@ using ComApiBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
 namespace Sonqollay
 {
     [Plugin("Sonqollay.Sync", "SQY",
-            DisplayName = "Sonqollay Sync",
+            DisplayName = "Asignar Propiedades",
             ToolTip = "Trae los datos editados en Sonqollay y los escribe en el modelo")]
     public class SonqollaySync : AddInPlugin
     {
