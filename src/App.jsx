@@ -113,7 +113,7 @@ export default function App() {
     .filter(Boolean)
 
   const crumbs = useMemo(() => {
-    const list = [{ label: 'Sonqollay' }]
+    const list = [{ label: 'Gestor de Información de Proyectos' }]
     if (discipline) list.push({ label: discipline.name, onClick: () => setActiveSub(null) })
     if (activeSub) {
       const info = findSub(activeSub)

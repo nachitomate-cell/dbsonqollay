@@ -46,7 +46,7 @@ export default function InstallButton() {
   return (
     <button
       onClick={install}
-      title="Instalar Sonqollay como aplicación"
+      title="Instalar la aplicación"
       className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 dark:border-accent/40 dark:bg-accent/10 dark:text-accent"
     >
       <Download className="h-4 w-4" />

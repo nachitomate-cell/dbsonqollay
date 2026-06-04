@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo-mark.png'],
       manifest: {
-        name: 'Sonqollay — Control de Ingeniería',
-        short_name: 'Sonqollay',
+        name: 'Gestor de Información de Proyectos — Control de Ingeniería',
+        short_name: 'Gestor',
         description:
           'Plataforma de gestión de proyectos de ingeniería, control documental y empaquetamiento de trabajo (AWP/BIM).',
         lang: 'es',

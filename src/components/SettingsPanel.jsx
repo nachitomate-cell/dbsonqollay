@@ -147,7 +147,7 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
             <p className={label}><Info className="h-3.5 w-3.5" /> Acerca de</p>
             <div className="rounded-lg border border-slate-200 p-3 text-xs space-y-1 dark:border-white/10">
               {[
-                ['Aplicación', 'Sonqollay'],
+                ['Aplicación', 'Gestor de Información de Proyectos'],
                 ['Versión', 'v0.1.0'],
                 ['Plataforma', 'AWP · BIM · EPC'],
               ].map(([k, v]) => (

@@ -67,7 +67,7 @@ function LoginScreen({ onSuccess }) {
         className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-7 shadow-xl dark:border-white/10 dark:bg-ink-800"
       >
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Sonqollay</h1>
+          <h1 className="text-lg font-bold leading-tight text-slate-800 dark:text-slate-100">Gestor de Información de Proyectos</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {mode === 'signup' ? 'Creá tu cuenta' : 'Iniciá sesión para continuar'}
           </p>

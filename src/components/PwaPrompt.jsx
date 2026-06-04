@@ -45,7 +45,7 @@ export default function PwaPrompt() {
       {needRefresh ? (
         <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg ring-1 ring-black/5 dark:border-white/10 dark:bg-ink-800 dark:ring-white/5">
           <RefreshCw className="h-5 w-5 shrink-0 text-brand-500" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Hay una nueva versión de Sonqollay.</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Hay una nueva versión disponible.</span>
           <button
             onClick={() => updateSW(true)}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900"

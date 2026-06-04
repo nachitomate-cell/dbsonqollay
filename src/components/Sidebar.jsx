@@ -24,8 +24,8 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
         <img src="/logo-mark.png" alt="Sonqollay" className="h-10 w-10 shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="truncate text-base font-extrabold tracking-tight text-steel-700 dark:text-white">
-              Sonqollay
+            <p className="text-sm font-extrabold leading-tight tracking-tight text-steel-700 dark:text-white">
+              GESTOR DE INFORMACIÓN DE PROYECTOS
             </p>
             <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
               Todas las disciplinas
@@ -105,7 +105,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
           <p className="text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
             AWP · BIM · Control Documental
             <br />
-            <span className="text-slate-300 dark:text-slate-600">v0.3 · Sonqollay</span>
+            <span className="text-slate-300 dark:text-slate-600">v0.3 · Gestor de Información de Proyectos</span>
           </p>
         ) : (
           <div className="mx-auto h-1.5 w-1.5 rounded-full bg-brand-500 dark:bg-accent/60" />

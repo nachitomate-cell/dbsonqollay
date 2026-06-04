@@ -522,7 +522,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
         {[
           { id: 'elements', label: 'Elementos' },
           { id: 'awp', label: 'AWP' },
-          { id: 'commodity', label: 'Código de mercancía' },
         ].map((t) => (
           <button
             key={t.id}
@@ -706,7 +705,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           {/* Update buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-3">
             <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => bulkUpdate('awp')}>Actualizar relación AWP</UpdateButton>
-            <UpdateButton icon={Tag} disabled={selected.size === 0} onClick={() => bulkUpdate('commodity')}>Actualizar relación de código de mercancía</UpdateButton>
           </div>
 
           {/* Active filter chips */}
