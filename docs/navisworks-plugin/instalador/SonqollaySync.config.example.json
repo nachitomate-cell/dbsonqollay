@@ -1,7 +1,7 @@
 {
   "baseUrl": "https://basesonqollay.synaptechspa.cl",
   "apiToken": "PEGAR_AQUI_EL_TOKEN_COMPARTIDO",
-  "linkCategory": "AutoCad",
-  "linkProperty": "Layer",
+  "linkCategory": "BIM",
+  "linkProperty": "TAG/Commodity",
   "tabName": "BIM"
 }

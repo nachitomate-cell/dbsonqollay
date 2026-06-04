@@ -321,15 +321,23 @@ namespace Sonqollay
         private string GetTagValue(ModelItem item)
         {
             // Camino rápido: si la categoría está configurada (caso normal, BIM),
-            // búsqueda directa de la propiedad en vez de recorrer todo el elemento.
+            // buscamos dentro de esa pestaña SIN distinguir mayús/minús, tanto en el
+            // nombre de la pestaña como en el de la propiedad. Esto es clave para que
+            // sea repetible: la web escribe "TAG/COMMODITY" y Aura BIM dejó
+            // "TAG/Commodity"; ambos deben matchear contra Cfg.LinkProperty.
             if (!string.IsNullOrEmpty(Cfg.LinkCategory))
             {
-                DataProperty dp = item.PropertyCategories
-                    .FindPropertyByDisplayName(Cfg.LinkCategory, Cfg.LinkProperty);
-                if (dp != null && dp.Value != null)
+                foreach (PropertyCategory cat in item.PropertyCategories)
                 {
-                    string val = dp.Value.ToDisplayString();
-                    return string.IsNullOrWhiteSpace(val) ? null : val;
+                    if (!string.Equals(cat.DisplayName, Cfg.LinkCategory, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    foreach (DataProperty p in cat.Properties)
+                    {
+                        if (!string.Equals(p.DisplayName, Cfg.LinkProperty, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        string val = p.Value != null ? p.Value.ToDisplayString() : null;
+                        return string.IsNullOrWhiteSpace(val) ? null : val;
+                    }
                 }
                 return null;
             }
@@ -388,7 +396,9 @@ namespace Sonqollay
 
                 foreach (var kv in row)
                 {
-                    if (kv.Key == tagField) continue;
+                    // Escribimos TODAS las columnas, incluida la del TAG: así la pestaña
+                    // BIM conserva TAG/Commodity y el sync sigue siendo repetible (la
+                    // próxima corrida vuelve a matchear por esa propiedad).
                     ComApi.InwOaProperty p = (ComApi.InwOaProperty)state.ObjectFactory(
                         ComApi.nwEObjectType.eObjectType_nwOaProperty, null, null);
                     p.name = Sanitize(kv.Key);   // nombre interno
