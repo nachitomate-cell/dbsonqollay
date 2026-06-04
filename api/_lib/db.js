@@ -120,3 +120,18 @@ export async function upsertDatasetToDb(payload) {
     client.release()
   }
 }
+
+/** Borra una planilla de la base de datos: su vista y sus filas. */
+export async function deleteDatasetFromDb(key) {
+  const pool = getPool()
+  if (!pool) return { skipped: true }
+  if (!key) return { skipped: true, reason: 'sin key' }
+  const client = await pool.connect()
+  try {
+    await client.query(`drop view if exists ${ident(viewName(key))}`)
+    const r = await client.query('delete from sqy_dataset_rows where dataset_key = $1', [key])
+    return { ok: true, deleted: r.rowCount }
+  } finally {
+    client.release()
+  }
+}

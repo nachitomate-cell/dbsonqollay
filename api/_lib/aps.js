@@ -161,6 +161,14 @@ export async function upsertDatasetIndex(entry) {
   await putJsonObject(INDEX_OBJECT_KEY, { datasets: list })
 }
 
+/** Quita una entrada del índice por key. Devuelve cuántas sacó (0 si no estaba). */
+export async function removeFromDatasetIndex(key) {
+  const list = await readDatasetIndex()
+  const next = list.filter((e) => e.key !== key)
+  if (next.length !== list.length) await putJsonObject(INDEX_OBJECT_KEY, { datasets: next })
+  return list.length - next.length
+}
+
 /** Token compartido del plugin (Authorization: Bearer o ?token=). Solo lectura.
  *  Si SQY_API_TOKEN no está definido, la lectura queda abierta (modo dev). */
 export function pluginAuthorized(req) {

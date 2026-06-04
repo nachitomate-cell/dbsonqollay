@@ -1,5 +1,5 @@
-import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, pluginAuthorized, send } from '../_lib/aps.js'
-import { upsertDatasetToDb } from '../_lib/db.js'
+import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, removeFromDatasetIndex, deleteObject, pluginAuthorized, send } from '../_lib/aps.js'
+import { upsertDatasetToDb, deleteDatasetFromDb } from '../_lib/db.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -49,6 +49,24 @@ export default async function handler(req, res) {
       const data = await readJsonObject(objectKey)
       if (!data) return send(res, 404, { error: 'Dataset no publicado todavía para esa key.' })
       return send(res, 200, data)
+    }
+
+    if (req.method === 'DELETE') {
+      // Destructivo: exige el token del plugin (igual que el GET).
+      if (!pluginAuthorized(req)) {
+        return send(res, 401, { error: 'No autorizado: falta o no coincide el token (Authorization: Bearer <SQY_API_TOKEN>).' })
+      }
+      await deleteObject(objectKey)
+      const removedFromIndex = await removeFromDatasetIndex(key)
+
+      let db = { skipped: true }
+      try {
+        db = await deleteDatasetFromDb(key)
+      } catch (e) {
+        db = { error: e.message }
+      }
+
+      return send(res, 200, { ok: true, key, removedFromIndex, db })
     }
 
     return send(res, 405, { error: 'Método no permitido' })
