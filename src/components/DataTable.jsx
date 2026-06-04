@@ -11,6 +11,7 @@ import {
   Copy,
   Download,
   Filter,
+  GripVertical,
   History,
   LayoutGrid,
   Link2,
@@ -79,7 +80,7 @@ function formatValue(header, value) {
 /* --------------------------- component ----------------------------- */
 
 export default function DataTable({ dataset, subcategory, onBack }) {
-  const { columns, rows, addColumn, removeColumn, toggleColumn, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, reset, dirty } =
+  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, reset, dirty } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
@@ -87,8 +88,16 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
   const [activeTab, setActiveTab] = useState('elements')
   const [viewMode, setViewMode] = useState('grid') // 'grid' (planilla) | 'cards' (fichas)
+  const [fullscreen, setFullscreen] = useState(false) // ver la planilla a pantalla completa
   const [engine, setEngine] = useState(() => localStorage.getItem('sqy-3d-engine') || 'three') // 'three' | 'aps'
   useEffect(() => { localStorage.setItem('sqy-3d-engine', engine) }, [engine])
+  // Salir de pantalla completa con Escape.
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e) => { if (e.key === 'Escape') setFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
@@ -516,7 +525,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     isSel ? 'bg-brand-50 dark:bg-ink-700' : 'bg-white group-hover:bg-slate-50 dark:bg-ink-800 dark:group-hover:bg-ink-700'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-lg rounded-tl-none border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/40">
+    <div className={[
+      'flex min-h-0 flex-1 flex-col border border-slate-200 bg-white dark:border-white/10',
+      fullscreen
+        ? 'fixed inset-0 z-[60] rounded-none dark:bg-ink-900'
+        : 'rounded-lg rounded-tl-none dark:bg-ink-800/40',
+    ].join(' ')}>
       {/* Sub-tabs */}
       <div className="flex gap-1 border-b border-slate-200 px-3 pt-2 dark:border-white/10">
         {[
@@ -556,6 +570,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
+              <ToolIcon icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'} active={fullscreen} onClick={() => setFullscreen((v) => !v)} />
             </div>
 
             {/* View mode toggle */}
@@ -659,6 +674,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               columns={columns}
               onToggle={toggleColumn}
               onRemove={removeColumn}
+              onMove={moveColumn}
               newField={newField}
               setNewField={setNewField}
               onAdd={addField}
@@ -954,16 +970,26 @@ function CardsView({ rows, headers, selected, onToggle, onOpen }) {
   )
 }
 
-function ColumnManager({ columns, onToggle, onRemove, newField, setNewField, onAdd, dirty, onReset, onClose, inputRef }) {
+function ColumnManager({ columns, onToggle, onRemove, onMove, newField, setNewField, onAdd, dirty, onReset, onClose, inputRef }) {
+  const [dragKey, setDragKey] = useState(null)
   return (
     <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-ink-800">
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Campos / columnas</h4>
+        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Campos / columnas <span className="ml-1 text-[11px] font-normal text-slate-400">— arrastrá para reordenar</span></h4>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
         {columns.map((c) => (
-          <div key={c.key} className="flex items-center gap-2">
+          <div
+            key={c.key}
+            draggable
+            onDragStart={() => setDragKey(c.key)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => { if (dragKey && dragKey !== c.key) onMove?.(dragKey, c.key); setDragKey(null) }}
+            onDragEnd={() => setDragKey(null)}
+            className={['flex items-center gap-1.5 rounded transition', dragKey === c.key ? 'opacity-40' : ''].join(' ')}
+          >
+            <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-slate-300 dark:text-slate-600" title="Arrastrar para reordenar" />
             <input type="checkbox" checked={c.visible} onChange={() => onToggle(c.key)} className="h-3.5 w-3.5 cursor-pointer accent-brand-500 dark:accent-accent" />
             <span className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300" title={c.key}>{c.key.replace(/_/g, ' ')}</span>
             <button onClick={() => onRemove(c.key)} title="Quitar campo" className="text-slate-300 transition hover:text-rose-500 dark:text-slate-600"><Trash2 className="h-3.5 w-3.5" /></button>

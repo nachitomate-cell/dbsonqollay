@@ -60,6 +60,18 @@ export function useEditableDataset(dataKey, dataset) {
           columns: s.columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)),
         }))
       },
+      // Reordena columnas: mueve `fromKey` a la posición de `toKey`.
+      moveColumn(fromKey, toKey) {
+        mutate((s) => {
+          const from = s.columns.findIndex((c) => c.key === fromKey)
+          const to = s.columns.findIndex((c) => c.key === toKey)
+          if (from < 0 || to < 0 || from === to) return s
+          const cols = [...s.columns]
+          const [moved] = cols.splice(from, 1)
+          cols.splice(to, 0, moved)
+          return { ...s, columns: cols }
+        })
+      },
       updateRecord(id, patch) {
         mutate((s) => ({ ...s, rows: s.rows.map((r) => (r._id === id ? { ...r, ...patch } : r)) }))
       },
