@@ -1,4 +1,4 @@
-import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, removeFromDatasetIndex, deleteObject, pluginAuthorized, send } from '../_lib/aps.js'
+import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, removeFromDatasetIndex, deleteObject, pluginAuthorized, send, fail } from '../_lib/aps.js'
 import { upsertDatasetToDb, deleteDatasetFromDb } from '../_lib/db.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
@@ -17,6 +17,10 @@ export default async function handler(req, res) {
       const b = req.body || {}
       const headers = Array.isArray(b.headers) ? b.headers : []
       const rows = Array.isArray(b.rows) ? b.rows : []
+      // Límites anti-abuso (defensa básica mientras no haya auth; Vercel ya
+      // limita el body a ~4.5MB). Una planilla real ronda cientos de filas.
+      if (headers.length > 500) return send(res, 413, { error: 'Demasiadas columnas (máx 500).' })
+      if (rows.length > 200000) return send(res, 413, { error: 'Demasiadas filas (máx 200000).' })
       const payload = {
         key,
         name: b.name || key,
@@ -71,6 +75,6 @@ export default async function handler(req, res) {
 
     return send(res, 405, { error: 'Método no permitido' })
   } catch (e) {
-    send(res, 500, { error: e.message })
+    fail(res, 500, 'Error interno del servidor', e)
   }
 }

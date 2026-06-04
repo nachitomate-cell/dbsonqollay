@@ -1,4 +1,4 @@
-import { deleteObject, listObjects, send } from '../_lib/aps.js'
+import { deleteObject, listObjects, send, fail } from '../_lib/aps.js'
 
 // GET    /api/aps/models                → lista los modelos del bucket
 // DELETE /api/aps/models?objectKey=...   → borra un objeto del bucket
@@ -12,6 +12,6 @@ export default async function handler(req, res) {
     }
     send(res, 200, await listObjects())
   } catch (e) {
-    send(res, 500, { error: e.message })
+    fail(res, 500, 'Error interno del servidor', e)
   }
 }

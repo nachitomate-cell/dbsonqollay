@@ -180,6 +180,14 @@ export function pluginAuthorized(req) {
   return bearer === expected || qtok === expected
 }
 
+/** Respuesta de error que NO filtra internals: loguea el detalle en el server
+ *  (visible en los logs de la función) y devuelve un mensaje genérico al cliente.
+ *  Usar en los catch 500; los 4xx con mensaje intencional siguen usando send(). */
+export function fail(res, status, publicMessage, err) {
+  if (err) console.error(`[api] ${publicMessage}:`, err?.stack || err?.message || err)
+  send(res, status, { error: publicMessage })
+}
+
 /** Helper de respuesta JSON con manejo de errores. */
 export function send(res, status, body) {
   res.status(status)

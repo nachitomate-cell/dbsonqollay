@@ -1,4 +1,4 @@
-import { readDatasetIndex, pluginAuthorized, send } from '../_lib/aps.js'
+import { readDatasetIndex, pluginAuthorized, send, fail } from '../_lib/aps.js'
 
 // GET /api/datasets  → lista las planillas publicadas para que el plugin de
 // Navisworks deje elegir cuáles sincronizar. Requiere el token del plugin.
@@ -12,6 +12,6 @@ export default async function handler(req, res) {
     const datasets = await readDatasetIndex()
     return send(res, 200, { datasets })
   } catch (e) {
-    send(res, 500, { error: e.message })
+    fail(res, 500, 'Error interno del servidor', e)
   }
 }

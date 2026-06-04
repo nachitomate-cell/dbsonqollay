@@ -1,4 +1,4 @@
-import { getSignedUpload, send } from '../_lib/aps.js'
+import { getSignedUpload, send, fail } from '../_lib/aps.js'
 
 // POST /api/aps/upload-url  body: { name }
 // Devuelve { objectKey, uploadKey, urls } para que el navegador suba el modelo
@@ -11,6 +11,6 @@ export default async function handler(req, res) {
     const { uploadKey, urls } = await getSignedUpload(objectKey)
     send(res, 200, { objectKey, uploadKey, urls })
   } catch (e) {
-    send(res, 500, { error: e.message })
+    fail(res, 500, 'No se pudo generar la URL de subida', e)
   }
 }

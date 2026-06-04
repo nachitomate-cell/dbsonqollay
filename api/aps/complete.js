@@ -1,4 +1,4 @@
-import { completeUpload, send, translate } from '../_lib/aps.js'
+import { completeUpload, send, translate, fail } from '../_lib/aps.js'
 
 // POST /api/aps/complete  body: { objectKey, uploadKey }
 // Confirma la subida S3 y lanza la traducción a SVF2. Devuelve { urn }.
@@ -11,6 +11,6 @@ export default async function handler(req, res) {
     const { urn } = await translate(objectId)
     send(res, 200, { urn, objectKey })
   } catch (e) {
-    send(res, 500, { error: e.message })
+    fail(res, 500, 'No se pudo completar la subida', e)
   }
 }
