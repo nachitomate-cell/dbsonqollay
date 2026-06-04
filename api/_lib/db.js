@@ -59,10 +59,15 @@ export async function upsertDatasetToDb(payload) {
   const tagField = payload.tagField || headers[0]
   if (!key || !tagField) return { skipped: true, reason: 'sin key o tagField' }
 
-  // Cada fila → { tag, data } (descarta filas sin TAG).
-  const items = rows
-    .map((r) => ({ tag: String(r[tagField] ?? '').trim(), data: r }))
-    .filter((x) => x.tag)
+  // Cada fila → { tag, data }. Dedupe por TAG (última fila gana): el modelo enlaza
+  // 1 elemento ↔ 1 fila por TAG, y la PK (dataset_key, tag) no admite duplicados
+  // (el bucket APS y la web conservan igualmente todas las filas).
+  const byTag = new Map()
+  for (const r of rows) {
+    const tag = String(r[tagField] ?? '').trim()
+    if (tag) byTag.set(tag, r)
+  }
+  const items = [...byTag.entries()].map(([tag, data]) => ({ tag, data }))
 
   const client = await pool.connect()
   try {
@@ -95,7 +100,10 @@ export async function upsertDatasetToDb(payload) {
     const vname = viewName(key)
     await client.query(`drop view if exists ${ident(vname)}`)
     if (headers.length) {
-      const cols = headers.map((h) => `data->>${lit(h)} as ${ident(h)}`).join(', ')
+      // Encabezados únicos: una columna repetida rompe la creación de la vista.
+      const seenH = new Set()
+      const uniqHeaders = headers.filter((h) => { const k = String(h); if (seenH.has(k)) return false; seenH.add(k); return true })
+      const cols = uniqHeaders.map((h) => `data->>${lit(h)} as ${ident(h)}`).join(', ')
       await client.query(
         `create view ${ident(vname)} as
          select tag, ${cols}
