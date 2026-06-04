@@ -114,6 +114,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   // Planilla recién creada (vacía): abre el gestor de columnas para guiar al usuario.
   const [showColumns, setShowColumns] = useState(() => (dataset?.rows?.length ?? 0) === 0)
   const [newField, setNewField] = useState('')
+  const [hdrDragKey, setHdrDragKey] = useState(null) // columna que se arrastra desde el encabezado
   const [editingId, setEditingId] = useState(null)
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
 
@@ -772,10 +773,16 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                       return (
                         <th
                           key={h}
+                          draggable
+                          onDragStart={() => setHdrDragKey(h)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => { if (hdrDragKey && hdrDragKey !== h) moveColumn(hdrDragKey, h); setHdrDragKey(null) }}
+                          onDragEnd={() => setHdrDragKey(null)}
                           style={{ left: idx === 0 ? CHECK_W : undefined }}
                           className={[
                             `top-0 z-20 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
                             idx === 0 ? 'sticky z-30' : 'relative',
+                            hdrDragKey === h ? 'opacity-40' : '',
                           ].join(' ')}
                         >
                           <div className="flex items-center gap-1.5 pr-2">
