@@ -1,7 +1,7 @@
 # Despliegue en Render (https://render.com) como un único Web Service Node que
 # compila el frontend y sirve dist/ + la API APS desde el mismo origen.
 #
-# Tras crear el servicio, agregá en el dashboard de Render las variables
+# Tras crear el servicio, agrega en el dashboard de Render las variables
 # secretas APS_CLIENT_ID y APS_CLIENT_SECRET (marcadas sync:false abajo).
 services:
   - type: web

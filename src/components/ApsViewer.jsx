@@ -132,16 +132,31 @@ function applyViewerStyle(viewer, hq = true) {
 // bounding-box parcial y deja el modelo como un puntito al centro. Por eso se
 // reintenta unas cuantas veces durante ~1.5 s; cada intento es inmediato (sin
 // animación) para no marear, y el último deja el encuadre definitivo.
+// ¿El elemento tiene tamaño real (no 0×0)? El visor de Autodesk emite
+// "Rendering to a canvas that was resized to zero" y puede quedar inservible si
+// se le hace resize/render mientras su contenedor está colapsado (transición de
+// layout, o adoptado antes de tomar tamaño). Solo operamos cuando hay tamaño.
+function hasSize(el) {
+  return !!el && el.clientWidth > 0 && el.clientHeight > 0
+}
+
 function frameModel(viewer) {
-  let tries = 0
+  let tries = 0, framed = 0
   const fit = () => {
     if (!viewer || !viewer.model) return
-    try {
-      viewer.resize()
-      // fitToView(ids, model, immediate=true) encuadra todo el modelo sin animar.
-      viewer.fitToView(null, viewer.model, true)
-    } catch { /* el visor aún no está listo; lo intenta el próximo tick */ }
-    if (++tries < 6) setTimeout(fit, 250)
+    // Si el contenedor aún no tomó tamaño, NO hacemos resize (iría a 0 y dejaría
+    // el canvas en cero); reintentamos hasta que el layout le dé alto/ancho.
+    if (hasSize(viewer.container)) {
+      try {
+        viewer.resize()
+        // fitToView(ids, model, immediate=true) encuadra todo el modelo sin animar.
+        viewer.fitToView(null, viewer.model, true)
+      } catch { /* el visor aún no está listo; lo intenta el próximo tick */ }
+      framed++
+    }
+    // Reintenta unos segundos: espera a tener tamaño y reencuadra unas pocas
+    // veces mientras la geometría sigue llegando por streaming.
+    if (++tries < 24 && framed < 6) setTimeout(fit, 200)
   }
   // Primer intento en el siguiente frame (deja que el canvas tome su tamaño).
   requestAnimationFrame(fit)
@@ -377,7 +392,9 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         viewerRef.current = viewer
         // Mueve el contenedor compartido del visor a este componente.
         mountRef.current?.appendChild(container)
-        try { viewer.resize() } catch { /* noop */ }
+        // Solo redimensiona si ya tiene tamaño: si está colapsado, el
+        // ResizeObserver hará el resize al crecer (evita "canvas resized to zero").
+        if (hasSize(mountRef.current)) { try { viewer.resize() } catch { /* noop */ } }
         applyViewerStyle(viewer, hq)
 
         // Handlers propios de esta instancia (se quitan al desmontar).
@@ -405,7 +422,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSel)
         ctxRef.current.onSel = onSel
 
-        const ro = new ResizeObserver(() => { try { viewer.resize() } catch { /* noop */ } })
+        const ro = new ResizeObserver(() => { if (hasSize(mountRef.current)) { try { viewer.resize() } catch { /* noop */ } } })
         ro.observe(mountRef.current)
         ctxRef.current.resizeObs = ro
         const themeObs = new MutationObserver(() => applyViewerStyle(viewer, hq))
@@ -808,7 +825,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
             </div>
             <button
               onClick={toggleArea}
-              title="Selección por área: arrastrá un rectángulo sobre el modelo para seleccionar varios elementos (incluidos los pequeños)"
+              title="Selección por área: arrastra un rectángulo sobre el modelo para seleccionar varios elementos (incluidos los pequeños)"
               className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', areaMode ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
             >
               <BoxSelect className="h-3.5 w-3.5" /> Área

@@ -3,10 +3,11 @@ import PwaPrompt from './components/PwaPrompt.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
-import AcademiaView from './components/AcademiaView.jsx'
+import AllDisciplinesView from './components/AllDisciplinesView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
-import { datasets as baseDatasets, disciplines as baseDisciplines, defaultColumns, emptyDataset } from './data/disciplines.js'
+import { datasets as baseDatasets, defaultColumns, emptyDataset } from './data/disciplines.js'
+import { useDisciplines } from './hooks/useDisciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 
@@ -24,9 +25,15 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeDiscipline, setActiveDiscipline] = useState('electrico')
+  const [showAll, setShowAll] = useState(false) // vista "Todas las disciplinas" (índice global de planillas)
   const [openSubs, setOpenSubs] = useState([])
   const [activeSub, setActiveSub] = useState(null)
-  const [theme, setTheme] = useState(() => localStorage.getItem('sqy-theme') || 'light')
+  const [theme, setTheme] = useState(() => {
+    // Si el usuario ya eligió tema, se respeta; si no, se usa el del sistema.
+    const saved = localStorage.getItem('sqy-theme')
+    if (saved === 'light' || saved === 'dark') return saved
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  })
   const [notice, setNotice] = useState(null)
   // Subcategorías sin datos para las que el usuario creó una planilla vacía,
   // con las columnas elegidas. Se persiste { subId: columns[] } entre recargas.
@@ -36,6 +43,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('sqy-created-sheets-v2', JSON.stringify(createdSheets))
   }, [createdSheets])
+
+  // Menú de disciplinas: viene de la base de datos (con fallback al estático).
+  const { disciplines: baseDisciplines } = useDisciplines()
 
   const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets()
 
@@ -52,7 +62,7 @@ export default function App() {
       baseDisciplines.map((d) =>
         extraSubs[d.id]?.length ? { ...d, subcategories: [...d.subcategories, ...extraSubs[d.id]] } : d,
       ),
-    [extraSubs],
+    [baseDisciplines, extraSubs],
   )
 
   // Plantillas de columnas disponibles al crear una planilla nueva: las columnas
@@ -114,17 +124,29 @@ export default function App() {
 
   const crumbs = useMemo(() => {
     const list = [{ label: 'Gestor de Información de Proyectos' }]
-    if (discipline) list.push({ label: discipline.name, onClick: () => setActiveSub(null) })
     if (activeSub) {
+      // Una planilla abierta: muestra su disciplina real (sirve también cuando se
+      // abrió desde "Todas las disciplinas") y su nombre.
       const info = findSub(activeSub)
+      const d = info?.discipline || discipline
+      if (d) list.push({ label: d.name, onClick: () => setActiveSub(null) })
       if (info) list.push({ label: info.subcategory.name })
+    } else if (showAll) {
+      list.push({ label: 'Todas las disciplinas' })
+    } else if (discipline) {
+      list.push({ label: discipline.name })
     }
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discipline, activeSub, disciplines])
+  }, [discipline, activeSub, disciplines, showAll])
 
   function selectDiscipline(id) {
     setActiveDiscipline(id)
+    setActiveSub(null)
+    setShowAll(false)
+  }
+  function selectAllDisciplines() {
+    setShowAll(true)
     setActiveSub(null)
   }
   function openSubcategory(subId) {
@@ -179,9 +201,11 @@ export default function App() {
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
-        activeDiscipline={discipline?.id}
+        disciplines={disciplines}
+        activeDiscipline={showAll ? null : discipline?.id}
+        allActive={showAll}
         onSelect={selectDiscipline}
-        onSelectAll={() => selectDiscipline(disciplines[0].id)}
+        onSelectAll={selectAllDisciplines}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -202,9 +226,14 @@ export default function App() {
               onClose={closeTab}
               onReturn={() => setActiveSub(null)}
             />
-          ) : discipline?.comingSoon ? (
+          ) : showAll ? (
             <div className="h-full overflow-y-auto">
-              <AcademiaView />
+              <AllDisciplinesView
+                disciplines={disciplines}
+                datasets={allDatasets}
+                createdSheets={createdSheets}
+                onOpenSubcategory={openSubcategory}
+              />
             </div>
           ) : (
             <div className="h-full overflow-y-auto">

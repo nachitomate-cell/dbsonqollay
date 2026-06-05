@@ -10,18 +10,18 @@ frontend a su URL con `VITE_APS_API`.
 > "Failed to fetch" en el visor. El resto de la app (planillas, fichas, 3D
 > propio, export) sí funciona sin backend.
 
-## Despliegue en Vercel (recomendado si ya usás Vercel)
+## Despliegue en Vercel (recomendado si ya usas Vercel)
 
 El backend está implementado **también** como **funciones serverless** en `api/`,
 así que Vercel sirve el frontend y la API en el **mismo dominio**, sin servidor
 aparte. No hace falta `VITE_APS_API` (mismo origen).
 
 Pasos:
-1. En el proyecto de Vercel, agregá las **Environment Variables**:
+1. En el proyecto de Vercel, agrega las **Environment Variables**:
    - `APS_CLIENT_ID`, `APS_CLIENT_SECRET` (de aps.autodesk.com)
    - `APS_BUCKET` (p. ej. `sonqollay-models-2026`)
 2. Deploy (Vercel detecta `vercel.json`, build con Vite, funciones en `/api`).
-3. Verificá `https://TU_DOMINIO/api/aps/token` → debe devolver un `access_token`.
+3. Verifica `https://TU_DOMINIO/api/aps/token` → debe devolver un `access_token`.
 
 Endpoints (funciones): `GET /api/aps/token`, `GET /api/aps/models`,
 `POST /api/aps/upload-url`, `POST /api/aps/complete`, `GET /api/aps/status/:urn`.
@@ -49,7 +49,7 @@ estático, cPanel, S3, Nginx sirviendo `dist/`…), las rutas `/api/*` devuelven
 funciona, pero el **visor APS no**, porque necesita el backend.
 
 Solución: el sitio debe ser servido por el **proceso Node** (`server/index.js`),
-que sirve el frontend **y** la API. Usá una de estas opciones.
+que sirve el frontend **y** la API. Usa una de estas opciones.
 
 ## Opción A (recomendada): un solo despliegue
 
@@ -65,20 +65,20 @@ docker run -p 3000:3000 --env-file server/.env sonqollay
 
 ### A.2 — Render (incluye `render.yaml`)
 
-1. Conectá el repo en Render → "New Web Service" (detecta `render.yaml`).
-2. Cargá las variables secretas `APS_CLIENT_ID` y `APS_CLIENT_SECRET`.
-3. Deploy. Verificá `https://TU_SERVICIO.onrender.com/api/health`.
+1. Conecta el repo en Render → "New Web Service" (detecta `render.yaml`).
+2. Carga las variables secretas `APS_CLIENT_ID` y `APS_CLIENT_SECRET`.
+3. Deploy. Verifica `https://TU_SERVICIO.onrender.com/api/health`.
 
 ### A.3 — VPS / manual
 
 ```bash
 npm install && npm run build        # genera dist/
 cd server
-cp .env.example .env                # pegá tus credenciales APS
+cp .env.example .env                # pega tus credenciales APS
 npm install && npm start            # sirve dist/ + API en el puerto 3000
 ```
 
-(Con un VPS, poné Nginx como proxy inverso a ese puerto y PM2 para mantenerlo vivo.)
+(Con un VPS, pon Nginx como proxy inverso a ese puerto y PM2 para mantenerlo vivo.)
 
 ## Opción B: frontend y backend separados
 
@@ -87,27 +87,27 @@ npm install && npm start            # sirve dist/ + API en el puerto 3000
 Cualquier host de Node sirve (Render, Railway, Fly.io, un VPS con PM2, etc.).
 
 Pasos genéricos:
-1. Subí la carpeta `server/` (o el repo) al host.
-2. Configurá las **variables de entorno** (no subas `.env` al repo):
+1. Sube la carpeta `server/` (o el repo) al host.
+2. Configura las **variables de entorno** (no subas `.env` al repo):
    - `APS_CLIENT_ID`, `APS_CLIENT_SECRET` (de aps.autodesk.com)
    - `APS_BUCKET` (p. ej. `sonqollay-models-2026`)
    - `CLIENT_ORIGIN=https://basesonqollay.synaptechspa.cl` (tu dominio del front)
    - `PORT` (el host suele inyectarlo)
 3. Comando de arranque: `npm install && npm start`.
-4. Anotá la URL pública resultante, p. ej. `https://sonqollay-api.onrender.com`.
+4. Anota la URL pública resultante, p. ej. `https://sonqollay-api.onrender.com`.
 
-Verificá: abrir `https://TU_BACKEND/api/health` debe devolver `{"ok":true}`.
+Verifica: abrir `https://TU_BACKEND/api/health` debe devolver `{"ok":true}`.
 
 ## 2. Apuntar el frontend al backend
 
-Antes de compilar el frontend, definí la variable:
+Antes de compilar el frontend, define la variable:
 
 ```
 # .env.production (o variable de entorno del build en tu hosting)
 VITE_APS_API=https://sonqollay-api.onrender.com
 ```
 
-Luego `npm run build` y publicá `dist/`.
+Luego `npm run build` y publica `dist/`.
 
 > Importante: el backend debe ir por **HTTPS** (igual que el front) para evitar
 > bloqueo de contenido mixto, y `CLIENT_ORIGIN` debe incluir el dominio del

@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo-mark.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'aura1.png'],
       manifest: {
         name: 'Gestor de Información de Proyectos — Control de Ingeniería',
         short_name: 'Gestor',

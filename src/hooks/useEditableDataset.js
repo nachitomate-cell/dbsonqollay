@@ -83,6 +83,22 @@ export function useEditableDataset(dataKey, dataset) {
         })
         return blank._id
       },
+      // Inserta una fila (con datos opcionales) arriba o abajo de otra fila.
+      // Sirve para "pegar" y "duplicar" desde el menú contextual. Devuelve el
+      // _id de la nueva fila. Si no se encuentra `referenceId`, la pone arriba.
+      insertRecord(referenceId, data, where = 'below') {
+        const _id = genId()
+        mutate((s) => {
+          const row = { _id }
+          s.columns.forEach((c) => (row[c.key] = data?.[c.key] ?? ''))
+          const idx = s.rows.findIndex((r) => r._id === referenceId)
+          const rows = [...s.rows]
+          if (idx < 0) rows.unshift(row)
+          else rows.splice(where === 'above' ? idx : idx + 1, 0, row)
+          return { ...s, rows }
+        })
+        return _id
+      },
       // Importación masiva: agrega varias filas y crea las columnas que falten.
       addRecords(incoming) {
         const list = Array.isArray(incoming) ? incoming : []

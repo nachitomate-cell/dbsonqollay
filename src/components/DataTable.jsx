@@ -1,11 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  ArrowDownToLine,
   ArrowUpDown,
+  ArrowUpToLine,
   Box,
   Boxes,
+  Check,
   ChevronDown,
   ChevronUp,
+  ClipboardPaste,
+  Clock,
   Columns2,
   Columns3,
   Copy,
@@ -13,7 +18,6 @@ import {
   Filter,
   GripVertical,
   History,
-  LayoutGrid,
   Link2,
   List,
   Maximize2,
@@ -28,12 +32,12 @@ import {
   Share2,
   Tag,
   Trash2,
+  TriangleAlert,
   Upload,
   X,
 } from 'lucide-react'
 
-// El visor BIM 3D (y three.js) se cargan en un chunk aparte, solo al abrir la vista 3D.
-const BimViewer = lazy(() => import('./BimViewer.jsx'))
+// El visor 3D (APS) se carga en un chunk aparte, solo al abrir la vista 3D.
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
@@ -70,27 +74,28 @@ const defaultWidth = (h) => {
   return 170
 }
 
-function formatValue(header, value) {
-  if (value === '' || value == null) return null
-  if (isCostHeader(header)) return fmtCost(value)
-  if (isWeightHeader(header)) return fmtWeight(value)
-  return String(value)
-}
-
 /* --------------------------- component ----------------------------- */
 
 export default function DataTable({ dataset, subcategory, onBack }) {
-  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, addRecord, addRecords, deleteRecord, reset, dirty } =
+  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
   const headers = visibleCols.map((c) => c.key)
 
+  // Estado de la vista persistido por planilla (orden, filtros, modo de vista):
+  // se restaura al reabrir. El ancho de columnas se guarda aparte (colWidths) y el
+  // orden/visibilidad de columnas viven en el dataset editable.
+  const viewKey = `sqy-view-${subcategory.dataKey}`
+  const persistedView = (() => {
+    try { return JSON.parse(localStorage.getItem(viewKey)) || {} } catch { return {} }
+  })()
+
   const [activeTab, setActiveTab] = useState('elements')
-  const [viewMode, setViewMode] = useState('grid') // 'grid' (planilla) | 'cards' (fichas)
+  // 'grid' (planilla) | 'bim' (3D) | 'split' (dividido). Una vista 'cards' antigua
+  // persistida se normaliza a 'grid'.
+  const [viewMode, setViewMode] = useState(() => (persistedView.viewMode === 'cards' ? 'grid' : persistedView.viewMode) || 'grid')
   const [fullscreen, setFullscreen] = useState(false) // ver la planilla a pantalla completa
-  const [engine, setEngine] = useState(() => localStorage.getItem('sqy-3d-engine') || 'three') // 'three' | 'aps'
-  useEffect(() => { localStorage.setItem('sqy-3d-engine', engine) }, [engine])
   // Salir de pantalla completa con Escape.
   useEffect(() => {
     if (!fullscreen) return
@@ -100,8 +105,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   }, [fullscreen])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(() => new Set())
-  const [sort, setSort] = useState({ key: null, dir: 'asc' })
-  const [colFilters, setColFilters] = useState({})
+  const [sort, setSort] = useState(persistedView.sort || { key: null, dir: 'asc' })
+  const [colFilters, setColFilters] = useState(persistedView.colFilters || {})
   const [filterByCol, setFilterByCol] = useState('')
   const [propertyChange, setPropertyChange] = useState('')
   const [colWidths, setColWidths] = useState(() => {
@@ -117,10 +122,18 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [hdrDragKey, setHdrDragKey] = useState(null) // columna que se arrastra desde el encabezado
   const [editingId, setEditingId] = useState(null)
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
+  const [ctxMenu, setCtxMenu] = useState(null) // menú contextual de fila: { x, y, rowId }
+  const [clipboardRow, setClipboardRow] = useState(null) // fila copiada (datos sin _id)
+  const [showPackage, setShowPackage] = useState(false) // modal "Agrupar en paquete"
+  // Publicación a Navisworks: { status:'publishing'|'done'|'error', count, key, ms, error }
+  const [publish, setPublish] = useState(null)
+  const [publishElapsed, setPublishElapsed] = useState(0) // ms transcurridos (cronómetro en vivo)
+  const publishStartRef = useRef(0)
 
   const scrollRef = useRef(null)
   const viewerWrapRef = useRef(null)
   const newFieldRef = useRef(null)
+  const searchRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Pantalla completa del contenedor del visor 3D (sirve para ambos motores).
@@ -139,13 +152,16 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape' && !editingId && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) {
+        // En pantalla completa, Escape SOLO sale de ese modo (lo maneja el otro
+        // efecto); no debe además cambiar de vista ni volver atrás.
+        if (fullscreen) return
         if (viewMode === 'bim' || viewMode === 'split') setViewMode('grid')
         else onBack()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onBack, editingId, viewMode])
+  }, [onBack, editingId, viewMode, fullscreen])
 
   // Persiste el ancho de columnas por dataset.
   useEffect(() => {
@@ -156,13 +172,42 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     }
   }, [colWidths, subcategory.dataKey])
 
+  // Cronómetro en vivo mientras se publica a Navisworks (actualiza cada 100 ms).
+  useEffect(() => {
+    if (publish?.status !== 'publishing') return
+    const id = setInterval(() => setPublishElapsed(Date.now() - publishStartRef.current), 100)
+    return () => clearInterval(id)
+  }, [publish?.status])
+
+  // Persiste el estado de la vista (modo, orden y filtros) por planilla.
+  useEffect(() => {
+    try {
+      localStorage.setItem(viewKey, JSON.stringify({ viewMode, sort, colFilters }))
+    } catch {
+      /* ignore */
+    }
+  }, [viewKey, viewMode, sort, colFilters])
+
+  // Aviso al cerrar/recargar si hay ediciones sin publicar (dirty). Las ediciones
+  // se guardan localmente, pero esto evita perderlas si se limpia el navegador o
+  // se cierra en un PC compartido antes de publicarlas a Navisworks.
+  useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirty])
+
   // Publica la planilla editada en el backend para que el plugin de Navisworks
   // la lea por HTTP (GET /api/datasets/:key). La key es el dataKey de la
   // subcategoría. Ver docs/navisworks-plugin/.
   async function publishForNavisworks() {
     const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+    const start = Date.now()
+    publishStartRef.current = start
+    setPublishElapsed(0)
+    setPublish({ status: 'publishing', count: rows.length, key: subcategory.dataKey })
     try {
-      flash('Publicando para Navisworks…')
       const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -176,10 +221,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       const ct = res.headers.get('content-type') || ''
       const j = ct.includes('application/json') ? await res.json() : {}
       if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
-      flash(`Publicado ✓ ${j.count} elementos — key: ${subcategory.dataKey}`)
-      logAction('Publicó la planilla para Navisworks')
+      const ms = Date.now() - start
+      setPublish({ status: 'done', count: j.count ?? rows.length, key: subcategory.dataKey, ms })
+      logAction(`Publicó la planilla para Navisworks (${j.count ?? rows.length} elementos, ${(ms / 1000).toFixed(1)} s)`)
     } catch (e) {
-      flash(`No se pudo publicar: ${e.message}`)
+      const ms = Date.now() - start
+      setPublish({ status: 'error', error: e.message, key: subcategory.dataKey, ms })
     }
   }
 
@@ -401,6 +448,71 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     setEditingId(null)
     logAction('Eliminó un registro')
   }
+  // ---- Menú contextual de fila: copiar / pegar / duplicar ----
+  // Abre el menú en la posición del clic derecho sobre una fila.
+  function openRowMenu(e, rowId) {
+    e.preventDefault()
+    setActiveId(rowId)
+    setCtxMenu({ x: e.clientX, y: e.clientY, rowId })
+  }
+  // Copia la fila a un portapapeles interno y, además, al del sistema en formato
+  // TSV (tab-separado) para poder pegarla en Excel/Sheets.
+  async function copyRow(id) {
+    const r = rows.find((x) => x._id === id)
+    if (!r) return
+    const { _id, ...data } = r
+    setClipboardRow(data)
+    try { await navigator.clipboard.writeText(headers.map((h) => String(data[h] ?? '')).join('\t')) } catch { /* sin permiso */ }
+    flash('Fila copiada. Usa “Pegar fila” con clic derecho.')
+    logAction('Copió una fila')
+  }
+  // Convierte texto del portapapeles (TSV/celdas de Excel) en filas mapeadas por
+  // posición a las columnas visibles.
+  function parseClipboardRows(text) {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    while (lines.length && lines[lines.length - 1] === '') lines.pop()
+    return lines
+      .filter((l) => l !== '')
+      .map((line) => {
+        const cells = line.split('\t')
+        const obj = {}
+        headers.forEach((h, i) => { obj[h] = cells[i] ?? '' })
+        return obj
+      })
+  }
+  // Pega debajo de la fila de referencia: primero intenta el portapapeles del
+  // sistema (datos tabulares de Excel/Sheets) y, si no, usa la fila copiada en la app.
+  async function pasteRow(refId) {
+    let dataRows = null
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text && text.trim()) {
+        // Sólo lo tratamos como datos del sistema si parece tabular (tab/varias
+        // líneas) o si no hay nada copiado dentro de la app.
+        if (/[\t\n]/.test(text.trim()) || !clipboardRow) dataRows = parseClipboardRows(text)
+      }
+    } catch { /* sin permiso de portapapeles: usamos el interno */ }
+    if (!dataRows || !dataRows.length) {
+      if (!clipboardRow) { flash('No hay nada para pegar.'); return }
+      dataRows = [clipboardRow]
+    }
+    // Inserta en orden bajo la fila de referencia (recorre al revés para conservarlo).
+    let lastId = null
+    for (let i = dataRows.length - 1; i >= 0; i--) lastId = insertRecord(refId, dataRows[i], 'below')
+    if (lastId) setActiveId(lastId)
+    flash(dataRows.length > 1 ? `Pegadas ${dataRows.length} fila(s).` : 'Fila pegada.')
+    logAction(`Pegó ${dataRows.length} fila(s)`)
+  }
+  // Duplica la fila (arriba o abajo) con todos sus valores.
+  function duplicateRow(id, where) {
+    const r = rows.find((x) => x._id === id)
+    if (!r) return
+    const { _id, ...data } = r
+    const newId = insertRecord(id, data, where)
+    setActiveId(newId)
+    flash(where === 'above' ? 'Fila duplicada arriba.' : 'Fila duplicada abajo.')
+    logAction('Duplicó una fila')
+  }
   function addField() {
     if (newField.trim()) logAction(`Agregó columna “${newField.trim()}”`)
     addColumn(newField)
@@ -419,6 +531,65 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   function logAction(text) {
     setHistory((h) => [{ t: Date.now(), text }, ...h].slice(0, 50))
   }
+
+  // ---- Atajos de teclado de la planilla ----
+  // No actúan mientras se tipea en un input/select ni con la ficha abierta.
+  //   Ctrl/Cmd+F  → enfocar el buscador
+  //   Ctrl/Cmd+A  → seleccionar todo lo filtrado
+  //   Supr        → eliminar las filas seleccionadas
+  //   Enter       → abrir la ficha de la fila activa
+  //   ↑ / ↓       → mover la fila activa (y desplazarla a la vista)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (editingId) return
+      const mod = e.ctrlKey || e.metaKey
+      // Ctrl/Cmd+F enfoca el buscador aunque el foco esté en otro lado.
+      if (mod && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        searchRef.current?.select?.()
+        return
+      }
+      const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable
+      if (typing) return
+
+      if (mod && e.key.toLowerCase() === 'a') {
+        e.preventDefault()
+        setSelected(new Set(filtered.map((r) => r._id)))
+        return
+      }
+      if (e.key === 'Delete') {
+        const ids = [...selected]
+        if (!ids.length) return
+        e.preventDefault()
+        ids.forEach((id) => deleteRecord(id))
+        setSelected(new Set())
+        if (ids.includes(activeId)) setActiveId(null)
+        flash(`Eliminada(s) ${ids.length} fila(s).`)
+        logAction(`Eliminó ${ids.length} fila(s)`)
+        return
+      }
+      if (e.key === 'Enter' && activeId) {
+        e.preventDefault()
+        openFicha(activeId)
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!filtered.length) return
+        e.preventDefault()
+        const cur = filtered.findIndex((r) => r._id === activeId)
+        const nextIdx = e.key === 'ArrowDown'
+          ? Math.min(filtered.length - 1, cur + 1)        // cur=-1 → primera fila
+          : Math.max(0, (cur < 0 ? 0 : cur) - 1)
+        const next = filtered[nextIdx]
+        if (next) { setActiveId(next._id); rowVirtualizer.scrollToIndex(nextIdx, { align: 'auto' }) }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, filtered, selected, activeId, deleteRecord])
+
   const fileRef = useRef(null)
   const [showStats, setShowStats] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -503,6 +674,49 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     logAction(`${kind === 'awp' ? 'Relación AWP' : 'Código de mercancía'}: ${col}=“${value}” en ${ids.length}`)
   }
 
+  // ---- Agrupar varias filas seleccionadas en un paquete ----
+  // El paquete se guarda en una columna ("PAQUETE" o la que ya exista que la
+  // represente); todos los elementos seleccionados reciben el mismo valor.
+  const PACKAGE_RE = /PAQUETE|PACKAGE/i
+  const packageCol = useMemo(
+    () => columns.find((c) => PACKAGE_RE.test(c.key))?.key || 'PAQUETE',
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columns.map((c) => c.key).join('|')],
+  )
+  // Paquetes ya creados (valores distintos de la columna) para reutilizarlos.
+  const existingPackages = useMemo(() => {
+    const set = new Set()
+    rows.forEach((r) => { const v = String(r[packageCol] ?? '').trim(); if (v) set.add(v) })
+    return [...set].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [rows, packageCol])
+
+  // Asigna el paquete `name` a las filas seleccionadas (crea la columna si falta).
+  function groupIntoPackage(name) {
+    const value = String(name || '').trim()
+    if (!value) return
+    const ids = [...selected]
+    if (!ids.length) { flash('Selecciona elementos primero.'); return }
+    if (!columns.some((c) => c.key === packageCol)) addColumn(packageCol)
+    updateRecords(ids, { [packageCol]: value })
+    setShowPackage(false)
+    flash(`${ids.length} elemento(s) agrupados en el paquete “${value}”.`)
+    logAction(`Agrupó ${ids.length} elemento(s) en el paquete “${value}”`)
+  }
+
+  // Borra un paquete: quita su valor a todas las filas que lo tienen (los
+  // elementos se conservan, solo se desagrupan) y limpia el filtro si estaba puesto.
+  function deletePackage(name) {
+    const value = String(name || '').trim()
+    if (!value) return
+    const ids = rows.filter((r) => String(r[packageCol] ?? '').trim() === value).map((r) => r._id)
+    if (!ids.length) return
+    if (!window.confirm(`¿Eliminar el paquete “${value}”? Sus ${ids.length} elemento(s) se conservan, solo se desagrupan.`)) return
+    updateRecords(ids, { [packageCol]: '' })
+    removeFilter(packageCol)
+    flash(`Paquete “${value}” eliminado (${ids.length} elemento(s) desagrupados).`)
+    logAction(`Eliminó el paquete “${value}” (${ids.length} elementos)`)
+  }
+
   // Estadísticas de la vista filtrada (para el panel de Estadísticas).
   const stats = useMemo(() => {
     const statusH = headers.find((h) => isStatusHeader(h))
@@ -577,25 +791,17 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             {/* View mode toggle */}
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ViewToggle active={viewMode === 'grid'} icon={List} label="Planilla" onClick={() => setViewMode('grid')} />
-              <ViewToggle active={viewMode === 'cards'} icon={LayoutGrid} label="Fichas" onClick={() => setViewMode('cards')} />
               <ViewToggle active={viewMode === 'bim'} icon={Box} label="3D" onClick={() => setViewMode('bim')} />
               <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Dividido" onClick={() => setViewMode('split')} />
             </div>
 
-            {/* Motor 3D: esquemático/glTF (sin backend) o APS (modelo real NWD/RVT/IFC) */}
-            {(viewMode === 'bim' || viewMode === 'split') && (
-              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
-                <ViewToggle active={engine === 'three'} icon={Box} label="3D propio" onClick={() => setEngine('three')} />
-                <ViewToggle active={engine === 'aps'} icon={Boxes} label="APS (real)" onClick={() => setEngine('aps')} />
-              </div>
-            )}
-
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
               <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
+                ref={searchRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar..."
+                placeholder="Buscar… (Ctrl+F)"
                 className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
               />
               {query && (
@@ -707,6 +913,45 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 onClear={() => removeFilter(filterByCol)}
               />
             )}
+
+            {/* Filtro de paquetes: si no hay ninguno, invita a crear el primero */}
+            <Labeled label="Paquete">
+              {existingPackages.length > 0 ? (
+                <div className="flex items-center gap-1.5">
+                  <Select
+                    value={colFilters[packageCol]?.values?.length === 1 ? colFilters[packageCol].values[0] : ''}
+                    onChange={(v) => (v ? setColumnFilter(packageCol, { type: 'values', values: [v] }) : removeFilter(packageCol))}
+                  >
+                    <option value="">Todos los paquetes</option>
+                    {existingPackages.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </Select>
+                  {colFilters[packageCol]?.values?.length === 1 && (
+                    <button
+                      onClick={() => deletePackage(colFilters[packageCol].values[0])}
+                      title="Eliminar este paquete (desagrupa sus elementos)"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-400 transition hover:border-rose-300 hover:text-rose-500 dark:border-white/10 dark:text-slate-500 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() =>
+                    selected.size >= 2
+                      ? setShowPackage(true)
+                      : flash('Aún no hay paquetes. Selecciona 2 o más elementos y usa “Agrupar en paquete” para crear el primero.')
+                  }
+                  title="Crear el primer paquete"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-brand-400 hover:text-brand-600 dark:border-white/15 dark:bg-ink-900 dark:text-slate-400 dark:hover:border-accent/50 dark:hover:text-accent"
+                >
+                  <Boxes className="h-4 w-4" /> Crear un paquete
+                </button>
+              )}
+            </Labeled>
+
             <div className="ml-auto">
               <Labeled label="Cambio de propiedad">
                 <Select value={propertyChange} onChange={setPropertyChange}>
@@ -722,6 +967,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           {/* Update buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-3">
             <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => bulkUpdate('awp')}>Actualizar relación AWP</UpdateButton>
+            <UpdateButton icon={Boxes} disabled={selected.size < 2} onClick={() => setShowPackage(true)}>Agrupar en paquete</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -749,10 +995,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             )}
           </div>
 
-          {/* Content: planilla / fichas / 3D / split */}
-          {viewMode === 'cards' ? (
-            <CardsView rows={filtered} headers={headers} selected={selected} onToggle={toggleRow} onOpen={openFicha} />
-          ) : (
+          {/* Content: planilla / 3D / split */}
           <div className="mx-4 mb-4 flex min-h-0 flex-1 gap-3">
             {(viewMode === 'grid' || viewMode === 'split') && (
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
@@ -780,8 +1023,11 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                           onDragEnd={() => setHdrDragKey(null)}
                           style={{ left: idx === 0 ? CHECK_W : undefined }}
                           className={[
-                            `top-0 z-20 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
-                            idx === 0 ? 'sticky z-30' : 'relative',
+                            `sticky top-0 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
+                            // Todos los encabezados se fijan arriba al hacer scroll vertical.
+                            // idx 0 (TAG) ademas se fija a la izquierda (esquina) y va por
+                            // encima del resto; los demas solo se fijan arriba.
+                            idx === 0 ? 'z-30' : 'z-20',
                             hdrDragKey === h ? 'opacity-40' : '',
                           ].join(' ')}
                         >
@@ -830,7 +1076,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                     const isSel = selected.has(r._id)
                     const isActive = r._id === activeId
                     return (
-                      <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} title="Clic: seleccionar · doble clic: abrir ficha" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
+                      <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} onContextMenu={(e) => openRowMenu(e, r._id)} title="Clic: seleccionar · doble clic: abrir ficha · clic derecho: copiar/duplicar" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
                         <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
                           <input type="checkbox" checked={isSel} onChange={() => toggleRow(r._id)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                         </td>
@@ -866,7 +1112,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
             </div>
             )}
             {(viewMode === 'bim' || viewMode === 'split') && (
-            <div ref={viewerWrapRef} className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-900">
+            <div ref={viewerWrapRef} className="relative min-h-[280px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-900">
               <button
                 onClick={toggleFullscreen}
                 title={isFullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
@@ -876,7 +1122,6 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               </button>
               <ViewerErrorBoundary>
                 <Suspense fallback={<ViewerLoading />}>
-                {engine === 'aps' ? (
                 <ApsViewer
                   rows={filtered}
                   headers={headers}
@@ -887,15 +1132,11 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                   dataKey={subcategory.dataKey}
                   isFiltered={activeFilters.length > 0 || query.trim() !== ''}
                 />
-              ) : (
-                <BimViewer rows={filtered} headers={headers} selectedId={activeId} onFocus={activate} onSelect={openFicha} dataKey={subcategory.dataKey} onRequestApsEngine={() => setEngine('aps')} />
-              )}
                 </Suspense>
               </ViewerErrorBoundary>
             </div>
             )}
           </div>
-          )}
         </div>
       )}
 
@@ -910,12 +1151,163 @@ export default function DataTable({ dataset, subcategory, onBack }) {
         />
       )}
 
+      {/* Modal: agrupar elementos seleccionados en un paquete */}
+      {showPackage && (
+        <PackageModal
+          count={selected.size}
+          existing={existingPackages}
+          onConfirm={groupIntoPackage}
+          onClose={() => setShowPackage(false)}
+        />
+      )}
+
+      {/* Menú contextual de fila (clic derecho): copiar / pegar / duplicar */}
+      {ctxMenu && (
+        <RowContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          canPaste={true}
+          onCopy={() => { copyRow(ctxMenu.rowId); setCtxMenu(null) }}
+          onPaste={() => { pasteRow(ctxMenu.rowId); setCtxMenu(null) }}
+          onDupAbove={() => { duplicateRow(ctxMenu.rowId, 'above'); setCtxMenu(null) }}
+          onDupBelow={() => { duplicateRow(ctxMenu.rowId, 'below'); setCtxMenu(null) }}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
+
+      {/* Modal de publicación a Navisworks: progreso con cronómetro y resultado claro */}
+      {publish && (
+        <PublishModal
+          state={publish}
+          elapsedMs={publishElapsed}
+          apiBase={localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''}
+          onRetry={publishForNavisworks}
+          onClose={() => setPublish(null)}
+        />
+      )}
+
       {/* Aviso efímero de acciones (copiar, importar, edición múltiple…) */}
       {toast && (
         <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-ink-900 px-4 py-2 text-sm font-medium text-white shadow-lg ring-1 ring-black/10 dark:bg-white dark:text-ink-900">
           {toast}
         </div>
       )}
+    </div>
+  )
+}
+
+// Modal de publicación a Navisworks. Muestra el progreso con cronómetro en vivo
+// y, al terminar, un resultado claro (elementos publicados, clave y tiempo) o el
+// error. Reemplaza el toast pequeño para que la acción quede explícita.
+function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
+  const publishing = state.status === 'publishing'
+  const done = state.status === 'done'
+  const error = state.status === 'error'
+  const secs = ((publishing ? elapsedMs : state.ms || 0) / 1000).toFixed(1)
+  const endpoint = `${apiBase || location.origin}/api/datasets/${state.key}`
+
+  // Cerrar con Escape (solo cuando ya terminó; durante la publicación no).
+  useEffect(() => {
+    if (publishing) return
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [publishing, onClose])
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+        onClick={() => { if (!publishing) onClose() }}
+      />
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+        {/* Cabecera con icono de estado */}
+        <div className="flex flex-col items-center gap-3 px-6 pt-7 text-center">
+          <div
+            className={[
+              'grid h-16 w-16 place-items-center rounded-2xl',
+              publishing ? 'bg-brand-50 text-brand-500 dark:bg-accent/10 dark:text-accent' : '',
+              done ? 'bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-400' : '',
+              error ? 'bg-rose-50 text-rose-500 dark:bg-rose-500/10 dark:text-rose-400' : '',
+            ].join(' ')}
+          >
+            {publishing && <Loader2 className="h-8 w-8 animate-spin" />}
+            {done && <Check className="h-8 w-8" strokeWidth={2.5} />}
+            {error && <TriangleAlert className="h-8 w-8" strokeWidth={2.2} />}
+          </div>
+          <div>
+            <h3 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
+              {publishing && 'Publicando para Navisworks…'}
+              {done && '¡Publicado correctamente!'}
+              {error && 'No se pudo publicar'}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {publishing && `Enviando ${state.count.toLocaleString('es-CL')} elemento(s) al servidor para que el plugin Aura BIM los lea.`}
+              {done && `El plugin de Navisworks (Aura BIM) ya puede leer esta planilla en vivo.`}
+              {error && 'Revisa la conexión con el servidor e inténtalo de nuevo.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Cronómetro grande */}
+        <div className="mx-6 mt-5 flex items-center justify-center gap-2 rounded-xl bg-slate-50 py-3 dark:bg-white/5">
+          <Clock className={['h-4 w-4', publishing ? 'text-brand-500 dark:text-accent' : 'text-slate-400'].join(' ')} />
+          <span className="text-sm text-slate-500 dark:text-slate-400">{publishing ? 'Tiempo transcurrido' : 'Tardó'}</span>
+          <span className="tabular-nums text-lg font-bold text-slate-800 dark:text-white">{secs} s</span>
+        </div>
+
+        {/* Detalle del resultado */}
+        <div className="px-6 py-5">
+          {publishing && (
+            <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+              Para muchos elementos puede tardar varios segundos. No cierres esta ventana.
+            </p>
+          )}
+          {done && (
+            <dl className="space-y-2 text-sm">
+              <Row label="Elementos publicados" value={state.count.toLocaleString('es-CL')} />
+              <Row label="Clave (key)" value={state.key} mono />
+              <Row label="Endpoint" value={endpoint} mono small />
+            </dl>
+          )}
+          {error && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
+              {state.error}
+            </div>
+          )}
+        </div>
+
+        {/* Acciones */}
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-white/10">
+          {publishing ? (
+            <button disabled className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400 dark:bg-white/5">
+              <Loader2 className="h-4 w-4 animate-spin" /> Publicando…
+            </button>
+          ) : (
+            <>
+              {error && (
+                <button onClick={onRetry} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-white/5">
+                  <RotateCw className="h-4 w-4" /> Reintentar
+                </button>
+              )}
+              <button onClick={onClose} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
+                {done ? 'Entendido' : 'Cerrar'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, value, mono, small }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt>
+      <dd className={['min-w-0 truncate text-right font-semibold text-slate-800 dark:text-slate-100', mono ? 'font-mono' : '', small ? 'text-xs' : ''].join(' ')} title={String(value)}>
+        {value}
+      </dd>
     </div>
   )
 }
@@ -930,59 +1322,12 @@ function renderCell(header, value) {
   return String(value)
 }
 
-function CardsView({ rows, headers, selected, onToggle, onOpen }) {
-  const cap = 300
-  const shown = rows.slice(0, cap)
-  const titleKey = headers[0]
-  const fieldKeys = headers.slice(1, 6)
-  return (
-    <div className="mx-4 mb-4 min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 p-3 dark:border-white/10">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map((r) => {
-          const isSel = selected.has(r._id)
-          return (
-            <button
-              key={r._id}
-              onClick={() => onOpen(r._id)}
-              className={[
-                'group relative rounded-xl border p-4 text-left transition hover:shadow-md',
-                isSel ? 'border-brand-300 bg-brand-50/50 dark:border-accent/40 dark:bg-accent/5' : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/60',
-              ].join(' ')}
-            >
-              <span onClick={(e) => { e.stopPropagation(); onToggle(r._id) }} className="absolute right-3 top-3">
-                <input type="checkbox" checked={isSel} readOnly className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
-              </span>
-              <p className="mb-2 truncate pr-6 font-mono text-sm font-bold text-slate-900 dark:text-white">{r[titleKey] || '—'}</p>
-              <dl className="space-y-1.5">
-                {fieldKeys.map((k) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3 text-xs">
-                    <dt className="shrink-0 font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{k.replace(/_/g, ' ')}</dt>
-                    <dd className="min-w-0 truncate text-right text-slate-600 dark:text-slate-300">{formatValue(k, r[k]) ?? '—'}</dd>
-                  </div>
-                ))}
-              </dl>
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-600 opacity-0 transition group-hover:opacity-100 dark:text-accent">
-                <Pencil className="h-3 w-3" /> Editar ficha
-              </span>
-            </button>
-          )
-        })}
-      </div>
-      {rows.length > cap && (
-        <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
-          Mostrando {cap} de {rows.length}. Usa la búsqueda o filtros para acotar.
-        </p>
-      )}
-    </div>
-  )
-}
-
 function ColumnManager({ columns, onToggle, onRemove, onMove, newField, setNewField, onAdd, dirty, onReset, onClose, inputRef }) {
   const [dragKey, setDragKey] = useState(null)
   return (
     <div className="mx-4 mb-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-ink-800">
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Campos / columnas <span className="ml-1 text-[11px] font-normal text-slate-400">— arrastrá para reordenar</span></h4>
+        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Campos / columnas <span className="ml-1 text-[11px] font-normal text-slate-400">— arrastra para reordenar</span></h4>
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
       </div>
       <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
@@ -1039,6 +1384,130 @@ function ToolIcon({ icon: IconCmp, title, onClick, active }) {
     >
       <IconCmp className="h-4 w-4" />
     </button>
+  )
+}
+
+// Menú contextual de fila (clic derecho): copiar, pegar y duplicar arriba/abajo.
+// Se posiciona junto al cursor y se cierra al hacer clic fuera, hacer scroll o Escape.
+function RowContextMenu({ x, y, canPaste, onCopy, onPaste, onDupAbove, onDupBelow, onClose }) {
+  useEffect(() => {
+    const close = () => onClose()
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  // Evita que el menú se salga de la pantalla por el borde derecho/inferior.
+  const W = 208, H = 168
+  const left = Math.min(x, window.innerWidth - W - 8)
+  const top = Math.min(y, window.innerHeight - H - 8)
+
+  const items = [
+    { icon: Copy, label: 'Copiar fila', onClick: onCopy },
+    { icon: ClipboardPaste, label: 'Pegar fila', onClick: onPaste, disabled: !canPaste },
+    { sep: true },
+    { icon: ArrowUpToLine, label: 'Duplicar fila arriba', onClick: onDupAbove },
+    { icon: ArrowDownToLine, label: 'Duplicar fila abajo', onClick: onDupBelow },
+  ]
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[70]" onClick={onClose} onContextMenu={(e) => { e.preventDefault(); onClose() }} />
+      <div
+        style={{ left, top, width: W }}
+        className="fixed z-[71] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-white/10 dark:bg-ink-800"
+      >
+        {items.map((it, i) =>
+          it.sep ? (
+            <div key={i} className="my-1 border-t border-slate-100 dark:border-white/10" />
+          ) : (
+            <button
+              key={i}
+              onClick={it.onClick}
+              disabled={it.disabled}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-700 dark:text-slate-200 dark:hover:bg-ink-700 dark:hover:text-accent"
+            >
+              <it.icon className="h-4 w-4 shrink-0" />
+              {it.label}
+            </button>
+          ),
+        )}
+      </div>
+    </>
+  )
+}
+
+// Modal para agrupar las filas seleccionadas en un paquete: se escribe un nombre
+// nuevo o se reutiliza uno existente. Confirmar asigna ese valor a la columna
+// del paquete en todas las filas seleccionadas.
+function PackageModal({ count, existing, onConfirm, onClose }) {
+  const [name, setName] = useState('')
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const value = name.trim()
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-[81] w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-ink-800">
+        <div className="mb-1 flex items-center gap-2">
+          <Boxes className="h-5 w-5 text-brand-500 dark:text-accent" />
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Agrupar en paquete</h3>
+        </div>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">{count} elemento(s) seleccionado(s).</p>
+
+        <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">Nombre del paquete</label>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && value) onConfirm(value) }}
+          placeholder="p. ej. PQ-CUBIERTAS-01"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-400 focus:outline-none dark:border-white/10 dark:bg-ink-900 dark:text-slate-100"
+        />
+
+        {existing.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">O usar uno existente</p>
+            <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
+              {existing.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setName(p)}
+                  className={[
+                    'rounded-full border px-2.5 py-1 text-xs font-medium transition',
+                    name === p
+                      ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-accent/40 dark:bg-accent/10 dark:text-accent'
+                      : 'border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent',
+                  ].join(' ')}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+          <button
+            onClick={() => onConfirm(value)}
+            disabled={!value}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900 dark:hover:bg-accent-400"
+          >
+            <Boxes className="h-4 w-4" /> Agrupar
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 

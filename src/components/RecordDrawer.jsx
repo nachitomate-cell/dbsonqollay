@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Save, Trash2, X } from 'lucide-react'
 
 /**
@@ -16,12 +16,32 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
 
   useEffect(() => setDraft(record), [record])
 
-  // Esc cierra el drawer.
+  // ¿Hay cambios sin guardar respecto del registro original?
+  const isDirty = () => {
+    if (!record) return false
+    for (const k of new Set([...Object.keys(record), ...Object.keys(draft)])) {
+      if (k === '_id') continue
+      if ((draft[k] ?? '') !== (record[k] ?? '')) return true
+    }
+    return false
+  }
+
+  // Cierra el drawer, pero si hay cambios sin guardar pide confirmación para no
+  // perder el avance. Se usa en TODAS las salidas: X, Cancelar, clic fuera y Esc.
+  const requestClose = () => {
+    if (isDirty() && !window.confirm('Tenés cambios sin guardar en esta ficha.\n¿Querés salir y perderlos?')) return
+    onClose()
+  }
+  // Ref siempre fresca para el handler de Esc (evita resuscribir en cada tecla).
+  const requestCloseRef = useRef(requestClose)
+  requestCloseRef.current = requestClose
+
+  // Esc cierra el drawer (con confirmación si hay cambios sin guardar).
   useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose()
+    const onKey = (e) => { if (e.key === 'Escape') requestCloseRef.current() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   if (!record) return null
   const visible = columns.filter((c) => c.visible)
@@ -31,7 +51,7 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60" onClick={requestClose} />
 
       <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
         {/* Header */}
@@ -40,7 +60,7 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
             <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-500">Ficha de elemento</p>
             <h3 className="truncate text-lg font-bold text-slate-900 dark:text-white">{title || 'Registro'}</h3>
           </div>
-          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5" aria-label="Cerrar">
+          <button onClick={requestClose} className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5" aria-label="Cerrar">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -80,7 +100,7 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
             Eliminar
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">
+            <button onClick={requestClose} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-300 dark:hover:bg-white/5">
               Cancelar
             </button>
             <button

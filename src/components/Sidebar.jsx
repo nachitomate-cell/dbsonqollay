@@ -1,6 +1,6 @@
 import { ArrowRight, ChevronLeft, ChevronRight, Globe } from 'lucide-react'
 import Icon from './Icon.jsx'
-import { disciplines } from '../data/disciplines.js'
+import { disciplines as staticDisciplines } from '../data/disciplines.js'
 
 /**
  * Menú lateral colapsable con las disciplinas de Sonqollay.
@@ -9,8 +9,10 @@ import { disciplines } from '../data/disciplines.js'
  *  - collapsed, onToggle()
  *  - activeDiscipline, onSelect(id)
  *  - onSelectAll(): item "Todas las disciplinas"
+ *  - disciplines: lista de disciplinas a mostrar. La provee App (viene de la base
+ *    de datos vía useDisciplines). Si no se pasa, usa el menú estático de respaldo.
  */
-export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelect, onSelectAll }) {
+export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActive, onSelect, onSelectAll, disciplines = staticDisciplines }) {
   return (
     <aside
       className={[
@@ -21,7 +23,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
     >
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5">
-        <img src="/logo-mark.png" alt="Sonqollay" className="h-10 w-10 shrink-0 object-contain" />
+        <img src="/aura1.png" alt="Aura" className="h-10 w-10 shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-sm font-extrabold leading-tight tracking-tight text-steel-700 dark:text-white">
@@ -39,9 +41,14 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
         <button
           onClick={onSelectAll}
           title={collapsed ? 'Todas las disciplinas' : undefined}
-          className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+          className={[
+            'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+            allActive
+              ? 'bg-brand-500 text-white shadow-sm dark:bg-accent/15 dark:text-white dark:ring-1 dark:ring-accent/40'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white',
+          ].join(' ')}
         >
-          <Globe className="h-[18px] w-[18px] shrink-0 text-slate-500 dark:text-slate-400" />
+          <Globe className={['h-[18px] w-[18px] shrink-0 transition-transform duration-300 ease-out group-hover:rotate-[20deg] group-hover:scale-110', allActive ? 'text-white dark:text-accent' : 'text-slate-500 dark:text-slate-400'].join(' ')} />
           {!collapsed && <span className="flex-1 truncate">Todas las disciplinas</span>}
         </button>
       </div>
@@ -67,7 +74,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
               <Icon
                 name={d.icon}
                 className={[
-                  'h-[18px] w-[18px] shrink-0 transition-colors',
+                  'h-[18px] w-[18px] shrink-0 transition-all duration-200 ease-out group-hover:-rotate-6 group-hover:scale-125',
                   active ? 'text-white dark:text-accent' : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-500 dark:group-hover:text-slate-300',
                 ].join(' ')}
               />
@@ -82,7 +89,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, onSelec
                         : 'border-slate-300 text-slate-400 group-hover:border-brand-400 group-hover:text-brand-500 dark:border-white/15 dark:text-slate-500 dark:group-hover:border-accent/40 dark:group-hover:text-accent',
                     ].join(' ')}
                   >
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                   </span>
                 </>
               )}

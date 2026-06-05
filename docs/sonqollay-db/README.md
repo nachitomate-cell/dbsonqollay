@@ -18,9 +18,9 @@ Sonqollay web ──publica──> Postgres (Supabase) <──ODBC/TAG── Nav
 
 1. Crear un proyecto en **https://supabase.com** (plan free alcanza para empezar).
 2. **Settings → Database → Connection string**:
-   - Para **Vercel/serverless** usá la cadena del **pooler "Transaction"** (puerto **6543**):
+   - Para **Vercel/serverless** usa la cadena del **pooler "Transaction"** (puerto **6543**):
      `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres`
-3. En **Vercel → Project → Settings → Environment Variables**, agregá:
+3. En **Vercel → Project → Settings → Environment Variables**, agrega:
    - `SQY_DATABASE_URL` = esa cadena de conexión.  *(secreto; no va al repo)*
 4. Redeploy. Listo: el próximo "Publicar para Navisworks" ya escribe a la base.
 
@@ -69,17 +69,17 @@ from sqy_dataset_rows where dataset_key = 'ele';
    - Nombre del DSN, p. ej. `Sonqollay`.
 2. En **Navisworks → Inicio → Herramientas → DataTools → Nuevo**:
    - **Nombre:** `Sonqollay`
-   - **Conexión ODBC:** seleccioná el DSN `Sonqollay` (o pegá la cadena).
-   - **SQL:** `SELECT * FROM sqy_v_ele`  *(usá la vista de la planilla; una por disciplina)*
+   - **Conexión ODBC:** selecciona el DSN `Sonqollay` (o pega la cadena).
+   - **SQL:** `SELECT * FROM sqy_v_ele`  *(usa la vista de la planilla; una por disciplina)*
    - **Campo de vínculo:**
      - *Categoría/Propiedad del modelo:* `BIM` / `TAG/Commodity`
      - *Campo de la base:* `TAG/Commodity` (o `tag`)
-   - Marcá el vínculo como **Activo** → Aceptar.
+   - Marca el vínculo como **Activo** → Aceptar.
 3. **Refresh** (botón actualizar de DataTools). Aparece una pestaña **Sonqollay**
    en Propiedades, **alimentada en vivo desde la base**.
-4. **Guardá el `.nwf`** para conservar el vínculo.
+4. **Guarda el `.nwf`** para conservar el vínculo.
 
-A partir de ahí: editás en la web → Publicar → **Refresh en Navisworks** → el
+A partir de ahí: editas en la web → Publicar → **Refresh en Navisworks** → el
 modelo muestra el dato actualizado, sin re-exportar nada.
 
 > Nota: DataTools agrega una pestaña viva (no *pisa* la pestaña "BIM" horneada en
@@ -90,6 +90,6 @@ modelo muestra el dato actualizado, sin re-exportar nada.
 
 ## Seguridad
 
-- Usá un **usuario de base de solo lectura** para el DSN de Navisworks (las
+- Usa un **usuario de base de solo lectura** para el DSN de Navisworks (las
   máquinas solo leen). El upsert lo hace el backend con su propia credencial.
 - La cadena `SQY_DATABASE_URL` vive **solo** en variables de entorno de Vercel.

@@ -315,8 +315,8 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onCreateSheet,
     >
       <button onClick={onToggleSelect} className="relative shrink-0" title={selected ? 'Quitar de la selección' : 'Agregar a la selección'}>
         <StatusBadge ok={selected} />
-        <div className="grid h-14 w-14 place-items-center rounded-lg border border-brand-200 bg-brand-50 text-brand-500 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
-          <Icon name={sub.icon} className="h-6 w-6" />
+        <div className="grid h-14 w-14 place-items-center rounded-lg border border-brand-200 bg-brand-50 text-brand-500 transition-transform duration-200 ease-out group-hover:scale-105 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
+          <Icon name={sub.icon} className="h-6 w-6 transition-transform duration-200 ease-out group-hover:-rotate-6 group-hover:scale-110" />
         </div>
       </button>
 
@@ -349,7 +349,7 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onCreateSheet,
       )}
       {openable ? (
         <button onClick={onOpen} className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-white/5 dark:hover:text-accent" title="Abrir grilla de datos">
-          <ArrowUpRight className="h-5 w-5" />
+          <ArrowUpRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
         </button>
       ) : (
         <button

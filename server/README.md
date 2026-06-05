@@ -8,7 +8,7 @@ del navegador y se encarga de subir y traducir los modelos.
 
 ```bash
 cd server
-cp .env.example .env        # pegá tus llaves reales de aps.autodesk.com
+cp .env.example .env        # pega tus llaves reales de aps.autodesk.com
 npm install
 npm start                   # http://localhost:3000
 ```
@@ -20,7 +20,7 @@ npm install
 npm run dev                 # http://localhost:5173
 ```
 
-En la app: abrí una subcategoría → vista **3D** → botón **"APS (real)"** →
+En la app: abre una subcategoría → vista **3D** → botón **"APS (real)"** →
 **"Subir modelo"**. El archivo se sube a Autodesk, se traduce y se muestra.
 
 ## Variables (.env)

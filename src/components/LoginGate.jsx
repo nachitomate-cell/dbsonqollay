@@ -48,7 +48,7 @@ function LoginScreen({ onSuccess }) {
       if (mode === 'signup') {
         const d = await signUp(email.trim(), password)
         if (d.access_token) onSuccess(d)
-        else setInfo('Cuenta creada. Revisá tu email para confirmar y luego iniciá sesión.')
+        else setInfo('Cuenta creada. Revisa tu correo para confirmar y luego inicia sesión.')
       } else {
         const d = await signIn(email.trim(), password)
         onSuccess(d)
@@ -69,7 +69,7 @@ function LoginScreen({ onSuccess }) {
         <div className="mb-6 text-center">
           <h1 className="text-lg font-bold leading-tight text-slate-800 dark:text-slate-100">Gestor de Información de Proyectos</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {mode === 'signup' ? 'Creá tu cuenta' : 'Iniciá sesión para continuar'}
+            {mode === 'signup' ? 'Crea tu cuenta' : 'Inicia sesión para continuar'}
           </p>
         </div>
 
@@ -102,7 +102,7 @@ function LoginScreen({ onSuccess }) {
           onClick={() => { setMode((m) => (m === 'signup' ? 'signin' : 'signup')); setError(''); setInfo('') }}
           className="mt-4 w-full text-center text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
-          {mode === 'signup' ? '¿Ya tenés cuenta? Iniciá sesión' : '¿No tenés cuenta? Registrate'}
+          {mode === 'signup' ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
         </button>
       </form>
     </div>

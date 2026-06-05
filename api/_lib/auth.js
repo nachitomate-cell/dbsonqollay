@@ -43,7 +43,7 @@ export async function withUser(req, res, send, handler) {
   if (!user) {
     res.status(401)
     res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ error: 'No autorizado: iniciá sesión.' }))
+    res.end(JSON.stringify({ error: 'No autorizado: inicia sesión.' }))
     return
   }
   return handler(user)

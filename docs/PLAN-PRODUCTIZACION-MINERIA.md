@@ -33,7 +33,7 @@ Leyenda de áreas: 🔴 Bloqueante · 🟠 Estructural · 🟡 Madurez de ingeni
 ### B3 — Autenticación + roles · **L**
 **Problema:** no hay login; un único `SQY_API_TOKEN` global; nadie sabe quién hace qué.
 **Acciones:**
-1. Adoptar **Supabase Auth** (ya usás Supabase Postgres) → email/password + magic link; SSO/SAML como fase posterior (ver D5).
+1. Adoptar **Supabase Auth** (ya usas Supabase Postgres) → email/password + magic link; SSO/SAML como fase posterior (ver D5).
 2. Tablas `users`, `memberships(user_id, org_id, role)` con roles `viewer | editor | approver | admin`.
 3. Verificación de JWT de Supabase en cada endpoint; el front manda el JWT en `Authorization`.
 4. Gating de UI por rol (ocultar editar/eliminar/publicar a `viewer`).
@@ -123,7 +123,7 @@ Leyenda de áreas: 🔴 Bloqueante · 🟠 Estructural · 🟡 Madurez de ingeni
 
 ### D2 — Navisworks bidireccional + vínculo por GUID · **L**
 **Problema:** el vínculo es por TAG como texto normalizado; publish manual.
-**Acciones:** vincular por GUID/ObjectId estable además del TAG; sincronización en dos sentidos (traer estado del modelo a la web); auto-publish por webhook al guardar (sin clic manual). Construye sobre el plugin SonqollaySync ya existente.
+**Acciones:** vincular por GUID/ObjectId estable además del TAG; sincronización en dos sentidos (traer estado del modelo a la web); auto-publish por webhook al guardar (sin clic manual). Construye sobre el plugin Aura BIM ya existente.
 **Aceptación:** match robusto sin colisiones de texto; cambios se reflejan sin pasos manuales.
 
 ### D3 — Dashboards y reportes · **L**

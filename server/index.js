@@ -9,7 +9,7 @@
  *   GET  /api/health                -> healthcheck
  *
  * Uso:
- *   1) cp .env.example .env  (y pegá tus llaves)
+ *   1) cp .env.example .env  (y pega tus llaves)
  *   2) npm install
  *   3) npm start
  */
