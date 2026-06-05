@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Bundle de Navisworks para SonqollaySync. Modelado en AuraBIM.bundle.
+<!-- Bundle de Navisworks para AuraBIM.
      Define el plugin como ManagedPlugin; la pestaña "Aura BIM" y el botón
-     "Asignar Propiedades" vienen del ribbon en Contents/en-US/SonqollaySync.xaml.
+     "Asignar Propiedades" vienen del ribbon en Contents/en-US/AuraBIM.xaml.
      Nw23 = Navisworks 2026 (Nw21=2024, Nw22=2025). -->
 <ApplicationPackage
     SchemaVersion="1.0"
     AppVersion="1.1.0"
     ProductType="Application"
     Name="Aura BIM"
-    Description="Sonqollay: asignar propiedades BIM al modelo desde la web"
-    Author="Sonqollay"
+    Description="Aura BIM: asignar propiedades BIM al modelo desde la web"
+    Author="Aura BIM"
     ProductCode="{7B3F1A2C-9D4E-4F60-AE21-5C8B6D0E1F34}"
     UpgradeCode="{1E9C7A55-3B22-49D8-8F0A-6D2E4B7C9A10}">
 
-    <CompanyDetails Name="Sonqollay" Url="" Email="" />
+    <CompanyDetails Name="Aura BIM" Url="" Email="" />
 
     <Components Description="Aura BIM Plugin">
         <RuntimeRequirements
@@ -23,7 +23,7 @@
             SeriesMax="Nw23" />
         <ComponentEntry
             AppType="ManagedPlugin"
-            ModuleName="./Contents/SonqollaySync.dll" />
+            ModuleName="./Contents/AuraBIM.dll" />
     </Components>
 
 </ApplicationPackage>

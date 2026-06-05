@@ -1,4 +1,4 @@
-<!-- Proyecto del plugin Sonqollay Sync para Navisworks Manage/Simulate 2026.
+<!-- Proyecto del plugin Aura BIM para Navisworks Manage/Simulate 2026.
      Navisworks 2026 apunta a .NET Framework 4.8 (x64).
 
      Compilar:
@@ -14,8 +14,8 @@
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>SonqollaySync</AssemblyName>
-    <RootNamespace>Sonqollay</RootNamespace>
+    <AssemblyName>AuraBIM</AssemblyName>
+    <RootNamespace>AuraBIM</RootNamespace>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -24,9 +24,9 @@
     <!-- Ruta de instalación de Navisworks 2026 (ajustá si difiere). -->
     <NavisworksPath Condition="'$(NavisworksPath)' == ''">C:\Program Files\Autodesk\Navisworks Manage 2026\</NavisworksPath>
 
-    <!-- Poné true para copiar el DLL a la carpeta de plugins al compilar. -->
+    <!-- Pon true para copiar el DLL a la carpeta de plugins al compilar. -->
     <DeployToNavisworks>false</DeployToNavisworks>
-    <NavisworksPluginsDir>$(AppData)\Autodesk Navisworks Manage 2026\Plugins\SonqollaySync\</NavisworksPluginsDir>
+    <NavisworksPluginsDir>$(AppData)\Autodesk Navisworks Manage 2026\Plugins\AuraBIM\</NavisworksPluginsDir>
   </PropertyGroup>
 
   <!-- DLLs de la API: por defecto LOCALES (vienen con la instalación de
@@ -69,21 +69,18 @@
   <!-- Solo compilar el .cs del plugin de esta carpeta. -->
   <ItemGroup>
     <Compile Remove="**/*.cs" />
-    <Compile Include="SonqollaySync.cs" />
+    <Compile Include="AuraBIM.cs" />
   </ItemGroup>
 
-  <!-- Logos embebidos en el DLL para la ventana de progreso. -->
+  <!-- Logo embebido en el DLL para la ventana de progreso. -->
   <ItemGroup>
-    <EmbeddedResource Include="assets\sonqollay.png">
-      <LogicalName>sonqollay.png</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="assets\synaptech.png">
-      <LogicalName>synaptech.png</LogicalName>
+    <EmbeddedResource Include="assets\aurabim.png">
+      <LogicalName>aurabim.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
   <!-- Copia opcional del DLL a la carpeta de plugins de Navisworks. -->
-  <Target Name="DeploySonqollay" AfterTargets="Build" Condition="'$(DeployToNavisworks)' == 'true'">
+  <Target Name="DeployAuraBIM" AfterTargets="Build" Condition="'$(DeployToNavisworks)' == 'true'">
     <MakeDir Directories="$(NavisworksPluginsDir)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(NavisworksPluginsDir)" />
   </Target>

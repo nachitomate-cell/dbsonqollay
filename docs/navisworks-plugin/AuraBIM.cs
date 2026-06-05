@@ -1,5 +1,5 @@
-// SonqollaySync — plugin de Navisworks 2026 que trae los datos editados en la
-// web Sonqollay y los escribe como propiedades custom en los elementos del
+// Aura BIM — plugin de Navisworks 2026 que trae los datos editados en la
+// web Aura BIM y los escribe como propiedades custom en los elementos del
 // modelo, vinculando por TAG.
 //
 // Al ejecutarlo, lista las planillas publicadas (GET /api/datasets) y te deja
@@ -7,7 +7,7 @@
 // cambiar de planilla.
 //
 // SIN dependencias externas (NuGet): WebClient + JavaScriptSerializer, ambos del
-// .NET Framework 4.8. Compilar con SonqollaySync.csproj (net48 / x64).
+// .NET Framework 4.8. Compilar con AuraBIM.csproj (net48 / x64).
 // Ver README.md para instalación y configuración.
 
 using System;
@@ -27,18 +27,18 @@ using Autodesk.Navisworks.Api.Plugins;
 using ComApi = Autodesk.Navisworks.Api.Interop.ComApi;
 using ComApiBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
 
-namespace Sonqollay
+namespace AuraBIM
 {
     // Ribbon propio: pestaña "Aura BIM" con botón "Asignar Propiedades" (definidos
-    // en SonqollaySync.xaml / .name del bundle). Modelado en el plugin AuraBIM.
-    [Plugin("SonqollaySync", "SQY",
+    // en AuraBIM.xaml / .name del bundle).
+    [Plugin("AuraBIM", "ABM",
             DisplayName = "Aura BIM",
-            ToolTip = "Trae los datos editados en Sonqollay y los escribe en el modelo")]
-    [Strings("SonqollaySync.name")]
-    [RibbonLayout("SonqollaySync.xaml")]
+            ToolTip = "Trae los datos editados en Aura BIM y los escribe en el modelo")]
+    [Strings("AuraBIM.name")]
+    [RibbonLayout("AuraBIM.xaml")]
     [RibbonTab("ID_TabAuraBIM", LoadForCanExecute = true)]
     [Command("ID_AsignarProps", LoadForCanExecute = true)]
-    public class SonqollaySync : CommandHandlerPlugin
+    public class AuraBIM : CommandHandlerPlugin
     {
         // El ribbon invoca este método con el id del botón.
         public override int ExecuteCommand(string commandId, params string[] parameters)
@@ -54,7 +54,7 @@ namespace Sonqollay
         }
 
         // La configuración (URL, token, propiedad de vínculo) se lee de
-        // SonqollaySync.config.json, ubicado junto al DLL. Ver clase Cfg al final
+        // AuraBIM.config.json, ubicado junto al DLL. Ver clase Cfg al final
         // y el archivo de ejemplo en instalador/. Así NO hay que recompilar para
         // cambiar el token o la URL: se distribuye el mismo DLL para todos.
 
@@ -67,7 +67,7 @@ namespace Sonqollay
             Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
             if (doc == null || doc.Models.Count == 0)
             {
-                MessageBox.Show("Abrí primero un modelo en Navisworks.");
+                MessageBox.Show("Abre primero un modelo en Navisworks.");
                 return 0;
             }
 
@@ -85,7 +85,7 @@ namespace Sonqollay
             if (index.Count == 0)
             {
                 MessageBox.Show("No hay planillas publicadas todavía.\n\n" +
-                                "En la web Sonqollay, abrí cada planilla y apretá \"Publicar para Navisworks\".");
+                                "En la web Aura BIM, abre cada planilla y pulsa \"Publicar para Navisworks\".");
                 return 0;
             }
 
@@ -133,13 +133,13 @@ namespace Sonqollay
             }
 
             string msg =
-                "Sonqollay Sync\n\n" +
+                "Aura BIM\n\n" +
                 "Planillas: " + chosen.Count + "\n" +
                 "Filas: " + totalRows + "\n" +
                 "TAGs encontrados: " + totalMatched + "\n" +
                 "Elementos actualizados: " + totalApplied + "\n" +
                 "TAGs sin geometría: " + totalMissing + "\n\n" +
-                "Guardá el archivo (.nwf/.nwd) para conservar las propiedades.";
+                "Guarda el archivo (.nwf/.nwd) para conservar las propiedades.";
             if (errores.Count > 0)
                 msg += "\n\nErrores:\n - " + string.Join("\n - ", errores);
             MessageBox.Show(msg);
@@ -270,36 +270,135 @@ namespace Sonqollay
             return ds;
         }
 
+        // Código de disciplina de una planilla: va entre paréntesis al final del
+        // nombre, p. ej. "Alumbrado (ALU)" o "Equipos EEL-01 (ELE)" -> ALU / ELE.
+        // Si no hay código, devuelve "—" (sin disciplina).
+        private static string DisciplineOf(DatasetInfo d)
+        {
+            string s = d != null ? (d.name ?? "") : "";
+            int close = s.LastIndexOf(')');
+            if (close > 0)
+            {
+                int open = s.LastIndexOf('(', close - 1);
+                if (open >= 0 && close - open > 1)
+                {
+                    string code = s.Substring(open + 1, close - open - 1).Trim();
+                    if (code.Length > 0) return code.ToUpperInvariant();
+                }
+            }
+            return "—";
+        }
+
         // ---- UI: elegir planillas ----------------------------------------
         private static List<DatasetInfo> ShowPicker(List<DatasetInfo> all)
         {
             var form = new Form
             {
-                Text = "Sonqollay — elegí las planillas a sincronizar",
-                ClientSize = new Size(460, 380),
+                Text = "Aura BIM — elige las planillas a sincronizar",
+                ClientSize = new Size(460, 410),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 MinimizeBox = false,
                 MaximizeBox = false,
             };
+
+            // Filtro por disciplina (combo) + "Seleccionar todos" (maestro).
+            var lblDisc = new Label { Text = "Disciplina:", Left = 12, Top = 16, Width = 64, Height = 20 };
+            var cboDisc = new ComboBox
+            {
+                Left = 78, Top = 12, Width = 180, Height = 24,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+            };
+            cboDisc.Items.Add("Todas");
+            foreach (var disc in all.Select(DisciplineOf).Distinct().OrderBy(x => x, StringComparer.Ordinal))
+                cboDisc.Items.Add(disc);
+            cboDisc.SelectedIndex = 0;
+
+            var chkAll = new CheckBox
+            {
+                Text = "Seleccionar todos", Left = 288, Top = 14, Width = 160, Height = 20,
+                Checked = true,
+            };
+
             var clb = new CheckedListBox
             {
-                Left = 12, Top = 12, Width = 436, Height = 300,
+                Left = 12, Top = 44, Width = 436, Height = 300,
                 CheckOnClick = true,
                 IntegralHeight = false,
             };
-            foreach (var d in all) clb.Items.Add(d, true); // todas marcadas por defecto
 
-            var ok = new Button { Text = "Sincronizar", Left = 268, Top = 324, Width = 90, Height = 30, DialogResult = DialogResult.OK };
-            var cancel = new Button { Text = "Cancelar", Left = 364, Top = 324, Width = 84, Height = 30, DialogResult = DialogResult.Cancel };
+            // El marcado se guarda por planilla y se conserva al cambiar de filtro:
+            // la disciplina es solo una vista; "Sincronizar" envía TODAS las marcadas.
+            var checkState = new Dictionary<DatasetInfo, bool>();
+            foreach (var d in all) checkState[d] = true;
+
+            bool refreshing = false;
+
+            // El maestro queda marcado solo si TODO lo visible está marcado.
+            void SyncMaster()
+            {
+                bool allChecked = clb.Items.Count > 0;
+                foreach (var it in clb.Items)
+                {
+                    var d = it as DatasetInfo;
+                    if (d != null && !checkState[d]) { allChecked = false; break; }
+                }
+                chkAll.Checked = allChecked;
+            }
+
+            // Repinta la lista según la disciplina elegida, conservando el marcado.
+            void Repopulate()
+            {
+                refreshing = true;
+                clb.Items.Clear();
+                string disc = cboDisc.SelectedItem as string ?? "Todas";
+                foreach (var d in all)
+                {
+                    if (disc != "Todas" && DisciplineOf(d) != disc) continue;
+                    clb.Items.Add(d, checkState[d]);
+                }
+                refreshing = false;
+                SyncMaster();
+            }
+
+            clb.ItemCheck += (s, e) =>
+            {
+                if (refreshing) return;
+                var d = clb.Items[e.Index] as DatasetInfo;
+                if (d != null) checkState[d] = (e.NewValue == CheckState.Checked);
+                SyncMaster();
+            };
+            cboDisc.SelectedIndexChanged += (s, e) => Repopulate();
+            chkAll.Click += (s, e) =>
+            {
+                // Marca/desmarca todo lo visible (y guarda su estado).
+                refreshing = true;
+                bool target = chkAll.Checked;
+                for (int i = 0; i < clb.Items.Count; i++)
+                {
+                    clb.SetItemChecked(i, target);
+                    var d = clb.Items[i] as DatasetInfo;
+                    if (d != null) checkState[d] = target;
+                }
+                refreshing = false;
+            };
+
+            var ok = new Button { Text = "Sincronizar", Left = 268, Top = 356, Width = 90, Height = 30, DialogResult = DialogResult.OK };
+            var cancel = new Button { Text = "Cancelar", Left = 364, Top = 356, Width = 84, Height = 30, DialogResult = DialogResult.Cancel };
+            form.Controls.Add(lblDisc);
+            form.Controls.Add(cboDisc);
+            form.Controls.Add(chkAll);
             form.Controls.Add(clb);
             form.Controls.Add(ok);
             form.Controls.Add(cancel);
             form.AcceptButton = ok;
             form.CancelButton = cancel;
 
+            Repopulate();
+
             if (form.ShowDialog() != DialogResult.OK) return new List<DatasetInfo>();
-            return clb.CheckedItems.Cast<DatasetInfo>().ToList();
+            // Todas las marcadas (en cualquier disciplina), no solo las visibles.
+            return all.Where(d => checkState[d]).ToList();
         }
 
         // ---- Matchear por TAG --------------------------------------------
@@ -395,7 +494,7 @@ namespace Sonqollay
                 ComApi.InwGUIPropertyNode2 node =
                     (ComApi.InwGUIPropertyNode2)state.GetGUIPropertyNode(path, true);
 
-                // Quitar pestañas "Sonqollay" previas para no acumular duplicados al
+                // Quitar pestañas "Aura BIM" previas para no acumular duplicados al
                 // re-sincronizar. SetUserDefined(0,...) crea SIEMPRE una nueva; el índice
                 // de RemoveUserDefined es 1-based entre las pestañas "user-defined".
                 var toRemove = new List<int>();
@@ -436,9 +535,8 @@ namespace Sonqollay
             return new string((s ?? "").Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray());
         }
 
-        // ---- Ventana de progreso (logos + barra + cancelar) --------------
-        // Producto Sonqollay (arriba, protagonista); desarrollado por SynapTech
-        // (abajo, crédito). Reemplaza a la barra nativa para poder mostrar logos.
+        // ---- Ventana de progreso (logo + barra + cancelar) --------------
+        // Logo Aura BIM arriba. Reemplaza a la barra nativa para mostrar el logo.
         private sealed class ProgressForm : Form
         {
             private readonly ProgressBar _bar;
@@ -447,18 +545,17 @@ namespace Sonqollay
 
             public ProgressForm()
             {
-                Text = "Sonqollay Sync";
+                Text = "Aura BIM";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
                 TopMost = true;
                 BackColor = System.Drawing.Color.White;
-                ClientSize = new Size(380, 290);
+                ClientSize = new Size(380, 234);
 
-                var sqy = LoadLogo("sonqollay.png");   // ~86x104
-                var syn = LoadLogo("synaptech.png");   // ~146x40
+                var sqy = LoadLogo("aurabim.png");   // ~108x104
 
-                // Logo Sonqollay, protagonista y centrado arriba.
+                // Logo Aura BIM, protagonista y centrado arriba.
                 var pbSqy = new PictureBox
                 {
                     Image = sqy,
@@ -489,29 +586,10 @@ namespace Sonqollay
                 };
                 btnCancel.Click += (s, e) => { Canceled = true; btnCancel.Enabled = false; _status.Text = "Cancelando…"; };
 
-                // Crédito "Desarrollado por" + logo SynapTech, abajo.
-                var lblBy = new Label
-                {
-                    Text = "Desarrollado por",
-                    AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
-                    Left = 20, Top = 238, Width = ClientSize.Width - 40, Height = 14,
-                    ForeColor = System.Drawing.Color.FromArgb(150, 155, 160),
-                    Font = new Font(Font.FontFamily, 7.5f),
-                };
-                var pbSyn = new PictureBox
-                {
-                    Image = syn,
-                    SizeMode = PictureBoxSizeMode.AutoSize,
-                    Top = 252,
-                };
-                pbSyn.Left = (ClientSize.Width - (syn?.Width ?? 146)) / 2;
-
                 Controls.Add(pbSqy);
                 Controls.Add(_status);
                 Controls.Add(_bar);
                 Controls.Add(btnCancel);
-                Controls.Add(lblBy);
-                Controls.Add(pbSyn);
 
                 ControlBox = false; // sin botón cerrar: se usa Cancelar
             }
@@ -541,7 +619,7 @@ namespace Sonqollay
             }
         }
 
-        // ---- Configuración (SonqollaySync.config.json junto al DLL) ------
+        // ---- Configuración (AuraBIM.config.json junto al DLL) ------
         // Valores por defecto embebidos; el config.json los pisa si existe.
         // Así se distribuye el mismo DLL para todos y solo cambia el .json.
         private static class Cfg
@@ -550,7 +628,7 @@ namespace Sonqollay
             public static string ApiToken = "";
             public static string LinkCategory = "BIM";
             public static string LinkProperty = "TAG/Commodity";
-            public static string TabName = "Sonqollay";
+            public static string TabName = "Aura BIM";
 
             static Cfg() { Load(); }
 
@@ -559,7 +637,7 @@ namespace Sonqollay
                 try
                 {
                     string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                    string path = Path.Combine(dir, "SonqollaySync.config.json");
+                    string path = Path.Combine(dir, "AuraBIM.config.json");
                     if (!File.Exists(path)) return;
                     var d = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path))
                             as Dictionary<string, object>;

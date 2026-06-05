@@ -1,4 +1,4 @@
-# Sonqollay → Navisworks (API en vivo)
+# Aura BIM → Navisworks (API en vivo)
 
 Trae a Navisworks los datos editados en las planillas de
 `https://basesonqollay.synaptechspa.cl/` mediante un plugin .NET que los
@@ -8,7 +8,7 @@ del modelo, vinculando por **TAG**.
 ## Arquitectura
 
 ```
-Web Sonqollay (edita planilla)
+Web Aura BIM (edita planilla)
    │  POST /api/datasets/:key   (botón "Publicar para Navisworks")
    ▼
 Backend (Vercel) ── guarda el dataset como JSON en el bucket APS
@@ -19,7 +19,7 @@ Plugin Navisworks (.NET)  ── matchea por TAG y escribe propiedades custom
 
 - **`key`** = el `dataKey` de la subcategoría/planilla. La web lo muestra al
   publicar (toast: `key: <...>`).
-- Los datos NO viven en el servidor hasta que apretás **"Publicar para
+- Los datos NO viven en el servidor hasta que pulsas **"Publicar para
   Navisworks"** en la web (ícono de compartir, en la barra de la planilla).
 
 ## Endpoints
@@ -52,7 +52,7 @@ Respuesta:
 
 ## Configuración del backend
 
-En Vercel → Environment Variables (Production), agregá:
+En Vercel → Environment Variables (Production), agrega:
 
 - `SQY_API_TOKEN` = un secreto largo y aleatorio. El plugin debe enviarlo en
   `Authorization: Bearer …` para poder **leer**. Si no se define, la lectura
@@ -65,13 +65,13 @@ En Vercel → Environment Variables (Production), agregá:
 
 ## El plugin (.NET)
 
-Ver [`SonqollaySync.cs`](./SonqollaySync.cs). Hace tres cosas:
+Ver [`AuraBIM.cs`](./AuraBIM.cs). Hace tres cosas:
 
 1. **Descarga** el dataset (`WebClient` + `JavaScriptSerializer`, sin NuGet).
 2. **Matchea por TAG**: arma un índice recorriendo los elementos y leyendo la
    propiedad de vínculo (por defecto `BIM` / `TAG/Commodity`, p. ej.
    `06940-BAT-011`) y la compara con `row[tagField]`. Es el mismo criterio que la web.
-3. **Escribe** los campos como una pestaña de propiedades custom ("Sonqollay")
+3. **Escribe** los campos como una pestaña de propiedades custom ("Aura BIM")
    usando el **COM API** (`InwGUIPropertyNode2.SetUserDefined` por elemento), ya
    que el API .NET es de solo lectura para propiedades.
 
@@ -79,32 +79,32 @@ Ver [`SonqollaySync.cs`](./SonqollaySync.cs). Hace tres cosas:
 
 El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
 
-### A) Vos: compilar y empaquetar (una sola vez)
-1. **Compilá** el DLL (PC con Navisworks 2024-2026 + Visual Studio 2022,
+### A) Tú: compilar y empaquetar (una sola vez)
+1. **Compila** el DLL (PC con Navisworks 2024-2026 + Visual Studio 2022,
    .NET Framework 4.8 x64):
    ```powershell
-   dotnet build SonqollaySync.csproj -c Release
+   dotnet build AuraBIM.csproj -c Release
    # si Navisworks está en otra ruta:
    #   ... -p:NavisworksPath="D:\Program Files\Autodesk\Navisworks Manage 2026\"
    ```
-2. **Poné el token**: copiá [`instalador/SonqollaySync.config.example.json`](./instalador/SonqollaySync.config.example.json)
-   a `instalador/SonqollaySync.config.json` y completá `apiToken` (= el mismo valor
+2. **Pon el token**: copia [`instalador/AuraBIM.config.example.json`](./instalador/AuraBIM.config.example.json)
+   a `instalador/AuraBIM.config.json` y completa `apiToken` (= el mismo valor
    de `SQY_API_TOKEN` de Vercel). Ese `.json` con el token **está gitignored**: no va
    al repo. (En CI no hace falta: el workflow inyecta el secret sobre el `.example`.)
-3. **Empaquetá**: clic derecho en `Empaquetar.ps1` → *Ejecutar con PowerShell*
+3. **Empaqueta**: clic derecho en `Empaquetar.ps1` → *Ejecutar con PowerShell*
    (o `powershell -ExecutionPolicy Bypass -File Empaquetar.ps1`).
-   Genera **`SonqollaySync-instalador.zip`** listo para enviar.
+   Genera **`AuraBIM-instalador.zip`** listo para enviar.
 
 ### B) El cliente: instalar (1 clic)
 1. Descomprime el `.zip`.
 2. Doble clic en **`Instalar.bat`** (copia el plugin a la carpeta de Navisworks
    de su usuario — detecta Manage/Simulate 2024-2026, sin permisos de admin).
-3. Abre Navisworks → pestaña **Add-ins** (*Complementos*) → **Sonqollay Sync**.
+3. Abre Navisworks → pestaña **Aura BIM** → botón **Asignar Propiedades**.
 
 > La configuración (URL + token + propiedad de vínculo) vive en
-> **`SonqollaySync.config.json`** junto al DLL (gitignored; en el repo solo está el
-> `.example`). Para cambiar el token **no hace falta recompilar**: editás el `.json`
-> y reempaquetás (o se lo reemplazás al cliente en su carpeta de plugins).
+> **`AuraBIM.config.json`** junto al DLL (gitignored; en el repo solo está el
+> `.example`). Para cambiar el token **no hace falta recompilar**: editas el `.json`
+> y reempaquetas (o se lo reemplazas al cliente en su carpeta de plugins).
 
 > **Vínculo por TAG**: el plugin matchea `linkCategory`/`linkProperty` (por
 > defecto `BIM` / `TAG/Commodity`) contra el TAG de la planilla. El **valor** del
@@ -120,7 +120,7 @@ que el cliente lo baje siempre del mismo link (o desde el botón **"Descargar
 plugin Navisworks"** en Configuración de la web).
 
 **Link estable (latest):**
-`https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/SonqollaySync-instalador.zip`
+`https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip`
 
 ### Automático (GitHub Actions)
 El workflow [`.github/workflows/plugin-release.yml`](../../.github/workflows/plugin-release.yml)
@@ -140,22 +140,22 @@ Configuración (una vez):
    botón de la web pasan a apuntar a esa versión.
 
 ### Manual (respaldo)
-Si preferís no usar CI: corré `Empaquetar.ps1` localmente y **subí el
-`SonqollaySync-instalador.zip` a una Release** a mano (GitHub → Releases → Draft
-a new release → adjuntá el zip con **ese mismo nombre**). El link *latest* y el
+Si prefieres no usar CI: ejecuta `Empaquetar.ps1` localmente y **sube el
+`AuraBIM-instalador.zip` a una Release** a mano (GitHub → Releases → Draft
+a new release → adjunta el zip con **ese mismo nombre**). El link *latest* y el
 botón funcionan igual.
 
 > El botón de la web da 404 hasta que exista la **primera** Release con el asset
-> `SonqollaySync-instalador.zip`.
+> `AuraBIM-instalador.zip`.
 
 ### Usar
-1. En la web: editá cada planilla → **"Publicar para Navisworks"** (una vez por
-   planilla; al re-editar, volvés a publicar y se sobrescribe).
-2. En Navisworks: abrí el modelo → pestaña **Aura BIM** → botón **Asignar Propiedades**.
-3. Aparece la **lista de planillas publicadas** con checkboxes → marcá las que
+1. En la web: edita cada planilla → **"Publicar para Navisworks"** (una vez por
+   planilla; al re-editar, vuelves a publicar y se sobrescribe).
+2. En Navisworks: abre el modelo → pestaña **Aura BIM** → botón **Asignar Propiedades**.
+3. Aparece la **lista de planillas publicadas** con checkboxes → marca las que
    quieras (vienen todas marcadas) → **Sincronizar**.
 4. El plugin descarga las elegidas, matchea por TAG y agrega la pestaña
-   **"Sonqollay"** a los elementos. **Guardá** como `.nwf`/`.nwd` para persistir.
+   **"Aura BIM"** a los elementos. **Guarda** como `.nwf`/`.nwd` para persistir.
 
 > No hace falta recompilar para cambiar de planilla ni cuando cambia su `key`:
 > el plugin siempre lista lo que haya publicado.

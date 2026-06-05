@@ -1,7 +1,7 @@
 name: Plugin Navisworks — Release
 
 # Compila el plugin en la nube (sin Navisworks instalado, vía paquetes NuGet) y
-# publica SonqollaySync-instalador.zip en una GitHub Release.
+# publica AuraBIM-instalador.zip en una GitHub Release.
 #
 # Disparadores:
 #   - push de un tag  plugin-v*   (ej: git tag plugin-v1.0 && git push origin plugin-v1.0)
@@ -32,39 +32,44 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Compilar (referencias NuGet)
-        run: dotnet build SonqollaySync.csproj -c Release -p:UseNugetRefs=true
+        run: dotnet build AuraBIM.csproj -c Release -p:UseNugetRefs=true
 
       - name: Armar el ZIP del instalador
         shell: pwsh
         env:
           SQY_API_TOKEN: ${{ secrets.SQY_API_TOKEN }}
         run: |
+          # No publicar un zip sin token: el plugin cargaria pero la sincronizacion
+          # daria 401 en todos los PC. Mejor fallar la release que entregar algo roto.
+          if (-not $env:SQY_API_TOKEN) {
+            throw "Falta el secret SQY_API_TOKEN (Settings -> Secrets -> Actions). El zip quedaria sin token."
+          }
           $stage = "package"
-          $bundle = Join-Path $stage 'SonqollaySync.bundle'
+          $bundle = Join-Path $stage 'AuraBIM.bundle'
           New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents/en-US') | Out-Null
           # Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM")
           Copy-Item bundle/PackageContents.xml $bundle
           Copy-Item bundle/Contents/en-US/* (Join-Path $bundle 'Contents/en-US')
           # DLL compilado -> Contents
-          $dll = Get-ChildItem -Recurse -Filter SonqollaySync.dll |
+          $dll = Get-ChildItem -Recurse -Filter AuraBIM.dll |
                  Where-Object { $_.FullName -match '\\bin\\' } |
                  Select-Object -First 1
-          if (-not $dll) { throw "No se encontro SonqollaySync.dll compilado" }
+          if (-not $dll) { throw "No se encontro AuraBIM.dll compilado" }
           Copy-Item $dll.FullName (Join-Path $bundle 'Contents')
           # config con el token inyectado (junto al DLL)
-          $cfg = Get-Content instalador/SonqollaySync.config.example.json -Raw
+          $cfg = Get-Content instalador/AuraBIM.config.example.json -Raw
           $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
-          Set-Content -Path (Join-Path $bundle 'Contents/SonqollaySync.config.json') -Value $cfg -NoNewline
+          Set-Content -Path (Join-Path $bundle 'Contents/AuraBIM.config.json') -Value $cfg -NoNewline
           # Instalador grafico (en la raiz del zip; copia el bundle a ApplicationPlugins)
           Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
-          Copy-Item assets/sonqollay.png,assets/synaptech.png $stage
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath SonqollaySync-instalador.zip -Force
+          Copy-Item assets/aurabim.png $stage
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath AuraBIM-instalador.zip -Force
 
       - name: Publicar Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: docs/navisworks-plugin/SonqollaySync-instalador.zip
+          files: docs/navisworks-plugin/AuraBIM-instalador.zip
           fail_on_unmatched_files: true
           name: Plugin Navisworks ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}

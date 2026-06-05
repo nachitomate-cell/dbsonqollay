@@ -3,7 +3,7 @@ import { Check, Download, Info, Moon, Server, Sun, Trash2, X } from 'lucide-reac
 
 // Link estable al último instalador publicado en GitHub Releases.
 const PLUGIN_URL =
-  'https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/SonqollaySync-instalador.zip'
+  'https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip'
 
 const DEFAULT_API = import.meta.env.VITE_APS_API || (import.meta.env.DEV ? 'http://localhost:3000' : '')
 
@@ -109,7 +109,7 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
             <p className={label}><Download className="h-3.5 w-3.5" /> Plugin Navisworks</p>
             <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
               Lleva los datos de las planillas a tu modelo de Navisworks (Manage/Simulate
-              2024-2026). Descargá el .zip y doble clic en <span className="font-mono">Instalar.bat</span>.
+              2024-2026). Descarga el .zip y doble clic en <span className="font-mono">Instalar.bat</span>.
             </p>
             <a
               href={PLUGIN_URL}

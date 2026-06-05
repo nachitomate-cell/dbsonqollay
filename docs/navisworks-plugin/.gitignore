@@ -3,4 +3,5 @@ obj/
 *.zip
 
 # Config local con el token real (NO subir). Se versiona solo el .example.
+instalador/AuraBIM.config.json
 instalador/SonqollaySync.config.json
