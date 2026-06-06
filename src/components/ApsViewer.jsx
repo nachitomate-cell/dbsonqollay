@@ -140,23 +140,37 @@ function hasSize(el) {
   return !!el && el.clientWidth > 0 && el.clientHeight > 0
 }
 
+// Diagonal del bounding box (para saber si el modelo dejó de crecer). Evita
+// depender de THREE: usa min/max del Box3 directamente.
+function bboxSpan(b) {
+  if (!b?.min || !b?.max) return 0
+  const dx = b.max.x - b.min.x, dy = b.max.y - b.min.y, dz = b.max.z - b.min.z
+  return Math.sqrt(dx * dx + dy * dy + dz * dz)
+}
+
 function frameModel(viewer) {
-  let tries = 0, framed = 0
+  let tries = 0, lastSpan = -1, stable = 0
   const fit = () => {
-    if (!viewer || !viewer.model) return
-    // Si el contenedor aún no tomó tamaño, NO hacemos resize (iría a 0 y dejaría
-    // el canvas en cero); reintentamos hasta que el layout le dé alto/ancho.
-    if (hasSize(viewer.container)) {
+    if (!viewer) return
+    if (viewer.model && hasSize(viewer.container)) {
       try {
         viewer.resize()
-        // fitToView(ids, model, immediate=true) encuadra todo el modelo sin animar.
-        viewer.fitToView(null, viewer.model, true)
+        // Encuadra al bounding box REAL del modelo (más fiable que fitToView para
+        // modelos grandes); fallback a fitToView si no hay navigation.fitBounds.
+        const bbox = viewer.model.getBoundingBox?.()
+        if (bbox && viewer.navigation?.fitBounds) viewer.navigation.fitBounds(true, bbox)
+        else viewer.fitToView(null, viewer.model, true)
+        // ¿El bounding box dejó de crecer? La geometría llega por streaming, así
+        // que reencuadramos mientras crece y paramos cuando se estabiliza (evita
+        // dejarlo "muy lejos" por un encuadre prematuro a una caja parcial).
+        const span = bboxSpan(bbox)
+        if (span > 0 && Math.abs(span - lastSpan) <= span * 0.001) { if (++stable >= 3) return }
+        else stable = 0
+        lastSpan = span
       } catch { /* el visor aún no está listo; lo intenta el próximo tick */ }
-      framed++
     }
-    // Reintenta unos segundos: espera a tener tamaño y reencuadra unas pocas
-    // veces mientras la geometría sigue llegando por streaming.
-    if (++tries < 24 && framed < 6) setTimeout(fit, 200)
+    // Reintenta hasta ~6 s (la geometría grande tarda en terminar de llegar).
+    if (++tries < 30) setTimeout(fit, 200)
   }
   // Primer intento en el siguiente frame (deja que el canvas tome su tamaño).
   requestAnimationFrame(fit)
