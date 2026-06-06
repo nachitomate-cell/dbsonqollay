@@ -6,7 +6,7 @@ import { disciplinesStructure } from './disciplinesStructure.js'
  * Estructura de navegación de Sonqollay.
  *
  * La jerarquía (disciplinas → subcategorías) vive en `disciplinesStructure.js`
- * (fuente única, sin conteos). Acá le adjuntamos el `count` real calculado desde
+ * (fuente única, sin conteos). Aquí le adjuntamos el `count` real calculado desde
  * los datasets. Una subcategoría puede apuntar a un dataset real (`dataKey` ->
  * clave dentro de engineering.json / mock.js) o no tener datos.
  *

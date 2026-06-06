@@ -29,7 +29,7 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
   // Cierra el drawer, pero si hay cambios sin guardar pide confirmación para no
   // perder el avance. Se usa en TODAS las salidas: X, Cancelar, clic fuera y Esc.
   const requestClose = () => {
-    if (isDirty() && !window.confirm('Tenés cambios sin guardar en esta ficha.\n¿Querés salir y perderlos?')) return
+    if (isDirty() && !window.confirm('Tienes cambios sin guardar en esta ficha.\n¿Quieres salir y perderlos?')) return
     onClose()
   }
   // Ref siempre fresca para el handler de Esc (evita resuscribir en cada tecla).

@@ -8,6 +8,7 @@ import AllDisciplinesView from './components/AllDisciplinesView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import AddDisciplineModal from './components/AddDisciplineModal.jsx'
+import OnboardingTour from './components/OnboardingTour.jsx'
 import { useAuth } from './components/LoginGate.jsx'
 import { datasets as baseDatasets, defaultColumns, emptyDataset } from './data/disciplines.js'
 import { useDisciplines } from './hooks/useDisciplines.js'
@@ -51,6 +52,18 @@ export default function App({ project, onChangeProject }) {
   }, [createdSheetsKey, createdSheets])
 
   const [showAddDiscipline, setShowAddDiscipline] = useState(false)
+  // Tour de bienvenida: se muestra al entrar a un proyecto en blanco la primera
+  // vez (se recuerda por proyecto). Reabrible desde el estado vacío.
+  const tourKey = `sqy-onboarding-${project.id}`
+  const [showTour, setShowTour] = useState(() => {
+    if (!project.empty) return false
+    try { return localStorage.getItem(tourKey) !== '1' } catch { return true }
+  })
+  function dismissTour(openAdd) {
+    try { localStorage.setItem(tourKey, '1') } catch { /* ignore */ }
+    setShowTour(false)
+    if (openAdd) setShowAddDiscipline(true)
+  }
 
   // Menú de disciplinas: viene de la base de datos (con fallback al estático).
   // Un proyecto vacío arranca SIN disciplinas base (solo las que cree el usuario).
@@ -295,12 +308,20 @@ export default function App({ project, onChangeProject }) {
                 <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                   Este proyecto está vacío. Agrega una disciplina para empezar a importar planillas y datos de ingeniería.
                 </p>
-                <button
-                  onClick={() => setShowAddDiscipline(true)}
-                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900"
-                >
-                  <Plus className="h-4 w-4" /> Agregar disciplina
-                </button>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    onClick={() => setShowAddDiscipline(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900"
+                  >
+                    <Plus className="h-4 w-4" /> Agregar disciplina
+                  </button>
+                  <button
+                    onClick={() => setShowTour(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:text-brand-600 dark:border-white/10 dark:text-slate-300 dark:hover:text-accent"
+                  >
+                    Ver tutorial
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -315,6 +336,10 @@ export default function App({ project, onChangeProject }) {
 
       {showAddDiscipline && (
         <AddDisciplineModal onCreate={createDiscipline} onClose={() => setShowAddDiscipline(false)} />
+      )}
+
+      {showTour && (
+        <OnboardingTour onClose={() => dismissTour(false)} onFinish={() => dismissTour(true)} />
       )}
 
       <PwaPrompt />
