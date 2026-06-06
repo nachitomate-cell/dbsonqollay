@@ -15,15 +15,28 @@ import { loadWorking, removeWorking, saveWorking } from '../utils/datastore'
 let _seq = 0
 const genId = () => `r${Date.now().toString(36)}_${(_seq++).toString(36)}`
 
+// Regla de negocio: TODO valor de texto de las planillas se almacena en
+// MAYÚSCULAS. `upper` no toca números, null/undefined ni el `_id` de la fila.
+const upper = (v) => (typeof v === 'string' ? v.toUpperCase() : v)
+// Aplica `upper` a todos los valores de un patch/fila, preservando `_id`.
+const upperPatch = (obj) => {
+  const out = {}
+  for (const k in obj) out[k] = k === '_id' ? obj[k] : upper(obj[k])
+  return out
+}
+const upperRows = (rows) => (rows ?? []).map(upperPatch)
+
 function build(dataset) {
   const columns = (dataset?.headers ?? []).map((h) => ({ key: h, visible: true }))
-  const rows = (dataset?.rows ?? []).map((r) => ({ ...r, _id: genId() }))
+  // Migra a MAYÚSCULAS lo ya ingresado al construir el estado editable.
+  const rows = (dataset?.rows ?? []).map((r) => ({ ...upperPatch(r), _id: genId() }))
   return { columns, rows, dirty: false }
 }
 
 function init(dataKey, dataset) {
   const p = loadWorking(dataKey)
-  if (p) return { ...p, dirty: true }
+  // También normaliza a MAYÚSCULAS el trabajo previo guardado en localStorage.
+  if (p) return { ...p, rows: upperRows(p.rows), dirty: true }
   return build(dataset)
 }
 
@@ -73,7 +86,8 @@ export function useEditableDataset(dataKey, dataset) {
         })
       },
       updateRecord(id, patch) {
-        mutate((s) => ({ ...s, rows: s.rows.map((r) => (r._id === id ? { ...r, ...patch } : r)) }))
+        const up = upperPatch(patch)
+        mutate((s) => ({ ...s, rows: s.rows.map((r) => (r._id === id ? { ...r, ...up } : r)) }))
       },
       addRecord() {
         const blank = { _id: genId() }
@@ -90,7 +104,7 @@ export function useEditableDataset(dataKey, dataset) {
         const _id = genId()
         mutate((s) => {
           const row = { _id }
-          s.columns.forEach((c) => (row[c.key] = data?.[c.key] ?? ''))
+          s.columns.forEach((c) => (row[c.key] = upper(data?.[c.key] ?? '')))
           const idx = s.rows.findIndex((r) => r._id === referenceId)
           const rows = [...s.rows]
           if (idx < 0) rows.unshift(row)
@@ -112,7 +126,7 @@ export function useEditableDataset(dataKey, dataset) {
           const columns = [...s.columns, ...newCols]
           const rows = list.map((r) => {
             const row = { _id: genId() }
-            columns.forEach((c) => (row[c.key] = r[c.key] ?? ''))
+            columns.forEach((c) => (row[c.key] = upper(r[c.key] ?? '')))
             return row
           })
           return { ...s, columns, rows: [...rows, ...s.rows] }
@@ -123,7 +137,8 @@ export function useEditableDataset(dataKey, dataset) {
       updateRecords(ids, patch) {
         const set = new Set(ids || [])
         if (!set.size) return
-        mutate((s) => ({ ...s, rows: s.rows.map((r) => (set.has(r._id) ? { ...r, ...patch } : r)) }))
+        const up = upperPatch(patch)
+        mutate((s) => ({ ...s, rows: s.rows.map((r) => (set.has(r._id) ? { ...r, ...up } : r)) }))
       },
       deleteRecord(id) {
         mutate((s) => ({ ...s, rows: s.rows.filter((r) => r._id !== id) }))

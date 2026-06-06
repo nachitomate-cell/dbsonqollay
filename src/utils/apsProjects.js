@@ -50,6 +50,19 @@ const apiBase = () =>
   import.meta.env.VITE_APS_API ||
   ''
 
+// El bucket de APS guarda TANTO los modelos 3D subidos COMO las planillas
+// publicadas para Navisworks (`datasets/<key>.json`, `datasets/__index__.json`).
+// Estas últimas NO son modelos: hay que excluirlas para que no aparezcan en la
+// lista de "Modelos guardados". Un modelo nunca es un `.json` ni vive bajo
+// `datasets/`.
+function isModelObject(objectKey, name) {
+  const k = String(objectKey || name || '').toLowerCase()
+  if (!k) return false
+  if (k.startsWith('datasets/') || k.includes('__index__')) return false
+  if (k.endsWith('.json')) return false
+  return true
+}
+
 export async function fetchAllProjects() {
   const local = listProjects()
   try {
@@ -60,6 +73,7 @@ export async function fetchAllProjects() {
     const byUrn = new Map()
     for (const p of local) byUrn.set(p.urn, { ...p })
     for (const r of remote) {
+      if (!isModelObject(r.objectKey, r.name)) continue // ignora planillas publicadas, no son modelos
       const existing = byUrn.get(r.urn)
       if (existing) existing.objectKey = r.objectKey // enlaza el objeto del bucket para poder borrarlo
       else byUrn.set(r.urn, { urn: r.urn, name: r.name, objectKey: r.objectKey, savedAt: null, remote: true })

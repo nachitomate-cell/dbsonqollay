@@ -16,7 +16,16 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const b = req.body || {}
       const headers = Array.isArray(b.headers) ? b.headers : []
-      const rows = Array.isArray(b.rows) ? b.rows : []
+      // Regla de negocio: TODO valor de texto de las planillas se almacena en
+      // MAYÚSCULAS (números y no-texto se dejan tal cual). Red de seguridad en
+      // el servidor por si llega algo sin normalizar desde el cliente.
+      const upper = (v) => (typeof v === 'string' ? v.toUpperCase() : v)
+      const rows = (Array.isArray(b.rows) ? b.rows : []).map((r) => {
+        if (!r || typeof r !== 'object') return r
+        const out = {}
+        for (const k in r) out[k] = upper(r[k])
+        return out
+      })
       // Límites anti-abuso (defensa básica mientras no haya auth; Vercel ya
       // limita el body a ~4.5MB). Una planilla real ronda cientos de filas.
       if (headers.length > 500) return send(res, 413, { error: 'Demasiadas columnas (máx 500).' })

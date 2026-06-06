@@ -14,6 +14,7 @@ import {
   Columns2,
   Columns3,
   Copy,
+  Database,
   Download,
   Filter,
   GripVertical,
@@ -129,6 +130,19 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [publish, setPublish] = useState(null)
   const [publishElapsed, setPublishElapsed] = useState(0) // ms transcurridos (cronómetro en vivo)
   const publishStartRef = useRef(0)
+  // Autoguardado en la base de datos: idle | saving | saved | error (+ at, error).
+  const [autosave, setAutosave] = useState({ status: 'idle' })
+  const autosaveTimer = useRef(null)
+  const skipFirstAutosave = useRef(true) // no auto-subir al abrir/restaurar; solo tras editar
+  // "Pendiente": hay cambios sin confirmar en la DB (entre una edición y un
+  // guardado exitoso). Habilita "Guardar ahora" y el aviso al cerrar la pestaña.
+  const [pendingSave, setPendingSave] = useState(false)
+  const pendingRef = useRef(false) // espejo para el handler de beforeunload (sin re-render)
+  const setPending = (v) => { pendingRef.current = v; setPendingSave(v) }
+  // Versionado de ediciones: si llega una edición MIENTRAS se guarda, no marcamos
+  // "guardado" al volver (quedaría pendiente la nueva). saved == edit ⇒ al día.
+  const editVersionRef = useRef(0)
+  const savedVersionRef = useRef(0)
 
   const scrollRef = useRef(null)
   const viewerWrapRef = useRef(null)
@@ -229,6 +243,74 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       setPublish({ status: 'error', error: e.message, key: subcategory.dataKey, ms })
     }
   }
+
+  // --- Autoguardado en la base de datos ---------------------------------------
+  // Sube la planilla completa al backend (POST /api/datasets/:key), el mismo
+  // endpoint del publish, que la persiste en Postgres (upsertDatasetToDb) además
+  // del bucket APS. Es single-tenant: reemplaza el dataset de esta key (no hay
+  // aislamiento por usuario aún → S1/B4 pendientes). Datos siempre frescos vía
+  // ref para que el guardado diferido no use una copia vieja.
+  const saveDataRef = useRef(null)
+  saveDataRef.current = { rows, headers, name: subcategory.name, dataKey: subcategory.dataKey }
+  async function autosaveToDb() {
+    const { rows, headers, name, dataKey } = saveDataRef.current
+    const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+    const version = editVersionRef.current // versión que estamos por persistir
+    setAutosave({ status: 'saving' })
+    try {
+      const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, tagField: headers[0], headers, rows: rows.map(({ _id, ...r }) => r) }),
+      })
+      const ct = res.headers.get('content-type') || ''
+      const j = ct.includes('application/json') ? await res.json() : {}
+      if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
+      // El publish nunca falla por la DB (es aditivo): si Postgres no está
+      // configurado o falló, lo informa en j.db. No mentimos: lo marcamos error.
+      if (j.db && (j.db.error || j.db.skipped)) {
+        setAutosave({ status: 'error', at: Date.now(), error: j.db.error || 'La base de datos no está configurada en el servidor.' })
+        return // queda pendiente (no tocamos pendingRef)
+      }
+      savedVersionRef.current = version
+      setAutosave({ status: 'saved', at: Date.now() })
+      // Solo "al día" si no llegó otra edición mientras se guardaba.
+      if (editVersionRef.current === version) setPending(false)
+    } catch (e) {
+      setAutosave({ status: 'error', at: Date.now(), error: e.message }) // queda pendiente
+    }
+  }
+  // Fuerza el guardado inmediato (botón "Guardar ahora"), sin esperar el debounce.
+  function flushAutosave() {
+    if (autosaveTimer.current) { clearTimeout(autosaveTimer.current); autosaveTimer.current = null }
+    autosaveToDb()
+  }
+
+  // Debounce: tras cada edición agenda el guardado ~1.5 s después de la última
+  // tecla (así no sube en cada pulsación). No corre en el primer render (mount o
+  // restauración desde localStorage) para no auto-subir al abrir la planilla.
+  useEffect(() => {
+    if (skipFirstAutosave.current) { skipFirstAutosave.current = false; return }
+    if (!dirty) return
+    editVersionRef.current += 1
+    setPending(true)
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current)
+    autosaveTimer.current = setTimeout(autosaveToDb, 1500)
+    return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, columns, dirty])
+
+  // Aviso del navegador si se cierra/recarga la pestaña con un guardado pendiente
+  // (cambios aún no confirmados en la DB). Usa el ref para leer el último valor.
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      if (!pendingRef.current) return
+      e.preventDefault()
+      e.returnValue = '' // dispara el diálogo estándar "¿Salir del sitio?"
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [])
 
   // Exporta la vista actual (columnas visibles + filas filtradas) a CSV o Excel.
   async function handleExport(format) {
@@ -794,6 +876,18 @@ export default function DataTable({ dataset, subcategory, onBack }) {
               <ViewToggle active={viewMode === 'bim'} icon={Box} label="3D" onClick={() => setViewMode('bim')} />
               <ViewToggle active={viewMode === 'split'} icon={Columns2} label="Dividido" onClick={() => setViewMode('split')} />
             </div>
+
+            {/* Indicador de autoguardado en la base de datos + "Guardar ahora" */}
+            <AutosaveBadge state={autosave} onRetry={autosaveToDb} />
+            {pendingSave && (autosave.status === 'idle' || autosave.status === 'saved') && (
+              <button
+                onClick={flushAutosave}
+                title="Guardar los cambios en la base de datos ahora, sin esperar"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-accent/40 dark:bg-ink-800 dark:text-accent dark:hover:bg-accent/10"
+              >
+                <Database className="h-3.5 w-3.5" /> Guardar ahora
+              </button>
+            )}
 
             <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
               <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
@@ -1562,6 +1656,41 @@ function ViewToggle({ active, icon: IconCmp, label, onClick }) {
       <IconCmp className="h-4 w-4" />
       {label}
     </button>
+  )
+}
+
+// Indicador de autoguardado en la base de datos. Informa el estado real de la
+// persistencia: idle (activo, sin cambios), saving (subiendo), saved (con hora) o
+// error (clic para reintentar). NO afirma "guardado en la DB" si no lo está.
+function AutosaveBadge({ state, onRetry }) {
+  const fmt = (t) => { try { return new Date(t).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
+  const base = 'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium'
+  if (state.status === 'saving') {
+    return (
+      <span title="Autoguardando los cambios en la base de datos…" className={`${base} border-brand-200 bg-brand-50 text-brand-700 dark:border-accent/30 dark:bg-accent/10 dark:text-accent`}>
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando en la base de datos…
+      </span>
+    )
+  }
+  if (state.status === 'saved') {
+    return (
+      <span title={`Tus cambios se guardaron en la base de datos a las ${fmt(state.at)}`} className={`${base} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400`}>
+        <Database className="h-3.5 w-3.5" /> Guardado en la base de datos <Check className="h-3.5 w-3.5" />
+      </span>
+    )
+  }
+  if (state.status === 'error') {
+    return (
+      <button onClick={onRetry} title={state.error || 'No se pudo guardar en la base de datos. Clic para reintentar.'} className={`${base} border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-400`}>
+        <TriangleAlert className="h-3.5 w-3.5" /> Sin guardar — reintentar
+      </button>
+    )
+  }
+  // idle: informa que el autoguardado está activo aunque todavía no haya cambios.
+  return (
+    <span title="Tus cambios se guardan automáticamente en la base de datos" className={`${base} border-slate-200 bg-slate-50 text-slate-500 dark:border-white/10 dark:bg-ink-900/40 dark:text-slate-400`}>
+      <Database className="h-3.5 w-3.5" /> Autoguardado activo
+    </span>
   )
 }
 

@@ -46,7 +46,8 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
   if (!record) return null
   const visible = columns.filter((c) => c.visible)
 
-  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value }))
+  // Todo lo ingresado en las planillas se guarda y se muestra en MAYÚSCULAS.
+  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value.toUpperCase() }))
   const isLong = (key) => /DESCRIP|OBSERV|NOTA|COMENT/i.test(key)
 
   return (

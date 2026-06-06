@@ -15,11 +15,11 @@ import { useCallback, useEffect, useState } from 'react'
  *  - removeImported(subId)
  *  - importing, error
  */
-const LS_KEY = 'sqy-imports-v1'
+const lsKey = (projectId) => `sqy-imports-v1${projectId ? `-${projectId}` : ''}`
 
-function loadPersisted() {
+function loadPersisted(key) {
   try {
-    const raw = localStorage.getItem(LS_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return { datasets: {}, subs: {} }
     const parsed = JSON.parse(raw)
     return { datasets: parsed.datasets || {}, subs: parsed.subs || {} }
@@ -63,7 +63,9 @@ function aoaToDataset(aoa) {
     for (let c = 0; c < ncol; c++) {
       let v = r[c]
       if (v == null) v = ''
-      if (typeof v === 'number' && Number.isInteger(v)) v = v
+      // Los datos de las planillas se almacenan en MAYÚSCULAS (los números
+      // y demás tipos no-texto se dejan tal cual).
+      if (typeof v === 'string') v = v.toUpperCase()
       rec[headers[c]] = v
     }
     rows.push(rec)
@@ -71,18 +73,19 @@ function aoaToDataset(aoa) {
   return { headers, rows, count: rows.length }
 }
 
-export function useImportedDatasets() {
-  const [{ datasets, subs }, setState] = useState(loadPersisted)
+export function useImportedDatasets(projectId) {
+  const KEY = lsKey(projectId)
+  const [{ datasets, subs }, setState] = useState(() => loadPersisted(KEY))
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     try {
-      localStorage.setItem(LS_KEY, JSON.stringify({ datasets, subs }))
+      localStorage.setItem(KEY, JSON.stringify({ datasets, subs }))
     } catch {
       /* cuota excedida: se ignora la persistencia */
     }
-  }, [datasets, subs])
+  }, [KEY, datasets, subs])
 
   const importFile = useCallback(async (file, disciplineId) => {
     setImporting(true)

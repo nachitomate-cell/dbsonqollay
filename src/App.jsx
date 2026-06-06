@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Plus, Sprout } from 'lucide-react'
 import PwaPrompt from './components/PwaPrompt.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
@@ -6,9 +7,12 @@ import DisciplineView from './components/DisciplineView.jsx'
 import AllDisciplinesView from './components/AllDisciplinesView.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
+import AddDisciplineModal from './components/AddDisciplineModal.jsx'
+import { useAuth } from './components/LoginGate.jsx'
 import { datasets as baseDatasets, defaultColumns, emptyDataset } from './data/disciplines.js'
 import { useDisciplines } from './hooks/useDisciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
+import { useCustomDisciplines } from './hooks/useCustomDisciplines.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 
 /**
@@ -21,7 +25,8 @@ import { exportProjectToExcel } from './utils/projectExport.js'
  * Los datasets importados (hook) se fusionan con los base, y sus subcategorías
  * se inyectan dinámicamente en la disciplina correspondiente.
  */
-export default function App() {
+export default function App({ project, onChangeProject }) {
+  const { user, isDemo, signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeDiscipline, setActiveDiscipline] = useState('electrico')
@@ -36,18 +41,25 @@ export default function App() {
   })
   const [notice, setNotice] = useState(null)
   // Subcategorías sin datos para las que el usuario creó una planilla vacía,
-  // con las columnas elegidas. Se persiste { subId: columns[] } entre recargas.
+  // con las columnas elegidas. Se persiste { subId: columns[] } por proyecto.
+  const createdSheetsKey = `sqy-created-sheets-v2-${project.id}`
   const [createdSheets, setCreatedSheets] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('sqy-created-sheets-v2')) || {} } catch { return {} }
+    try { return JSON.parse(localStorage.getItem(createdSheetsKey)) || {} } catch { return {} }
   })
   useEffect(() => {
-    localStorage.setItem('sqy-created-sheets-v2', JSON.stringify(createdSheets))
-  }, [createdSheets])
+    localStorage.setItem(createdSheetsKey, JSON.stringify(createdSheets))
+  }, [createdSheetsKey, createdSheets])
+
+  const [showAddDiscipline, setShowAddDiscipline] = useState(false)
 
   // Menú de disciplinas: viene de la base de datos (con fallback al estático).
-  const { disciplines: baseDisciplines } = useDisciplines()
+  // Un proyecto vacío arranca SIN disciplinas base (solo las que cree el usuario).
+  const { disciplines: dbDisciplines } = useDisciplines()
+  const baseDisciplines = project.empty ? [] : dbDisciplines
+  // Disciplinas creadas por el usuario (scopeadas al proyecto), fusionadas.
+  const { customDisciplines, addDiscipline, removeDiscipline } = useCustomDisciplines(project.id)
 
-  const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets()
+  const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets(project.id)
 
   useEffect(() => {
     const root = document.documentElement
@@ -55,14 +67,14 @@ export default function App() {
     localStorage.setItem('sqy-theme', theme)
   }, [theme])
 
-  // Datasets y disciplinas fusionados (base + importados).
+  // Datasets y disciplinas fusionados (base + personalizadas + importados).
   const allDatasets = useMemo(() => ({ ...baseDatasets, ...importedDatasets }), [importedDatasets])
   const disciplines = useMemo(
     () =>
-      baseDisciplines.map((d) =>
+      [...baseDisciplines, ...customDisciplines].map((d) =>
         extraSubs[d.id]?.length ? { ...d, subcategories: [...d.subcategories, ...extraSubs[d.id]] } : d,
       ),
-    [baseDisciplines, extraSubs],
+    [baseDisciplines, customDisciplines, extraSubs],
   )
 
   // Plantillas de columnas disponibles al crear una planilla nueva: las columnas
@@ -123,7 +135,8 @@ export default function App() {
     .filter(Boolean)
 
   const crumbs = useMemo(() => {
-    const list = [{ label: 'Gestor de Información de Proyectos' }]
+    // El nombre del proyecto es la raíz y, al clicar, vuelve al selector.
+    const list = [{ label: project.name, onClick: onChangeProject }]
     if (activeSub) {
       // Una planilla abierta: muestra su disciplina real (sirve también cuando se
       // abrió desde "Todas las disciplinas") y su nombre.
@@ -144,6 +157,19 @@ export default function App() {
     setActiveDiscipline(id)
     setActiveSub(null)
     setShowAll(false)
+  }
+  // Crea una disciplina nueva y la deja seleccionada.
+  function createDiscipline({ name, icon }) {
+    const id = addDiscipline({ name, icon })
+    setShowAddDiscipline(false)
+    if (id) selectDiscipline(id)
+  }
+  // Elimina una disciplina personalizada; si estaba activa, deja que se resuelva
+  // a la primera disponible (o al estado vacío si el proyecto se queda sin ninguna).
+  function deleteDiscipline(id) {
+    removeDiscipline(id)
+    setActiveDiscipline((cur) => (cur === id ? '' : cur))
+    if (activeDiscipline === id) { setActiveSub(null); setShowAll(false) }
   }
   function selectAllDisciplines() {
     setShowAll(true)
@@ -206,6 +232,10 @@ export default function App() {
         allActive={showAll}
         onSelect={selectDiscipline}
         onSelectAll={selectAllDisciplines}
+        onAddDiscipline={() => setShowAddDiscipline(true)}
+        onRemoveDiscipline={deleteDiscipline}
+        projectName={project.name}
+        onChangeProject={onChangeProject}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -215,6 +245,10 @@ export default function App() {
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
           onOpenSettings={() => setSettingsOpen(true)}
+          user={user}
+          isDemo={isDemo}
+          onSignOut={signOut}
+          onChangeProject={onChangeProject}
         />
 
         <main className="min-h-0 flex-1 overflow-hidden">
@@ -235,7 +269,7 @@ export default function App() {
                 onOpenSubcategory={openSubcategory}
               />
             </div>
-          ) : (
+          ) : discipline ? (
             <div className="h-full overflow-y-auto">
               <DisciplineView
                 discipline={discipline}
@@ -250,6 +284,25 @@ export default function App() {
                 defaultColumns={defaultColumns}
               />
             </div>
+          ) : (
+            // Proyecto sin disciplinas (p. ej. proyecto en blanco): invita a crear.
+            <div className="grid h-full place-items-center px-6">
+              <div className="max-w-md rounded-2xl border border-dashed border-slate-300 bg-white px-8 py-12 text-center dark:border-white/15 dark:bg-ink-800/50">
+                <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-glow">
+                  <Sprout className="h-7 w-7" />
+                </div>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white">Proyecto sin disciplinas</h2>
+                <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                  Este proyecto está vacío. Agrega una disciplina para empezar a importar planillas y datos de ingeniería.
+                </p>
+                <button
+                  onClick={() => setShowAddDiscipline(true)}
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900"
+                >
+                  <Plus className="h-4 w-4" /> Agregar disciplina
+                </button>
+              </div>
+            </div>
           )}
         </main>
       </div>
@@ -258,6 +311,10 @@ export default function App() {
         <div className="fixed bottom-5 right-5 z-50 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-lg dark:border-white/10 dark:bg-ink-800 dark:text-slate-200">
           {notice}
         </div>
+      )}
+
+      {showAddDiscipline && (
+        <AddDisciplineModal onCreate={createDiscipline} onClose={() => setShowAddDiscipline(false)} />
       )}
 
       <PwaPrompt />

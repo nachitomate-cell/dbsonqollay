@@ -1,7 +1,9 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
-import { ArrowUpRight, Box, Filter, Globe, LayoutGrid, Layers, List, Loader2, Search, Sigma, X } from 'lucide-react'
+import { ArrowUpRight, Box, Filter, Globe, LayoutGrid, Layers, List, Loader2, Search, ShieldCheck, Sigma, Table2, X } from 'lucide-react'
 import Icon from './Icon.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
+import CombinedTable from './CombinedTable.jsx'
+import QualityPanel from './QualityPanel.jsx'
 
 // El visor APS (SDK de Autodesk) se carga en un chunk aparte, solo al abrir el 3D.
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
@@ -19,7 +21,7 @@ const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
  */
 export default function AllDisciplinesView({ disciplines, datasets = {}, createdSheets = {}, onOpenSubcategory }) {
   const [query, setQuery] = useState('')
-  const [mode, setMode] = useState('sheets') // 'sheets' (índice de planillas) | 'model' (visor 3D)
+  const [mode, setMode] = useState('sheets') // 'sheets' (índice) | 'table' (tabla) | 'quality' (calidad) | 'model' (3D)
   const [discFilter, setDiscFilter] = useState(() => new Set()) // ids de disciplina; vacío = todas
   const toggleDisc = (id) =>
     setDiscFilter((prev) => {
@@ -45,7 +47,7 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
         const tagk = ds.headers?.[0]
         ;(ds.headers || []).forEach((h) => headerSet.add(h))
         ds.rows.forEach((r, i) => {
-          rows.push({ ...r, _id: `${s.dataKey}-${i}`, TAG: r[tagk] ?? '', DISCIPLINA: d.name, PLANILLA: s.name })
+          rows.push({ ...r, _id: `${s.dataKey}-${i}`, _subId: s.id, _dataKey: s.dataKey, TAG: r[tagk] ?? '', DISCIPLINA: d.name, PLANILLA: s.name })
         })
       }
     }
@@ -53,6 +55,21 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
     const rest = [...headerSet].filter((h) => !['TAG', 'DISCIPLINA', 'PLANILLA'].includes(h))
     return { headers: ['TAG', 'DISCIPLINA', 'PLANILLA', ...rest], rows }
   }, [disciplines, datasets, discFilter])
+
+  // Conteo liviano de problemas de calidad (sin TAG + TAGs duplicados) para el
+  // indicador del modo "Calidad". El detalle se calcula dentro de QualityPanel.
+  const qualityIssues = useMemo(() => {
+    let noTag = 0
+    const seen = new Map()
+    for (const r of combined.rows) {
+      const t = String(r.TAG ?? '').trim().toLowerCase()
+      if (!t) { noTag++; continue }
+      seen.set(t, (seen.get(t) || 0) + 1)
+    }
+    let dupTags = 0
+    for (const c of seen.values()) if (c > 1) dupTags++
+    return noTag + dupTags
+  }, [combined])
 
   // Aplana todas las planillas "abribles": con datos (count > 0) o creadas vacías.
   const groups = useMemo(() => {
@@ -120,6 +137,8 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
             {/* Conmutador Planillas / Modelo 3D */}
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ModeToggle active={mode === 'sheets'} icon={List} label="Planillas" onClick={() => setMode('sheets')} />
+              <ModeToggle active={mode === 'table'} icon={Table2} label="Tabla" onClick={() => setMode('table')} />
+              <ModeToggle active={mode === 'quality'} icon={ShieldCheck} label="Calidad" badge={qualityIssues} onClick={() => setMode('quality')} />
               <ModeToggle active={mode === 'model'} icon={Box} label="Modelo 3D" onClick={() => setMode('model')} />
             </div>
 
@@ -185,6 +204,13 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
             </Suspense>
           </ViewerErrorBoundary>
         </div>
+      ) : mode === 'table' ? (
+        /* Modo Tabla combinada: todas las filas del proyecto en una grilla única,
+           buscable / ordenable / exportable. Respeta el filtro de disciplina. */
+        <CombinedTable headers={combined.headers} rows={combined.rows} onOpenRowSheet={onOpenSubcategory} />
+      ) : mode === 'quality' ? (
+        /* Modo Calidad: TAGs duplicados (cruce de disciplinas) y elementos sin TAG. */
+        <QualityPanel rows={combined.rows} onOpenRowSheet={onOpenSubcategory} />
       ) : /* Grupos por disciplina */ filteredGroups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center dark:border-white/15 dark:bg-ink-800/40">
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -251,7 +277,7 @@ function DiscChip({ icon, label, count, active, onClick }) {
   )
 }
 
-function ModeToggle({ active, icon: IconCmp, label, onClick }) {
+function ModeToggle({ active, icon: IconCmp, label, badge, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -264,6 +290,11 @@ function ModeToggle({ active, icon: IconCmp, label, onClick }) {
     >
       <IconCmp className="h-4 w-4" />
       {label}
+      {badge > 0 && (
+        <span className={['rounded-full px-1.5 text-[10px] font-bold tabular-nums', active ? 'bg-white/25 text-white dark:bg-ink-900/25 dark:text-ink-900' : 'bg-rose-500 text-white'].join(' ')}>
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   )
 }

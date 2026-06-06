@@ -306,7 +306,7 @@ function SubcategoryCard({ sub, selected, onToggleSelect, onOpen, onCreateSheet,
   return (
     <div
       className={[
-        'group relative flex items-center gap-4 overflow-hidden rounded-xl border p-4 transition-all',
+        'group relative flex items-center gap-4 rounded-xl border p-4 transition-all',
         selected
           ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/[0.06]'
           : 'border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800/70',

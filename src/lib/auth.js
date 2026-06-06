@@ -14,17 +14,24 @@ export function authEnabled() {
   return Boolean(URL && ANON)
 }
 
+// La sesión puede vivir en localStorage (persistente, "mantener sesión") o en
+// sessionStorage (solo mientras la pestaña esté abierta). Se lee de ambos.
 export function getSession() {
   try {
-    return JSON.parse(localStorage.getItem(SKEY) || 'null')
+    const raw = localStorage.getItem(SKEY) || sessionStorage.getItem(SKEY)
+    return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
-function setSession(s) {
-  if (s && s.access_token) localStorage.setItem(SKEY, JSON.stringify(s))
-  else localStorage.removeItem(SKEY)
+function setSession(s, remember = true) {
+  // Limpia ambos almacenamientos antes de escribir (evita sesiones duplicadas).
+  try { localStorage.removeItem(SKEY); sessionStorage.removeItem(SKEY) } catch { /* ignore */ }
+  if (s && (s.access_token || s.demo)) {
+    const store = remember ? localStorage : sessionStorage
+    try { store.setItem(SKEY, JSON.stringify(s)) } catch { /* cuota */ }
+  }
 }
 
 export function accessToken() {
@@ -48,17 +55,54 @@ async function authPost(path, body) {
   return data
 }
 
-export async function signIn(email, password) {
+export async function signIn(email, password, remember = true) {
   const data = await authPost('token?grant_type=password', { email, password })
-  setSession(data)
+  setSession(data, remember)
   return data
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, remember = true) {
   const data = await authPost('signup', { email, password })
   // Si el proyecto NO exige confirmar email, signup ya devuelve sesión.
-  if (data.access_token) setSession(data)
+  if (data.access_token) setSession(data, remember)
   return data
+}
+
+// Sesión de PRUEBA (sin backend): permite entrar a la app con los datos de
+// ejemplo. `remember` decide si persiste entre reinicios del navegador
+// (localStorage) o solo dura la pestaña actual (sessionStorage).
+export function signInDemo(remember = true) {
+  const data = {
+    demo: true,
+    access_token: 'demo',
+    user: { email: 'demo@sonqollay.cl', name: 'Usuario de prueba', role: 'demo' },
+  }
+  setSession(data, remember)
+  return data
+}
+
+export function isDemoSession() {
+  return Boolean(getSession()?.demo)
+}
+
+// Enlace mágico (OTP por correo): inicia sesión sin contraseña. Supabase manda
+// un email con el enlace; al volver, la sesión llega por el hash de la URL.
+export async function sendMagicLink(email) {
+  return authPost('otp', { email, create_user: true })
+}
+
+// Recuperación de contraseña: envía un correo con el enlace para restablecerla.
+export async function sendPasswordReset(email) {
+  return authPost('recover', { email })
+}
+
+// Último email usado (para prefijarlo en el próximo login).
+const EKEY = 'sqy-last-email'
+export function lastEmail() {
+  try { return localStorage.getItem(EKEY) || '' } catch { return '' }
+}
+export function rememberEmail(email) {
+  try { if (email) localStorage.setItem(EKEY, email) } catch { /* ignore */ }
 }
 
 export function signOut() {
@@ -69,9 +113,10 @@ export function signOut() {
 export async function refreshSession() {
   const s = getSession()
   if (!s?.refresh_token) return null
+  const remember = !!localStorage.getItem(SKEY) // preserva dónde vivía la sesión
   try {
     const data = await authPost('token?grant_type=refresh_token', { refresh_token: s.refresh_token })
-    setSession(data)
+    setSession(data, remember)
     return data
   } catch {
     setSession(null)

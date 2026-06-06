@@ -1,24 +1,31 @@
 import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, Download, Moon, Search, Settings, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, ChevronRight, Download, FlaskConical, LogOut, Moon, Search, Settings, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
+
+// Iniciales para el avatar a partir del nombre o el email.
+function initials(user) {
+  const base = user?.name || user?.email || 'SQ'
+  const parts = String(base).replace(/@.*/, '').split(/[\s._-]+/).filter(Boolean)
+  const ini = (parts[0]?.[0] || '') + (parts[1]?.[0] || '')
+  return (ini || base.slice(0, 2)).toUpperCase()
+}
 
 /**
  * Encabezado del área principal: breadcrumbs, búsqueda global, exportación del
- * proyecto, toggle de tema y acciones rápidas.
+ * proyecto, toggle de tema, acciones rápidas y menú de usuario.
  *
  * props:
  *  - crumbs: [{ label, onClick? }]
- *  - theme: 'light' | 'dark'
- *  - onToggleTheme()
- *  - onExportProject()
- *  - onOpenSettings()
+ *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
+ *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, user, isDemo, onSignOut, onChangeProject }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
 
   const [notifOpen, setNotifOpen] = useState(false)
+  const [userOpen, setUserOpen] = useState(false)
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   useEffect(() => {
     const on = () => setOnline(true)
@@ -120,8 +127,47 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           <Settings className="h-4 w-4" />
         </button>
 
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600 text-xs font-bold text-white">
-          SQ
+        {/* Menú de usuario */}
+        <div className="relative">
+          {userOpen && <div className="fixed inset-0 z-30" onClick={() => setUserOpen(false)} />}
+          <button
+            onClick={() => setUserOpen((v) => !v)}
+            title={user?.name || user?.email || 'Cuenta'}
+            className={`relative z-40 grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600 text-xs font-bold text-white ring-offset-2 transition hover:opacity-90 dark:ring-offset-ink-900 ${userOpen ? 'ring-2 ring-brand-400 dark:ring-accent/50' : ''}`}
+          >
+            {initials(user)}
+          </button>
+          {userOpen && (
+            <div className={panel}>
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-600 text-xs font-bold text-white">{initials(user)}</div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{user?.name || 'Sesión'}</p>
+                  <p className="truncate text-xs text-slate-400">{user?.email || ''}</p>
+                </div>
+              </div>
+              {isDemo && (
+                <div className="mx-3 mb-1 flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                  <FlaskConical className="h-3.5 w-3.5" /> Sesión de prueba
+                </div>
+              )}
+              <div className="my-1 border-t border-slate-100 dark:border-white/5" />
+              {onChangeProject && (
+                <button
+                  onClick={() => { setUserOpen(false); onChangeProject() }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+                >
+                  <ArrowLeftRight className="h-4 w-4 text-slate-400" /> Cambiar proyecto
+                </button>
+              )}
+              <button
+                onClick={() => { setUserOpen(false); onSignOut?.() }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+              >
+                <LogOut className="h-4 w-4" /> Cerrar sesión
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

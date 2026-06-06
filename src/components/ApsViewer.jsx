@@ -173,10 +173,12 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const headersRef = useRef(headers); headersRef.current = headers
   const [status, setStatus] = useState('idle') // idle|loadingSdk|uploading|translating|ready|error
   const [message, setMessage] = useState('')
-  // El último modelo cargado se recuerda por subcategoría (localStorage), así
-  // volver al 3D no obliga a re-subir ni re-traducir: el modelo sigue en
-  // Autodesk y se reabre directo por su urn.
-  const storeKey = `sqy-aps-model-${dataKey}`
+  // El modelo 3D es el modelo federado del PROYECTO: se comparte entre todas las
+  // disciplinas/vistas (NO se recuerda por subcategoría). Así, al cambiar de
+  // disciplina, el visor sigue mostrando el mismo modelo en vez de quedar en
+  // blanco. Se guarda en localStorage para reabrirlo directo por su urn sin
+  // re-subir ni re-traducir.
+  const storeKey = 'sqy-aps-model'
   const restored = (() => {
     try { return JSON.parse(localStorage.getItem(storeKey)) || {} } catch { return {} }
   })()
@@ -214,6 +216,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   }
   function forgetModel() {
     try { localStorage.removeItem(storeKey) } catch { /* ignore */ }
+    // Descarga el modelo del visor singleton (compartido entre disciplinas) para
+    // que "Quitar modelo" lo saque de todas las vistas, no solo de ésta.
+    const v = viewerRef.current
+    if (v) {
+      try { (v.getVisibleModels?.() || []).forEach((m) => v.unloadModel?.(m)) } catch { /* noop */ }
+    }
+    ctxRef.current.loadedUrn = null
     setUrn(''); setModelName(null)
     setStatus('ready')
   }
@@ -429,7 +438,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
         ctxRef.current.themeObs = themeObs
 
-        // Carga el modelo de esta subcategoría (si difiere del ya cargado).
+        // Carga el modelo (compartido por todas las disciplinas vía storeKey). Una
+        // instancia nueva siempre recarga (force): es el camino que SÍ renderiza
+        // tras re-adoptar el canvas en otro contenedor. El modelo/derivado queda
+        // cacheado en Autodesk, así que reabrir el mismo urn es rápido.
         if (urn) loadDocument(urn, { force: ctxRef.current.loadedUrn !== urn })
         else setStatus('ready')
       })
@@ -447,7 +459,14 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         try { v.removeEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, ctxRef.current.onSel) } catch { /* noop */ }
       }
       const cont = v?.container
-      if (cont && cont.parentNode) { try { cont.parentNode.removeChild(cont) } catch { /* noop */ } }
+      // Solo se saca el contenedor si SIGUE colgando de NUESTRO mount. Si otra
+      // instancia (otra disciplina) ya lo adoptó, su parentNode es el mount de la
+      // otra: NO se lo robamos, o esa vista quedaría en blanco (sin visor). Este
+      // era el bug del "blanco al pasar a otra disciplina": la limpieza tardía de
+      // la pestaña anterior le quitaba el contenedor a la nueva.
+      if (cont && mountRef.current && cont.parentNode === mountRef.current) {
+        try { mountRef.current.removeChild(cont) } catch { /* noop */ }
+      }
       viewerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -623,6 +642,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     if (!dbIds.length) { setMessage('No se encontraron objetos del paquete en el modelo (revisa el campo de vínculo).'); return }
 
     ctxRef.current.awpActive = true
+    ctxRef.current.hlIds = [] // el theming del paquete (abajo) sustituye al realce de fila
     // Ghosting nativo: el resto del modelo queda como "fantasma" gris tenue que
     // SÍ da contexto sobre cualquier fondo (no blanco invisible). `isolate`
     // mantiene el paquete a color pleno y atenúa lo demás.
@@ -652,6 +672,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     if (token !== ctxRef.current.awpToken || !viewerRef.current) return
     if (!dbIds.length) { setMessage('No se encontraron en el modelo los elementos filtrados (revisa el campo de vínculo).'); return }
     ctxRef.current.filterActive = true
+    ctxRef.current.hlIds = [] // clearThemingColors (abajo) ya borra el realce de fila
     safe(() => {
       viewer.setGhosting(true)
       viewer.clearThemingColors()
@@ -666,6 +687,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     if (!viewer) return
     ctxRef.current.awpActive = false
     ctxRef.current.filterActive = false
+    ctxRef.current.hlIds = [] // clearThemingColors (abajo) ya borra el realce de fila
     ctxRef.current.awpToken = (ctxRef.current.awpToken || 0) + 1 // invalida searches en curso
     if (!viewerHasModel(viewer)) return // sin modelo no hay nada que limpiar (y el SDK tiraría)
     safe(() => {
@@ -690,18 +712,66 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     })
   }
 
-  // cross-selection: enfocar el TAG activo de la planilla (solo si cambió).
-  // No actúa si hay un filtro AWP activo, para no pisar el aislado del paquete.
+  // Quita el realce de theming de la fila previamente vinculada. Como el visor
+  // no permite limpiar el color de un solo dbId, se distingue por modo:
+  //   - En modo paquete AWP las piezas siguen perteneciendo al paquete → se las
+  //     devuelve al naranja del paquete (no se limpia todo el theming, que
+  //     borraría el aislado naranja).
+  //   - En modo normal/filtrado el ÚNICO theming activo es este realce → se
+  //     limpia todo de una.
+  function clearRowHighlight() {
+    const viewer = viewerRef.current
+    const prev = ctxRef.current.hlIds || []
+    ctxRef.current.hlIds = []
+    if (!viewer || !prev.length || !viewerHasModel(viewer)) return
+    if (ctxRef.current.awpActive && window.THREE) {
+      const ORANGE = new window.THREE.Vector4(0.97, 0.44, 0, 1)
+      safe(() => prev.forEach((id) => viewer.setThemingColor(id, ORANGE)))
+    } else {
+      safe(() => viewer.clearThemingColors())
+    }
+  }
+
+  // cross-selection planilla → 3D: al activar una fila, RESALTA y enfoca ese
+  // elemento dentro del modelo SIN ocultar el resto, para no perder el contexto
+  // del conjunto. Antes se hacía isolate(), que dejaba el modelo "en negro" salvo
+  // la pieza y desorientaba; ahora solo se resalta la pieza en su sitio, con:
+  //   - selección nativa (naranja de marca), y
+  //   - un realce persistente por theming en CIAN (distinto del naranja del
+  //     aislado por paquete) para que destaque en modelos densos aunque la pieza
+  //     pierda el foco de selección nativo.
+  //   - Si hay un aislado activo (paquete AWP o planilla filtrada) se conserva su
+  //     encuadre: se resalta la pieza sin volar la cámara (no pisa el aislado).
+  //   - Si no hay aislado, además se vuela la cámara a la pieza para ubicarla.
+  //   - Sin TAG activo (se deselecciona la fila) se limpia selección y realce.
   useEffect(() => {
     const viewer = viewerRef.current
-    if (!viewer || !selectedTag || status !== 'ready') return
-    // No pisa el aislado del paquete AWP ni el de la planilla filtrada.
-    if (ctxRef.current.awpActive || ctxRef.current.filterActive) return
+    if (!viewer || status !== 'ready' || !viewerHasModel(viewer)) return
+    if (!selectedTag) {
+      if (ctxRef.current.lastTag != null) {
+        ctxRef.current.lastTag = null
+        clearRowHighlight()
+        safe(() => viewer.clearSelection?.())
+      }
+      return
+    }
     if (ctxRef.current.lastTag === selectedTag) return
     ctxRef.current.lastTag = selectedTag
+    // Token: si el usuario salta de fila mientras el search asíncrono está en
+    // curso, descarta el resultado viejo para no resaltar la pieza equivocada.
+    const token = ctxRef.current.selToken = (ctxRef.current.selToken || 0) + 1
     findDbIds([selectedTag]).then((ids) => {
-      if (ctxRef.current.awpActive || ctxRef.current.filterActive || !viewerRef.current) return
-      if (ids.length) safe(() => { viewer.isolate(ids); viewer.fitToView(ids) })
+      if (token !== ctxRef.current.selToken || !viewerRef.current) return
+      clearRowHighlight() // quita el realce de la fila anterior
+      if (!ids.length) { safe(() => viewer.clearSelection?.()); return }
+      const keepFraming = ctxRef.current.awpActive || ctxRef.current.filterActive
+      const HL = window.THREE ? new window.THREE.Vector4(0.0, 0.78, 1.0, 1) : null // cian de realce
+      safe(() => {
+        viewer.select(ids)                                      // resaltado nativo (naranja de marca)
+        if (HL) ids.forEach((id) => viewer.setThemingColor(id, HL)) // realce persistente cian
+        if (!keepFraming) viewer.fitToView(ids)                 // vuela a la pieza solo si no hay aislado activo
+      })
+      ctxRef.current.hlIds = ids
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTag, status])
@@ -739,8 +809,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
 
           {projects.length > 0 && (
             <div className="relative">
-              <button onClick={() => { setShowProjects((v) => !v); if (!showProjects) refreshProjects() }} title="Proyectos guardados" className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:text-brand-600 dark:text-slate-200 dark:hover:text-accent ${glass}`}>
-                <FolderOpen className="h-3.5 w-3.5" /> Proyectos
+              <button onClick={() => { setShowProjects((v) => !v); if (!showProjects) refreshProjects() }} title="Modelos 3D guardados" className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:text-brand-600 dark:text-slate-200 dark:hover:text-accent ${glass}`}>
+                <FolderOpen className="h-3.5 w-3.5" /> Modelos
                 <span className="rounded bg-brand-100 px-1 text-[10px] text-brand-700 dark:bg-accent/20 dark:text-accent">{projects.length}</span>
               </button>
               {showProjects && (
@@ -757,7 +827,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                             <span className="block truncate text-xs font-medium text-slate-700 dark:text-slate-200" title={p.name}>{p.name}</span>
                             <span className="block text-[10px] text-slate-400">{p.savedAt ? new Date(p.savedAt).toLocaleDateString('es-CL') : (p.remote ? 'En la nube (APS)' : '')}</span>
                           </button>
-                          <button onClick={() => deleteProject(p)} title="Eliminar modelo del proyecto" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => deleteProject(p)} title="Eliminar modelo guardado" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                     </div>
