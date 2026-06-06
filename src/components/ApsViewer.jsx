@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Layers, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
-import { getApsViewer } from './apsViewerSingleton.js'
+import { getApsViewer, parkApsViewer } from './apsViewerSingleton.js'
 
 /**
  * Visor de modelos reales con el SDK de Autodesk (APS Viewer) + comportamientos
@@ -459,13 +459,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         try { v.removeEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, ctxRef.current.onSel) } catch { /* noop */ }
       }
       const cont = v?.container
-      // Solo se saca el contenedor si SIGUE colgando de NUESTRO mount. Si otra
+      // Solo se suelta el contenedor si SIGUE colgando de NUESTRO mount. Si otra
       // instancia (otra disciplina) ya lo adoptó, su parentNode es el mount de la
-      // otra: NO se lo robamos, o esa vista quedaría en blanco (sin visor). Este
-      // era el bug del "blanco al pasar a otra disciplina": la limpieza tardía de
-      // la pestaña anterior le quitaba el contenedor a la nueva.
+      // otra: NO se lo robamos, o esa vista quedaría en blanco. En vez de sacarlo
+      // del DOM (lo dejaría a 0×0 → warning "canvas resized to zero"), se ESTACIONA
+      // en un host oculto con tamaño real hasta que otra vista lo re-adopte.
       if (cont && mountRef.current && cont.parentNode === mountRef.current) {
-        try { mountRef.current.removeChild(cont) } catch { /* noop */ }
+        parkApsViewer()
       }
       viewerRef.current = null
     }

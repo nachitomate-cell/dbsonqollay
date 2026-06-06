@@ -56,6 +56,33 @@ let viewer = null
 let container = null
 let initPromise = null
 
+// "Estacionamiento" oculto del contenedor: cuando ninguna vista lo está usando,
+// el contenedor del visor vive aquí, FUERA de pantalla pero con tamaño REAL
+// (>0). Así el loop de render del singleton nunca dibuja a un canvas de 0×0
+// (que dispara el warning "Rendering to a canvas that was resized to zero",
+// ErrorCode:14) ni queda "fugado" detached del DOM.
+let parkingHost = null
+function getParkingHost() {
+  if (parkingHost && parkingHost.isConnected) return parkingHost
+  parkingHost = document.createElement('div')
+  parkingHost.setAttribute('aria-hidden', 'true')
+  parkingHost.style.cssText = 'position:fixed;left:-100000px;top:0;width:1280px;height:720px;overflow:hidden;pointer-events:none;opacity:0;'
+  document.body.appendChild(parkingHost)
+  return parkingHost
+}
+
+/**
+ * Devuelve el contenedor del visor al host oculto (con tamaño) cuando una vista
+ * lo suelta. NO destruye el visor: queda listo para que otra vista lo re-adopte.
+ */
+export function parkApsViewer() {
+  if (!viewer || !container) return
+  try {
+    getParkingHost().appendChild(container)
+    if (viewer.impl) viewer.resize()
+  } catch { /* noop */ }
+}
+
 /** ¿El navegador/GPU puede entregar un contexto WebGL nuevo? */
 function webglAvailable() {
   try {
@@ -118,6 +145,9 @@ export function getApsViewer(getToken) {
     // start() confunde la construcción interna de paneles (bug "tBodies").
     container = document.createElement('div')
     container.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
+    // Antes de start(): el contenedor vive en el host oculto (con tamaño) para que
+    // el primer render NO sea a un canvas de 0×0. Luego la vista lo adopta.
+    getParkingHost().appendChild(container)
     try {
       viewer = new window.Autodesk.Viewing.GuiViewer3D(container)
       const code = viewer.start()
