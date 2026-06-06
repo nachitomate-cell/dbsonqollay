@@ -442,8 +442,24 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         // instancia nueva siempre recarga (force): es el camino que SÍ renderiza
         // tras re-adoptar el canvas en otro contenedor. El modelo/derivado queda
         // cacheado en Autodesk, así que reabrir el mismo urn es rápido.
-        if (urn) loadDocument(urn, { force: ctxRef.current.loadedUrn !== urn })
-        else setStatus('ready')
+        if (urn) {
+          loadDocument(urn, { force: ctxRef.current.loadedUrn !== urn })
+        } else {
+          // Sin modelo recordado: carga AUTOMÁTICAMENTE el modelo por defecto del
+          // proyecto (el primero disponible en el bucket APS). Así el visor siempre
+          // muestra el modelo sin que el usuario tenga que seleccionarlo. Queda
+          // recordado para los próximos montajes.
+          setStatus('ready')
+          fetchAllProjects()
+            .then((list) => {
+              if (cancelled || !viewerRef.current || !list.length) return
+              const def = list[0]
+              setProjects(list)
+              setUrn(def.urn); setModelName(def.name); rememberModel(def.urn, def.name)
+              loadDocument(def.urn, { force: true })
+            })
+            .catch(() => { /* sin backend: queda el prompt de subir modelo */ })
+        }
       })
       .catch((e) => { if (!cancelled) { setStatus('error'); setMessage(e.message) } })
 
