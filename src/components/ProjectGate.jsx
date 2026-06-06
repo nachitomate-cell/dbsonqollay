@@ -13,9 +13,19 @@ import { useProjects } from '../hooks/useProjects.js'
  * hooks (disciplinas, importaciones, planillas) re-inicialicen con el
  * almacenamiento del proyecto correcto, sin mezclar estado.
  */
+// Proyecto activo de la SESIÓN actual (sessionStorage): sobrevive a una recarga
+// dentro de la misma pestaña (p. ej. cuando el service worker se actualiza y
+// recarga la página) pero NO entre pestañas/sesiones nuevas, donde se vuelve a
+// mostrar el selector "bienvenido de nuevo".
+const SKEY = 'sqy-active-project-session'
+
 export default function ProjectGate() {
   const { projects, opened, lastOpenedId, addProject, removeProject, markOpened } = useProjects()
-  const [active, setActive] = useState(null)
+  // Restaura el proyecto activo de la sesión (evita que una recarga del SW te
+  // devuelva al selector). Si no hay, arranca en el selector.
+  const [active, setActive] = useState(() => {
+    try { const id = sessionStorage.getItem(SKEY); return id ? (projects.find((p) => p.id === id) || null) : null } catch { return null }
+  })
   const [entering, setEntering] = useState(null) // proyecto que se está abriendo (spinner)
   const [showNew, setShowNew] = useState(false)
 
@@ -24,9 +34,16 @@ export default function ProjectGate() {
   function open(p) {
     if (entering) return
     setEntering(p)
-    window.setTimeout(() => { markOpened(p.id); setActive(p); setEntering(null) }, 500)
+    window.setTimeout(() => {
+      markOpened(p.id)
+      try { sessionStorage.setItem(SKEY, p.id) } catch { /* ignore */ }
+      setActive(p); setEntering(null)
+    }, 500)
   }
-  function change() { setActive(null) }
+  function change() {
+    try { sessionStorage.removeItem(SKEY) } catch { /* ignore */ }
+    setActive(null)
+  }
   function createAndOpen({ name, icon, empty }) {
     const p = addProject({ name, icon, empty })
     setShowNew(false)

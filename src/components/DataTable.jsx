@@ -407,8 +407,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 41,
-    overscan: 14,
+    estimateSize: () => 33,
+    overscan: 16,
   })
   const virtualItems = rowVirtualizer.getVirtualItems()
   const totalSize = rowVirtualizer.getTotalSize()
@@ -416,10 +416,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0
 
   // Desplaza la planilla al elemento activo (selección cruzada desde el 3D).
+  // align:'auto' solo desplaza si la fila está fuera de vista — así clickear una
+  // fila visible para editarla no la re-centra (no "salta" el input inline).
   useEffect(() => {
     if (!activeId || (viewMode !== 'grid' && viewMode !== 'split')) return
     const idx = filtered.findIndex((r) => r._id === activeId)
-    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: 'center' })
+    if (idx >= 0) rowVirtualizer.scrollToIndex(idx, { align: 'auto' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId])
 
@@ -491,8 +493,33 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   // Selección cruzada: activar resalta (y vuela el 3D); abrir ficha edita.
   const activate = (id) => setActiveId(id)
   const openFicha = (id) => {
+    cancelEditRef.current = true // si había una edición inline en curso, se descarta
+    setEditingCell(null)
     setActiveId(id)
     setEditingId(id)
+  }
+
+  // ---- Edición INLINE en la celda (un clic) ----
+  // Un clic en una celda la vuelve editable ahí mismo (como Excel/Sheets); el
+  // doble clic sigue abriendo la ficha completa. Se confirma con Enter/clic fuera
+  // (onBlur) y se cancela con Esc. cancelEditRef distingue guardar vs descartar
+  // en el onBlur (único punto de confirmación, evita guardado doble).
+  const [editingCell, setEditingCell] = useState(null) // { id, key } | null
+  const [cellDraft, setCellDraft] = useState('')
+  const cancelEditRef = useRef(false)
+  function startInlineEdit(id, key, value) {
+    cancelEditRef.current = false
+    setCellDraft(value == null ? '' : String(value))
+    setEditingCell({ id, key })
+  }
+  function commitInlineEdit() {
+    setEditingCell((cur) => {
+      if (cur && !cancelEditRef.current) {
+        updateRecord(cur.id, { [cur.key]: cellDraft })
+        logAction('Editó una celda')
+      }
+      return null
+    })
   }
 
   // Handler estable para el visor APS (evita re-renders por nueva fn cada render).
@@ -854,7 +881,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2">
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
               <ToolIcon icon={Plus} title="Nuevo registro" onClick={newRecord} />
@@ -987,7 +1014,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           )}
 
           {/* Filter row */}
-          <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
+          <div className="flex flex-wrap items-end gap-3 px-4 pb-2">
             <Labeled label="Filtrar por">
               <Select value={filterByCol} onChange={setFilterByCol}>
                 <option value="">— Elegir columna —</option>
@@ -1059,7 +1086,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           </div>
 
           {/* Update buttons */}
-          <div className="flex flex-wrap gap-2 px-4 pb-3">
+          <div className="flex flex-wrap gap-2 px-4 pb-2">
             <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => bulkUpdate('awp')}>Actualizar relación AWP</UpdateButton>
             <UpdateButton icon={Boxes} disabled={selected.size < 2} onClick={() => setShowPackage(true)}>Agrupar en paquete</UpdateButton>
           </div>
@@ -1080,7 +1107,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           )}
 
           {/* Stats bar */}
-          <div className="mx-4 mb-3 flex flex-wrap gap-x-8 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+          <div className="mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-1.5 text-[13px] font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
             <span>Total de elementos : <b className="tabular-nums text-brand-600 dark:text-accent">{rows.length}</b></span>
             <span>Total de elementos seleccionados : <b className="tabular-nums text-brand-600 dark:text-accent">{selected.size}</b></span>
             <span>Total de elementos eliminados : <b className="tabular-nums">0</b></span>
@@ -1093,7 +1120,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           <div className="mx-4 mb-4 flex min-h-0 flex-1 gap-3">
             {(viewMode === 'grid' || viewMode === 'split') && (
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
-              <table className="w-max table-fixed border-separate border-spacing-0 text-sm">
+              <table className="w-max table-fixed border-separate border-spacing-0 text-[13px]">
                 <colgroup>
                   <col style={{ width: CHECK_W }} />
                   {headers.map((h) => (
@@ -1102,7 +1129,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th className={`sticky left-0 top-0 z-30 border-b border-slate-200 px-3 py-2.5 dark:border-white/10 ${headBg}`}>
+                    <th className={`sticky left-0 top-0 z-30 border-b border-slate-200 px-3 py-1.5 dark:border-white/10 ${headBg}`}>
                       <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                     </th>
                     {headers.map((h, idx) => {
@@ -1117,7 +1144,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                           onDragEnd={() => setHdrDragKey(null)}
                           style={{ left: idx === 0 ? CHECK_W : undefined }}
                           className={[
-                            `sticky top-0 border-b border-slate-200 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
+                            `sticky top-0 border-b border-slate-200 px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/10 dark:text-slate-400 ${headBg}`,
                             // Todos los encabezados se fijan arriba al hacer scroll vertical.
                             // idx 0 (TAG) ademas se fija a la izquierda (esquina) y va por
                             // encima del resto; los demas solo se fijan arriba.
@@ -1147,7 +1174,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                       )
                     })}
                     {/* Botón + para agregar columna directamente desde el encabezado */}
-                    <th className={`sticky top-0 z-20 border-b border-slate-200 px-2 py-2.5 dark:border-white/10 ${headBg}`}>
+                    <th className={`sticky top-0 z-20 border-b border-slate-200 px-2 py-1.5 dark:border-white/10 ${headBg}`}>
                       <button
                         onClick={() => {
                           setShowColumns(true)
@@ -1170,24 +1197,44 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                     const isSel = selected.has(r._id)
                     const isActive = r._id === activeId
                     return (
-                      <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} onContextMenu={(e) => openRowMenu(e, r._id)} title="Clic: seleccionar · doble clic: abrir ficha · clic derecho: copiar/duplicar" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
-                        <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-2.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
+                      <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} onContextMenu={(e) => openRowMenu(e, r._id)} title="Clic en una celda: editar · doble clic: abrir ficha · clic derecho: copiar/duplicar" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
+                        <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-1.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
                           <input type="checkbox" checked={isSel} onChange={() => toggleRow(r._id)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                         </td>
-                        {headers.map((h, idx) => (
+                        {headers.map((h, idx) => {
+                          const editing = editingCell && editingCell.id === r._id && editingCell.key === h
+                          return (
                           <td
                             key={h}
+                            onClick={() => { if (!editing) startInlineEdit(r._id, h, r[h]) }}
                             style={{ left: idx === 0 ? CHECK_W : undefined }}
                             className={[
-                              'overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-3 py-2.5 dark:border-white/5',
+                              'overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-3 py-1.5 dark:border-white/5',
                               idx === 0
                                 ? `sticky z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
                                 : 'text-slate-600 dark:text-slate-300',
                             ].join(' ')}
                           >
-                            {renderCell(h, r[h])}
+                            {editing ? (
+                              <input
+                                autoFocus
+                                value={cellDraft}
+                                onChange={(e) => setCellDraft(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation()
+                                  if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                                  else if (e.key === 'Escape') { e.preventDefault(); cancelEditRef.current = true; e.currentTarget.blur() }
+                                }}
+                                onBlur={commitInlineEdit}
+                                className="w-full rounded border border-brand-400 bg-white px-1.5 py-1 text-xs text-slate-900 outline-none ring-2 ring-brand-100 dark:border-accent/50 dark:bg-ink-900 dark:text-slate-100 dark:ring-accent/20"
+                              />
+                            ) : (
+                              renderCell(h, r[h])
+                            )}
                           </td>
-                        ))}
+                          )
+                        })}
                       </tr>
                     )
                   })}
