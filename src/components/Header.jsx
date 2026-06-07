@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, LayoutDashboard, LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 
 // Iniciales para el avatar a partir del nombre o el email.
@@ -19,7 +19,7 @@ function initials(user) {
  *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
  *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
@@ -74,6 +74,17 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
         </div>
 
         <InstallButton />
+
+        {onOpenWorkspace && (
+          <button
+            onClick={onOpenWorkspace}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900"
+            title="Workspace AWP: CWA / CWP / IWP"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span className="hidden lg:inline">Workspace AWP</span>
+          </button>
+        )}
 
         <button
           onClick={onExportProject}
