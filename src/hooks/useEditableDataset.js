@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadWorking, removeWorking, saveWorking } from '../utils/datastore'
 
 /**
@@ -40,14 +40,35 @@ function init(dataKey, dataset) {
   return build(dataset)
 }
 
+// Profundidad máxima del historial de deshacer/rehacer. Como las mutaciones son
+// inmutables (cada cambio crea nuevos arrays), guardar estados previos es barato
+// (solo referencias), pero igual lo acotamos para no acumular sin límite.
+const HISTORY_LIMIT = 60
+
 export function useEditableDataset(dataKey, dataset) {
-  const [state, setState] = useState(() => init(dataKey, dataset))
+  // Historial: { past:[], present, future:[] }. Cada mutación empuja el estado
+  // actual a `past` y limpia `future`; deshacer/rehacer mueven entre las pilas.
+  const [hist, setHist] = useState(() => ({ past: [], present: init(dataKey, dataset), future: [] }))
+  const state = hist.present
 
   useEffect(() => {
     if (state.dirty) saveWorking(dataKey, state)
   }, [dataKey, state])
 
-  const mutate = (fn) => setState((s) => ({ ...fn(s), dirty: true }))
+  const mutate = (fn) => setHist((h) => {
+    const next = { ...fn(h.present), dirty: true }
+    if (next.rows === h.present.rows && next.columns === h.present.columns) return h // no-op
+    return { past: [...h.past, h.present].slice(-HISTORY_LIMIT), present: next, future: [] }
+  })
+
+  const undo = useCallback(() => setHist((h) => {
+    if (!h.past.length) return h
+    return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future].slice(0, HISTORY_LIMIT) }
+  }), [])
+  const redo = useCallback(() => setHist((h) => {
+    if (!h.future.length) return h
+    return { past: [...h.past, h.present].slice(-HISTORY_LIMIT), present: h.future[0], future: h.future.slice(1) }
+  }), [])
 
   const api = useMemo(
     () => ({
@@ -140,17 +161,28 @@ export function useEditableDataset(dataKey, dataset) {
         const up = upperPatch(patch)
         mutate((s) => ({ ...s, rows: s.rows.map((r) => (set.has(r._id) ? { ...r, ...up } : r)) }))
       },
+      // Aplica patches DISTINTOS a varias filas en UNA sola operación (un solo
+      // paso de deshacer). patches: { [id]: { col: valor, ... } }. Para pegar
+      // un bloque de Excel sin que cada fila sea un paso de historial aparte.
+      applyPatches(patches) {
+        const ids = Object.keys(patches || {})
+        if (!ids.length) return
+        mutate((s) => ({ ...s, rows: s.rows.map((r) => (patches[r._id] ? { ...r, ...upperPatch(patches[r._id]) } : r)) }))
+      },
       deleteRecord(id) {
         mutate((s) => ({ ...s, rows: s.rows.filter((r) => r._id !== id) }))
       },
       reset() {
         removeWorking(dataKey)
-        setState(build(dataset))
+        setHist({ past: [], present: build(dataset), future: [] })
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dataKey, dataset],
   )
 
-  return { columns: state.columns, rows: state.rows, dirty: state.dirty, ...api }
+  return {
+    columns: state.columns, rows: state.rows, dirty: state.dirty, ...api,
+    undo, redo, canUndo: hist.past.length > 0, canRedo: hist.future.length > 0,
+  }
 }
