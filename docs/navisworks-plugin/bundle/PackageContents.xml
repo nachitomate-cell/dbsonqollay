@@ -2,10 +2,12 @@
 <!-- Bundle de Navisworks para AuraBIM.
      Define el plugin como ManagedPlugin; la pestaña "Aura BIM" y el botón
      "Asignar Propiedades" vienen del ribbon en Contents/en-US/AuraBIM.xaml.
-     Nw23 = Navisworks 2026 (Nw21=2024, Nw22=2025). -->
+     Nw21=2024, Nw22=2025, Nw23=2026, Nw24=2027. El DLL se compila contra el API
+     2026; se permite cargar también en 2027 (API estable). Si en 2027 fallara la
+     carga, recompilar contra ese API y dejar SeriesMax en Nw24. -->
 <ApplicationPackage
     SchemaVersion="1.0"
-    AppVersion="1.1.0"
+    AppVersion="1.9.0"
     ProductType="Application"
     Name="Aura BIM"
     Description="Aura BIM: asignar propiedades BIM al modelo desde la web"
@@ -20,7 +22,7 @@
             OS="Win64"
             Platform="NAVMAN"
             SeriesMin="Nw21"
-            SeriesMax="Nw23" />
+            SeriesMax="Nw24" />
         <ComponentEntry
             AppType="ManagedPlugin"
             ModuleName="./Contents/AuraBIM.dll" />

@@ -40,6 +40,10 @@ namespace AuraBIM
     [Command("ID_AsignarProps", LoadForCanExecute = true)]
     public class AuraBIM : CommandHandlerPlugin
     {
+        // Versión del plugin (para el log de sincronización y soporte). Mantener
+        // en sync con AppVersion de bundle/PackageContents.xml.
+        private const string Version = "1.9.0";
+
         // El ribbon invoca este método con el id del botón.
         public override int ExecuteCommand(string commandId, params string[] parameters)
         {
@@ -132,8 +136,14 @@ namespace AuraBIM
                 progress.Dispose();
             }
 
+            // Log para soporte (en %LOCALAPPDATA%\AuraBIM\AuraBIM.log).
+            WriteLog(string.Format(
+                "sync v{0} | planillas={1} filas={2} matched={3} aplicados={4} sinGeom={5} cancelado={6}{7}",
+                Version, chosen.Count, totalRows, totalMatched, totalApplied, totalMissing, progress.Canceled,
+                errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : ""));
+
             string msg =
-                "Aura BIM\n\n" +
+                "Aura BIM v" + Version + "\n\n" +
                 "Planillas: " + chosen.Count + "\n" +
                 "Filas: " + totalRows + "\n" +
                 "TAGs encontrados: " + totalMatched + "\n" +
@@ -144,6 +154,22 @@ namespace AuraBIM
                 msg += "\n\nErrores:\n - " + string.Join("\n - ", errores);
             MessageBox.Show(msg);
             return 0;
+        }
+
+        // Log best-effort de cada sincronización (para diagnóstico remoto). Se
+        // escribe en %LOCALAPPDATA%\AuraBIM (siempre escribible por el usuario, a
+        // diferencia de la carpeta del bundle en ApplicationPlugins).
+        private static void WriteLog(string text)
+        {
+            try
+            {
+                string dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AuraBIM");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(Path.Combine(dir, "AuraBIM.log"),
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + text + Environment.NewLine);
+            }
+            catch { /* el log nunca debe romper la sincronización */ }
         }
 
         // ---- Aplicar un dataset al modelo --------------------------------
@@ -628,7 +654,10 @@ namespace AuraBIM
             public static string ApiToken = "";
             public static string LinkCategory = "BIM";
             public static string LinkProperty = "TAG/Commodity";
-            public static string TabName = "Aura BIM";
+            // Pestaña de propiedades que se escribe. Por diseño coincide con
+            // LinkCategory: se lee y se reescribe la MISMA pestaña "BIM" (conserva
+            // TAG/Commodity → el sync es repetible). El config la puede pisar.
+            public static string TabName = "BIM";
 
             static Cfg() { Load(); }
 

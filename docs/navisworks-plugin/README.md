@@ -58,10 +58,13 @@ En Vercel → Environment Variables (Production), agrega:
   `Authorization: Bearer …` para poder **leer**. Si no se define, la lectura
   queda **abierta** (solo para pruebas — no lo dejes así en producción).
 
-> Nota de seguridad: el `POST` (publicar) queda abierto porque el frontend es
-> JS público y no puede guardar un secreto. La `key` no es adivinable
-> fácilmente. El control real está en el `GET` (token). Para algo más estricto,
-> conviene sumar autenticación de usuario a la app.
+> Nota de seguridad: el `GET /api/datasets/:key` acepta **tres** vías de acceso:
+> el token del plugin (`SQY_API_TOKEN`), el **JWT de un usuario logueado**
+> (Supabase) y, por ahora, el token de la **sesión de prueba** (`demo`). El token
+> del plugin viaja en el config de cada PC cliente, así que **no es realmente
+> secreto** (cualquiera con el instalador puede leer). El **`POST` (publicar)
+> sigue abierto** (el frontend es JS público). Pendiente de endurecimiento (B2):
+> exigir JWT también en el `POST` y **scopear por proyecto** (`project_id`).
 
 ## El plugin (.NET)
 
@@ -71,9 +74,15 @@ Ver [`AuraBIM.cs`](./AuraBIM.cs). Hace tres cosas:
 2. **Matchea por TAG**: arma un índice recorriendo los elementos y leyendo la
    propiedad de vínculo (por defecto `BIM` / `TAG/Commodity`, p. ej.
    `06940-BAT-011`) y la compara con `row[tagField]`. Es el mismo criterio que la web.
-3. **Escribe** los campos como una pestaña de propiedades custom ("Aura BIM")
-   usando el **COM API** (`InwGUIPropertyNode2.SetUserDefined` por elemento), ya
-   que el API .NET es de solo lectura para propiedades.
+3. **Escribe** los campos como una pestaña de propiedades custom (**`BIM`**, igual
+   que `linkCategory` para que el sync sea repetible) usando el **COM API**
+   (`InwGUIPropertyNode2.SetUserDefined` por elemento), ya que el API .NET es de
+   solo lectura para propiedades.
+
+> **Nota:** el plugin solo reemplaza pestañas `BIM` **definidas por el usuario**
+> (las que dejó Aura BIM por COM). Si un modelo ya trae una pestaña `BIM`
+> **nativa** del NWC, el plugin agrega su propia `BIM` al lado (quedarían dos). En
+> el pipeline normal la `BIM` la siembra Aura BIM por COM, así que hay una sola.
 
 ## Distribución a clientes (lo simple)
 
@@ -154,8 +163,9 @@ botón funcionan igual.
 2. En Navisworks: abre el modelo → pestaña **Aura BIM** → botón **Asignar Propiedades**.
 3. Aparece la **lista de planillas publicadas** con checkboxes → marca las que
    quieras (vienen todas marcadas) → **Sincronizar**.
-4. El plugin descarga las elegidas, matchea por TAG y agrega la pestaña
-   **"Aura BIM"** a los elementos. **Guarda** como `.nwf`/`.nwd` para persistir.
+4. El plugin descarga las elegidas, matchea por TAG y reescribe la pestaña de
+   propiedades **`BIM`** de los elementos. **Guarda** como `.nwf`/`.nwd` para
+   persistir. Queda un log en `%LOCALAPPDATA%\AuraBIM\AuraBIM.log`.
 
 > No hace falta recompilar para cambiar de planilla ni cuando cambia su `key`:
 > el plugin siempre lista lo que haya publicado.
