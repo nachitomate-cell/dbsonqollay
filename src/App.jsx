@@ -9,6 +9,8 @@ import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import AddDisciplineModal from './components/AddDisciplineModal.jsx'
 import OnboardingTour from './components/OnboardingTour.jsx'
+import ProjectConfigPanel from './components/awp/ProjectConfigPanel.jsx'
+import { useProjectConfig } from './hooks/useProjectConfig.js'
 import { useAuth } from './components/LoginGate.jsx'
 import { datasets as baseDatasets, defaultColumns, emptyDataset } from './data/disciplines.js'
 import { useDisciplines } from './hooks/useDisciplines.js'
@@ -85,6 +87,9 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets(project.id)
   // CWPs (AWP) importados del CSV de Aura AWP, por proyecto. Para "Conectar a AWP".
   const { cwps: awpCwps, importCwps, clearCwps } = useAwpCwps(project.id)
+  // Configuración AWP del proyecto (modelo de Aura AWP) + overlay de edición.
+  const projectCfg = useProjectConfig(project.id, project)
+  const [showProjectConfig, setShowProjectConfig] = useState(false)
 
   useEffect(() => {
     const root = document.documentElement
@@ -273,6 +278,7 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenProjectConfig={() => setShowProjectConfig(true)}
           user={user}
           isDemo={isDemo}
           onSignOut={signOut}
@@ -359,6 +365,10 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
 
       {showTour && (
         <OnboardingTour onClose={() => dismissTour(false)} onFinish={() => dismissTour(true)} />
+      )}
+
+      {showProjectConfig && (
+        <ProjectConfigPanel project={project} cfg={projectCfg} onClose={() => setShowProjectConfig(false)} />
       )}
 
       <PwaPrompt />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, LogOut, Moon, Search, Settings, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, LogOut, Moon, Search, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 
 // Iniciales para el avatar a partir del nombre o el email.
@@ -19,7 +19,7 @@ function initials(user) {
  *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
  *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
@@ -153,6 +153,14 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
                 </div>
               )}
               <div className="my-1 border-t border-slate-100 dark:border-white/5" />
+              {onOpenProjectConfig && (
+                <button
+                  onClick={() => { setUserOpen(false); onOpenProjectConfig() }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white"
+                >
+                  <SlidersHorizontal className="h-4 w-4 text-slate-400" /> Configuración del proyecto
+                </button>
+              )}
               {onChangeOrg && (
                 <button
                   onClick={() => { setUserOpen(false); onChangeOrg() }}
