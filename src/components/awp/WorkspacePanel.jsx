@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Archive, Boxes, ChevronRight, LayoutDashboard, LogOut, Map, Pencil, Plus, Sigma, Trash2, X } from 'lucide-react'
+import { Archive, Boxes, FileText, LayoutDashboard, LogOut, Map, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
 import { genCode } from '../../utils/awpCodes.js'
+import { CWA_COLORS, Donut, Sunburst } from './charts.jsx'
+import { printCwaReport, printCwpReport } from '../../utils/awpReports.js'
 
 /**
  * Workspace AWP del proyecto (modelo de Aura AWP): Dashboard + entidades
@@ -66,6 +68,15 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
   const estimadas = Number(config.hhEstimadas) || totalHH
   const pctAsign = estimadas ? Math.round((asignadaHH / estimadas) * 100) : 0
 
+  // Validación de límites de HH (parámetros AWP del proyecto).
+  const hhMaxCwa = Number(config.awp.hhMaxCwa) || 0
+  const hhMaxCwp = Number(config.awp.hhMaxCwp) || 0
+  const cwaOver = (c) => hhMaxCwa > 0 && Math.max(Number(c.hh) || 0, cwaHH(c.id)) > hhMaxCwa
+  const cwpOver = (c) => hhMaxCwp > 0 && (Number(c.hh) || 0) > hhMaxCwp
+  const cwasOver = cwas.filter(cwaOver)
+  const cwpsOver = cwps.filter(cwpOver)
+  const donutData = cwas.map((c, i) => ({ label: c.codigo, value: Number(c.hh) || cwaHH(c.id) || 1, color: CWA_COLORS[i % CWA_COLORS.length] }))
+
   const NAV = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, count: null },
     { id: 'cwas', label: 'CWAs', icon: Map, count: cwas.length },
@@ -111,21 +122,46 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
                   <div className="mb-1.5 flex justify-between text-[11px] font-medium text-slate-400"><span>Asignación de HH (CWPs vs estimadas del proyecto)</span><span className="tabular-nums">{pctAsign}%</span></div>
                   <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-emerald-500" style={{ width: `${Math.min(100, pctAsign)}%` }} /></div>
                 </div>
-                {cwas.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="mb-2 text-sm font-bold text-slate-600 dark:text-slate-300">HH por CWA</h3>
-                    <div className="space-y-1.5">
-                      {cwas.map((c) => { const hh = Number(c.hh) || cwaHH(c.id); const w = totalHH ? Math.round((hh / totalHH) * 100) : 0; return (
-                        <div key={c.id} className="flex items-center gap-3 text-xs">
-                          <span className="w-20 shrink-0 font-mono font-semibold text-slate-700 dark:text-slate-200">{c.codigo}</span>
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-white/5"><div className="h-full rounded-full bg-brand-500 dark:bg-accent" style={{ width: `${w}%` }} /></div>
-                          <span className="w-24 shrink-0 text-right tabular-nums text-slate-500">{fmt(hh)} HH</span>
-                        </div>
-                      ) })}
+                {(cwasOver.length > 0 || cwpsOver.length > 0) && (
+                  <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Límites de HH superados</p>
+                      {cwasOver.length > 0 && <p>{cwasOver.length} CWA(s) superan el máximo de {fmt(hhMaxCwa)} HH: {cwasOver.map((c) => c.codigo).join(', ')}.</p>}
+                      {cwpsOver.length > 0 && <p>{cwpsOver.length} CWP(s) superan el máximo de {fmt(hhMaxCwp)} HH: {cwpsOver.map((c) => c.codigo).join(', ')}.</p>}
                     </div>
                   </div>
                 )}
-                {cwas.length === 0 && <Empty msg="Aún no hay CWAs. Crea la primera área de trabajo en la sección CWAs." />}
+                {cwas.length > 0 ? (
+                  <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <Card title="Jerarquía CWA / CWP / IWP">
+                      <div className="flex items-center gap-4">
+                        <div className="h-52 w-52 shrink-0">
+                          <Sunburst cwas={cwas} cwps={cwps} iwps={iwps} discById={discById} weightCwa={(c) => Number(c.hh) || cwaHH(c.id)} weightCwp={(c) => Number(c.hh) || 0} weightIwp={(i) => Number(i.hh) || 0} />
+                        </div>
+                        <div className="min-w-0 flex-1 text-xs">
+                          <p className="mb-1 text-slate-400">Anillos: CWA · CWP · IWP</p>
+                          <div className="flex gap-3 font-semibold text-slate-600 dark:text-slate-300"><span>{cwas.length} CWAs</span><span>{cwps.length} CWPs</span><span>{iwps.length} IWPs</span></div>
+                          <p className="mt-2 text-slate-400">Color del CWP/IWP = disciplina.</p>
+                        </div>
+                      </div>
+                    </Card>
+                    <Card title="Distribución de esfuerzo (HH por CWA)">
+                      <div className="flex items-center gap-4">
+                        <div className="h-44 w-44 shrink-0"><Donut data={donutData} /></div>
+                        <div className="min-w-0 flex-1 space-y-1 overflow-y-auto text-xs" style={{ maxHeight: '11rem' }}>
+                          {cwas.map((c, i) => { const hh = Number(c.hh) || cwaHH(c.id); return (
+                            <div key={c.id} className="flex items-center gap-2">
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: CWA_COLORS[i % CWA_COLORS.length] }} />
+                              <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">{c.codigo}</span>
+                              <span className="shrink-0 tabular-nums text-slate-400">{fmt(hh)} HH</span>
+                            </div>
+                          ) })}
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                ) : <Empty msg="Aún no hay CWAs. Crea la primera área de trabajo en la sección CWAs." />}
               </>
             )}
 
@@ -138,10 +174,10 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
                       <tr key={c.id} className="border-t border-slate-100 dark:border-white/5">
                         <Td><span className="font-mono font-bold text-brand-700 dark:text-accent">{c.codigo}</span></Td>
                         <Td><span className="font-medium text-slate-800 dark:text-white">{c.nombre}</span></Td>
-                        <Td><span className="tabular-nums">{fmt(c.hh)}</span></Td>
+                        <Td><HhCell value={c.hh} over={cwaOver(c)} /></Td>
                         <Td><span className="tabular-nums text-slate-500">{cwps.filter((p) => p.cwaId === c.id).length}</span></Td>
                         <Td><Badge>{c.estado}</Badge></Td>
-                        <Td><RowActions onEdit={() => openCwa(c)} onDelete={() => { if (confirm(`¿Eliminar ${c.codigo} y sus CWPs/IWPs?`)) entities.removeCwa(c.id) }} /></Td>
+                        <Td><RowActions onReport={() => printCwaReport({ cwa: c, cwps, iwps, discById, project, config })} onEdit={() => openCwa(c)} onDelete={() => { if (confirm(`¿Eliminar ${c.codigo} y sus CWPs/IWPs?`)) entities.removeCwa(c.id) }} /></Td>
                       </tr>
                     ))}
                   </Table>
@@ -160,9 +196,9 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
                         <Td><span className="font-medium text-slate-800 dark:text-white">{c.nombre}</span></Td>
                         <Td><span className="font-mono text-xs text-slate-500">{cwa?.codigo || '—'}</span></Td>
                         <Td>{d ? <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: d.color }} /><span className="text-xs">{d.prefijo}</span></span> : '—'}</Td>
-                        <Td><span className="tabular-nums">{fmt(c.hh)}</span></Td>
+                        <Td><HhCell value={c.hh} over={cwpOver(c)} /></Td>
                         <Td>{nIwp > 0 ? <button onClick={() => { if (confirm(`¿Revertir la apertura de ${c.codigo}? Se eliminan sus ${nIwp} IWPs.`)) entities.clearIwpsForCwp(c.id) }} className="rounded bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-accent/15 dark:text-accent" title="Revertir apertura">{nIwp} IWPs</button> : <button onClick={() => openApertura(c)} className="rounded border border-brand-300 px-2 py-0.5 text-[11px] font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-accent/40 dark:text-accent" title="Abrir en IWPs">Abrir</button>}</Td>
-                        <Td><RowActions onEdit={() => openCwp(c)} onDelete={() => { if (confirm(`¿Eliminar ${c.codigo} y sus IWPs?`)) entities.removeCwp(c.id) }} /></Td>
+                        <Td><RowActions onReport={() => printCwpReport({ cwp: c, cwa, disc: d, iwps, project, config })} onEdit={() => openCwp(c)} onDelete={() => { if (confirm(`¿Eliminar ${c.codigo} y sus IWPs?`)) entities.removeCwp(c.id) }} /></Td>
                       </tr>
                     ) })}
                   </Table>
@@ -259,11 +295,23 @@ const Table = ({ cols, children }) => (
 )
 const Td = ({ children }) => <td className="px-3 py-2">{children}</td>
 const Badge = ({ children }) => <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">{children}</span>
-const RowActions = ({ onEdit, onDelete }) => (
+const RowActions = ({ onEdit, onDelete, onReport }) => (
   <div className="flex items-center gap-1">
-    <button onClick={onEdit} className="grid h-7 w-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-white/5"><Pencil className="h-3.5 w-3.5" /></button>
-    <button onClick={onDelete} className="grid h-7 w-7 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" /></button>
+    {onReport && <button onClick={onReport} title="Generar PDF" className="grid h-7 w-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-white/5"><FileText className="h-3.5 w-3.5" /></button>}
+    <button onClick={onEdit} title="Editar" className="grid h-7 w-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-white/5"><Pencil className="h-3.5 w-3.5" /></button>
+    <button onClick={onDelete} title="Eliminar" className="grid h-7 w-7 place-items-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"><Trash2 className="h-3.5 w-3.5" /></button>
   </div>
+)
+const Card = ({ title, children }) => (
+  <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-ink-800/60">
+    <h3 className="mb-3 text-sm font-bold text-slate-600 dark:text-slate-300">{title}</h3>
+    {children}
+  </div>
+)
+const HhCell = ({ value, over }) => (
+  <span className={['inline-flex items-center gap-1 tabular-nums', over ? 'font-semibold text-amber-600 dark:text-amber-400' : ''].join(' ')}>
+    {over && <TriangleAlert className="h-3.5 w-3.5" />}{Number(value || 0).toLocaleString('es-CL')}
+  </span>
 )
 const Empty = ({ msg }) => (
   <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center text-sm text-slate-500 dark:border-white/15 dark:bg-ink-800/40 dark:text-slate-400">{msg}</div>
