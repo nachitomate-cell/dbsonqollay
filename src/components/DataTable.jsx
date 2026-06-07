@@ -525,8 +525,13 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     if (suppressBlurRef.current) { suppressBlurRef.current = false; return } // ya se guardó al navegar
     setEditingCell((cur) => {
       if (cur && !cancelEditRef.current) {
-        updateRecord(cur.id, { [cur.key]: cellDraft })
-        logAction('Editó una celda')
+        // Solo guarda si el valor cambió de verdad (abrir y cerrar una celda sin
+        // tocarla no debe disparar el autoguardado).
+        const curVal = rows.find((r) => r._id === cur.id)?.[cur.key]
+        if (cellDraft !== String(curVal ?? '')) {
+          updateRecord(cur.id, { [cur.key]: cellDraft })
+          logAction('Editó una celda')
+        }
       }
       return null
     })
@@ -534,8 +539,13 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
   // Navegación tipo planilla: guarda la celda y pasa a editar otra. Enter = abajo,
   // Tab = derecha; con Shift, sentido inverso. Tab en el borde salta de fila.
   function commitAndMove(id, key, dRow, dCol) {
-    updateRecord(id, { [key]: cellDraft })
-    logAction('Editó una celda')
+    // Solo guarda si cambió (igual que commitInlineEdit); igual navega a la celda
+    // siguiente aunque no haya cambio.
+    const curVal = rows.find((r) => r._id === id)?.[key]
+    if (cellDraft !== String(curVal ?? '')) {
+      updateRecord(id, { [key]: cellDraft })
+      logAction('Editó una celda')
+    }
     const rowIdx = filtered.findIndex((r) => r._id === id)
     const colIdx = headers.indexOf(key)
     let nr = rowIdx + dRow
