@@ -45,6 +45,7 @@ const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
+import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 
 /* ----------------------------- helpers ----------------------------- */
@@ -52,6 +53,8 @@ import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 const isCostHeader = (h) => /COSTO/i.test(h)
 const isWeightHeader = (h) => /PESO/i.test(h)
 const isStatusHeader = (h) => /(ESTADO|APROB|AVANCE)/i.test(h)
+// Columnas de paquete AWP (CWA/CWP/EWP/PWP/IWP/SWP): se muestran como badge.
+const isAwpHeader = (h) => /^\s*(cwa|cwp|ewp|pwp|iwp|swp)\s*$/i.test(String(h))
 
 const fmtCost = (v) =>
   v === '' || v == null
@@ -885,6 +888,14 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     setShowConnectAwp(false)
   }
 
+  // Columna CWP de la planilla (la que escribe "Conectar a AWP").
+  const cwpCol = useMemo(() => headers.find((h) => /cwp/i.test(h)), [headers.join('|')])
+  // Filtra la grilla a un CWP (o a "sin CWP" con code === '') y va a Elementos.
+  function filterByCwp(code) {
+    if (cwpCol) setColumnFilter(cwpCol, { type: 'values', values: [code] })
+    setActiveTab('elements')
+  }
+
   // Asigna el paquete `name` a las filas seleccionadas (crea la columna si falta).
   function groupIntoPackage(name) {
     const value = String(name || '').trim()
@@ -963,7 +974,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
       </div>
 
       {activeTab !== 'elements' ? (
-        <RelationshipPlaceholder kind={activeTab} count={selected.size} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <AwpCoveragePanel cwps={awpCwps} rows={rows} cwpCol={cwpCol} onSelectCwp={filterByCwp} onImport={importCwps} />
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Toolbar */}
@@ -1558,6 +1571,7 @@ function Row({ label, value, mono, small }) {
 function renderCell(header, value) {
   if (value === '' || value == null) return <span className="text-slate-300 dark:text-slate-600">—</span>
   if (isStatusHeader(header)) return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ${statusStyles(value)}`}>{value}</span>
+  if (isAwpHeader(header)) return <span className="inline-flex items-center rounded-md bg-brand-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-brand-700 dark:bg-accent/15 dark:text-accent">{value}</span>
   if (isCostHeader(header)) return <span className="tabular-nums text-emerald-600 dark:text-emerald-300">{fmtCost(value)}</span>
   if (isWeightHeader(header)) return <span className="tabular-nums">{fmtWeight(value)}</span>
   return String(value)

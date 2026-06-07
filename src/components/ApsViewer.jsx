@@ -177,6 +177,19 @@ function frameModel(viewer) {
   requestAnimationFrame(fit)
 }
 
+// Paleta de colores distintos para "Colorear por CWP" (cicla si hay más CWPs).
+const CWP_PALETTE = [
+  '#f77000', '#2563eb', '#16a34a', '#db2777', '#9333ea', '#0891b2', '#ca8a04',
+  '#dc2626', '#4f46e5', '#059669', '#e11d48', '#7c3aed', '#0284c7', '#65a30d',
+]
+// hex "#rrggbb" → THREE.Vector4 (componentes 0..1) para setThemingColor.
+function hexToVec4(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  return window.THREE ? new window.THREE.Vector4(r, g, b, 1) : null
+}
+
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, awpCwps = [], onImportCwps, onConnectAwp, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
@@ -293,6 +306,8 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   // Conjunto a editar elegido por filtro/paquete (sin clic en 3D): { ids, tags, label }.
   const [bulkSet, setBulkSet] = useState(null)
   const [showConnectAwp, setShowConnectAwp] = useState(false) // modal "Conectar a AWP" desde el 3D
+  const [colorByCwp, setColorByCwp] = useState(false) // pintar el modelo por CWP
+  const [cwpLegend, setCwpLegend] = useState([]) // [{ cwp, hex, count, found }]
   // Modo "selección por área" (arrastre): activa la extensión BoxSelection.
   const [areaMode, setAreaMode] = useState(false)
   const multiRows = useMemo(() => {
@@ -729,6 +744,51 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     })
   }
 
+  // Columna CWP de la planilla (la que escribe "Conectar a AWP").
+  const cwpCol = useMemo(() => headers.find((h) => /cwp/i.test(h)), [headers.join('|')])
+
+  // Colorea TODO el modelo por CWP: cada CWP distinto recibe un color de la
+  // paleta y sus componentes (matcheados por TAG) se pintan con setThemingColor.
+  // Los componentes sin CWP quedan sin teñir. Arma la leyenda CWP→color.
+  async function colorModelByCwp() {
+    const viewer = viewerRef.current
+    if (!viewer || !viewerHasModel(viewer)) return
+    if (!cwpCol) { setMessage('La planilla no tiene columna CWP.'); return }
+    // Agrupa los TAGs por valor de CWP.
+    const groups = new Map()
+    rows.forEach((r) => {
+      const v = String(r[cwpCol] ?? '').trim()
+      const t = String(r[tagKey] ?? '')
+      if (!v || !t) return
+      if (!groups.has(v)) groups.set(v, [])
+      groups.get(v).push(t)
+    })
+    const token = ++ctxRef.current.awpToken
+    ctxRef.current.colorActive = true
+    setMessage('Coloreando por CWP…')
+    safe(() => { viewer.setGhosting(false); viewer.showAll?.(); viewer.clearThemingColors() })
+    const legend = []
+    let i = 0
+    for (const [cwp, tags] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'))) {
+      const hex = CWP_PALETTE[i++ % CWP_PALETTE.length]
+      const vec = hexToVec4(hex)
+      const dbIds = await findDbIds(tags)
+      if (token !== ctxRef.current.awpToken || !viewerRef.current) return // se canceló
+      if (vec) safe(() => dbIds.forEach((id) => viewer.setThemingColor(id, vec)))
+      legend.push({ cwp, hex, count: tags.length, found: dbIds.length })
+    }
+    setCwpLegend(legend)
+    setMessage('')
+  }
+
+  function clearCwpColors() {
+    const viewer = viewerRef.current
+    ctxRef.current.colorActive = false
+    ctxRef.current.awpToken = (ctxRef.current.awpToken || 0) + 1
+    setCwpLegend([])
+    if (viewer && viewerHasModel(viewer)) safe(() => viewer.clearThemingColors())
+  }
+
   // Exportar imagen 16:9 del estado actual.
   function exportImage16x9() {
     const viewer = viewerRef.current
@@ -812,13 +872,23 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   //   1) paquete AWP elegido en el visor  → aísla el paquete (naranja)
   //   2) planilla filtrada (sin paquete)   → aísla los elementos filtrados
   //   3) sin filtro ni paquete             → muestra todo
+  // No corre en modo "colorear por CWP" (ese modo tiñe todo el modelo y manda).
   useEffect(() => {
-    if (status !== 'ready') return
+    if (status !== 'ready' || colorByCwp) return
     if (awpSel.length) isolatePackage()
     else if (isFiltered) isolateFilteredRows()
     else clearIsolation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awpSel, isFiltered, rows, status])
+  }, [awpSel, isFiltered, rows, status, colorByCwp])
+
+  // Colorear por CWP: pinta/limpia el modelo cuando se activa el modo o cambian
+  // las filas (reasignaciones de CWP) estando activo.
+  useEffect(() => {
+    if (status !== 'ready') return
+    if (colorByCwp) colorModelByCwp()
+    else clearCwpColors()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorByCwp, rows, status])
 
   const busy = ['loadingSdk', 'uploading', 'translating'].includes(status)
   const ready = status === 'ready'
@@ -925,6 +995,15 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                 </>
               )}
             </div>
+            {cwpCol && (
+              <button
+                onClick={() => setColorByCwp((v) => !v)}
+                title="Colorear el modelo por CWP: cada paquete con un color distinto"
+                className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', colorByCwp ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+              >
+                <Layers className="h-3.5 w-3.5" /> Por CWP
+              </button>
+            )}
             <button
               onClick={toggleArea}
               title="Selección por área: arrastra un rectángulo sobre el modelo para seleccionar varios elementos (incluidos los pequeños)"
@@ -953,8 +1032,22 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         )}
       </div>
 
+      {/* Leyenda: color por CWP */}
+      {ready && colorByCwp && cwpLegend.length > 0 && (
+        <div className={`absolute right-3 top-16 z-10 max-h-[55%] w-56 overflow-y-auto p-2 ${glass}`}>
+          <p className="mb-1.5 px-1 text-[11px] font-bold text-slate-700 dark:text-white">Color por CWP · {cwpLegend.length}</p>
+          {cwpLegend.map((l) => (
+            <div key={l.cwp} className="flex items-center gap-2 rounded px-1.5 py-1 text-[11px]">
+              <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: l.hex }} />
+              <span className="min-w-0 flex-1 truncate font-mono text-slate-700 dark:text-slate-200" title={l.cwp}>{l.cwp}</span>
+              <span className="shrink-0 tabular-nums text-slate-400" title={`${l.found} encontrados en el modelo`}>{l.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Listado de componentes del/los paquete(s) */}
-      {ready && awpSel.length > 0 && packageTags.length > 0 && (
+      {ready && !colorByCwp && awpSel.length > 0 && packageTags.length > 0 && (
         <div className={`absolute right-3 top-16 z-10 max-h-[45%] w-56 overflow-y-auto p-2 ${glass}`}>
           <p className="mb-1 px-1 text-[11px] font-bold text-slate-700 dark:text-white">{awpSel.length === 1 ? awpSel[0] : `${awpSel.length} paquetes`} · {packageTags.length} comp.</p>
           {packageTags.map((t) => (
