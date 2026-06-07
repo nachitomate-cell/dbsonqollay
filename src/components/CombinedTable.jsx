@@ -21,8 +21,8 @@ const KEY_COLS = ['TAG', 'DISCIPLINA', 'PLANILLA']
 const CHECK = 0
 const colWidth = (h) => (h === 'TAG' ? 200 : h === 'DISCIPLINA' || h === 'PLANILLA' ? 180 : 160)
 
-export default function CombinedTable({ headers = [], rows = [], onOpenRowSheet }) {
-  const [query, setQuery] = useState('')
+export default function CombinedTable({ headers = [], rows = [], onOpenRowSheet, initialQuery = '' }) {
+  const [query, setQuery] = useState(initialQuery)
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
   const scrollRef = useRef(null)
 

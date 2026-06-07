@@ -1,9 +1,10 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
-import { ArrowUpRight, Box, Filter, Globe, LayoutGrid, Layers, List, Loader2, Search, ShieldCheck, Sigma, Table2, X } from 'lucide-react'
+import { ArrowUpRight, Box, Filter, Gauge, Globe, LayoutGrid, Layers, List, Loader2, Search, ShieldCheck, Sigma, Table2, X } from 'lucide-react'
 import Icon from './Icon.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 import CombinedTable from './CombinedTable.jsx'
 import QualityPanel from './QualityPanel.jsx'
+import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 
 // El visor APS (SDK de Autodesk) se carga en un chunk aparte, solo al abrir el 3D.
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
@@ -19,9 +20,11 @@ const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
  *  - createdSheets: { subId: columns[] } de planillas nuevas creadas.
  *  - onOpenSubcategory(subId)
  */
-export default function AllDisciplinesView({ disciplines, datasets = {}, createdSheets = {}, onOpenSubcategory }) {
+export default function AllDisciplinesView({ disciplines, datasets = {}, createdSheets = {}, onOpenSubcategory, awp = {} }) {
+  const { cwps: awpCwps = [], importCwps } = awp
   const [query, setQuery] = useState('')
-  const [mode, setMode] = useState('sheets') // 'sheets' (índice) | 'table' (tabla) | 'quality' (calidad) | 'model' (3D)
+  const [mode, setMode] = useState('sheets') // sheets | table | quality | awp | model
+  const [tableSeed, setTableSeed] = useState('') // búsqueda inicial de la tabla (al filtrar por CWP)
   const [discFilter, setDiscFilter] = useState(() => new Set()) // ids de disciplina; vacío = todas
   const toggleDisc = (id) =>
     setDiscFilter((prev) => {
@@ -139,6 +142,7 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
               <ModeToggle active={mode === 'sheets'} icon={List} label="Planillas" onClick={() => setMode('sheets')} />
               <ModeToggle active={mode === 'table'} icon={Table2} label="Tabla" onClick={() => setMode('table')} />
               <ModeToggle active={mode === 'quality'} icon={ShieldCheck} label="Calidad" badge={qualityIssues} onClick={() => setMode('quality')} />
+              <ModeToggle active={mode === 'awp'} icon={Gauge} label="Avance AWP" onClick={() => setMode('awp')} />
               <ModeToggle active={mode === 'model'} icon={Box} label="Modelo 3D" onClick={() => setMode('model')} />
             </div>
 
@@ -207,10 +211,21 @@ export default function AllDisciplinesView({ disciplines, datasets = {}, created
       ) : mode === 'table' ? (
         /* Modo Tabla combinada: todas las filas del proyecto en una grilla única,
            buscable / ordenable / exportable. Respeta el filtro de disciplina. */
-        <CombinedTable headers={combined.headers} rows={combined.rows} onOpenRowSheet={onOpenSubcategory} />
+        <CombinedTable key={tableSeed || 'all'} initialQuery={tableSeed} headers={combined.headers} rows={combined.rows} onOpenRowSheet={onOpenSubcategory} />
       ) : mode === 'quality' ? (
         /* Modo Calidad: TAGs duplicados (cruce de disciplinas) y elementos sin TAG. */
         <QualityPanel rows={combined.rows} onOpenRowSheet={onOpenSubcategory} />
+      ) : mode === 'awp' ? (
+        /* Modo Avance AWP: cobertura y avance por CWP de TODO el proyecto. Al
+           clicar un CWP, salta a la Tabla combinada filtrada por ese código. */
+        <AwpCoveragePanel
+          cwps={awpCwps}
+          rows={combined.rows}
+          cwpCol={combined.headers.find((h) => /cwp/i.test(h))}
+          avanceCol={combined.headers.find((h) => /AVANCE/i.test(h))}
+          onImport={importCwps}
+          onSelectCwp={(code) => { setTableSeed(code); setMode('table') }}
+        />
       ) : /* Grupos por disciplina */ filteredGroups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center dark:border-white/15 dark:bg-ink-800/40">
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">

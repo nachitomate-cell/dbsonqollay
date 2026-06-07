@@ -284,6 +284,7 @@ export default function App({ project, onChangeProject }) {
                 datasets={allDatasets}
                 createdSheets={createdSheets}
                 onOpenSubcategory={openSubcategory}
+                awp={{ cwps: awpCwps, importCwps }}
               />
             </div>
           ) : discipline ? (
