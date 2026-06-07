@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Layers, Link2, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Gauge, Layers, Link2, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 import { getApsViewer, parkApsViewer } from './apsViewerSingleton.js'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
@@ -190,6 +190,27 @@ function hexToVec4(hex) {
   return window.THREE ? new window.THREE.Vector4(r, g, b, 1) : null
 }
 
+// Peso de avance de un estado "E<n>": E1=0 … E4=1. null si no se reconoce.
+function avanceWeight(v) {
+  const m = /e\s*(\d+)/i.exec(String(v ?? '').trim())
+  if (!m) return null
+  return Math.max(0, Math.min(1, (Number(m[1]) - 1) / 3))
+}
+// Color de "mapa de calor" para un peso 0..1: rojo (0) → ámbar (0.5) → verde (1).
+function heatVec(w) {
+  if (!window.THREE) return null
+  const stops = [[220, 38, 38], [245, 158, 11], [22, 163, 74]]
+  const seg = w <= 0.5 ? 0 : 1
+  const t = w <= 0.5 ? w / 0.5 : (w - 0.5) / 0.5
+  const a = stops[seg], b = stops[seg + 1]
+  return new window.THREE.Vector4(
+    (a[0] + (b[0] - a[0]) * t) / 255,
+    (a[1] + (b[1] - a[1]) * t) / 255,
+    (a[2] + (b[2] - a[2]) * t) / 255,
+    1,
+  )
+}
+
 function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, awpCwps = [], onImportCwps, onConnectAwp, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
@@ -306,7 +327,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   // Conjunto a editar elegido por filtro/paquete (sin clic en 3D): { ids, tags, label }.
   const [bulkSet, setBulkSet] = useState(null)
   const [showConnectAwp, setShowConnectAwp] = useState(false) // modal "Conectar a AWP" desde el 3D
-  const [colorByCwp, setColorByCwp] = useState(false) // pintar el modelo por CWP
+  const [colorMode, setColorMode] = useState('none') // 'none' | 'cwp' | 'avance'
   const [cwpLegend, setCwpLegend] = useState([]) // [{ cwp, hex, count, found }]
   // Modo "selección por área" (arrastre): activa la extensión BoxSelection.
   const [areaMode, setAreaMode] = useState(false)
@@ -789,6 +810,40 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     if (viewer && viewerHasModel(viewer)) safe(() => viewer.clearThemingColors())
   }
 
+  // Columna de avance (ESTADO_AVANCE) de la planilla.
+  const avanceCol = useMemo(() => headers.find((h) => /AVANCE/i.test(h)), [headers.join('|')])
+
+  // Mapa de calor de avance: pinta cada componente según su estado E1→E4
+  // (rojo → ámbar → verde). Los componentes sin estado quedan grises. Agrupa por
+  // valor de estado para hacer una sola búsqueda por estado (rápido).
+  async function colorModelByAvance() {
+    const viewer = viewerRef.current
+    if (!viewer || !viewerHasModel(viewer)) return
+    if (!avanceCol) { setMessage('La planilla no tiene columna de avance (ESTADO_AVANCE).'); return }
+    const groups = new Map() // estado -> tags
+    rows.forEach((r) => {
+      const t = String(r[tagKey] ?? '')
+      if (!t) return
+      const v = String(r[avanceCol] ?? '').trim() || '—'
+      if (!groups.has(v)) groups.set(v, [])
+      groups.get(v).push(t)
+    })
+    const token = ++ctxRef.current.awpToken
+    ctxRef.current.colorActive = true
+    setMessage('Coloreando por avance…')
+    safe(() => { viewer.setGhosting(false); viewer.showAll?.(); viewer.clearThemingColors() })
+    const GRAY = window.THREE ? new window.THREE.Vector4(0.8, 0.84, 0.88, 1) : null
+    for (const [state, tags] of groups) {
+      const w = avanceWeight(state)
+      const vec = w == null ? GRAY : heatVec(w)
+      const dbIds = await findDbIds(tags)
+      if (token !== ctxRef.current.awpToken || !viewerRef.current) return
+      if (vec) safe(() => dbIds.forEach((id) => viewer.setThemingColor(id, vec)))
+    }
+    setCwpLegend([]) // el avance usa una escala fija (gradiente), no leyenda por ítem
+    setMessage('')
+  }
+
   // Exportar imagen 16:9 del estado actual.
   function exportImage16x9() {
     const viewer = viewerRef.current
@@ -872,23 +927,24 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   //   1) paquete AWP elegido en el visor  → aísla el paquete (naranja)
   //   2) planilla filtrada (sin paquete)   → aísla los elementos filtrados
   //   3) sin filtro ni paquete             → muestra todo
-  // No corre en modo "colorear por CWP" (ese modo tiñe todo el modelo y manda).
+  // No corre con un modo de color activo (ese modo tiñe todo el modelo y manda).
   useEffect(() => {
-    if (status !== 'ready' || colorByCwp) return
+    if (status !== 'ready' || colorMode !== 'none') return
     if (awpSel.length) isolatePackage()
     else if (isFiltered) isolateFilteredRows()
     else clearIsolation()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [awpSel, isFiltered, rows, status, colorByCwp])
+  }, [awpSel, isFiltered, rows, status, colorMode])
 
-  // Colorear por CWP: pinta/limpia el modelo cuando se activa el modo o cambian
-  // las filas (reasignaciones de CWP) estando activo.
+  // Colorear por CWP o por avance: pinta/limpia el modelo cuando cambia el modo o
+  // las filas (reasignaciones/cambios de estado) estando activo.
   useEffect(() => {
     if (status !== 'ready') return
-    if (colorByCwp) colorModelByCwp()
+    if (colorMode === 'cwp') colorModelByCwp()
+    else if (colorMode === 'avance') colorModelByAvance()
     else clearCwpColors()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorByCwp, rows, status])
+  }, [colorMode, rows, status])
 
   const busy = ['loadingSdk', 'uploading', 'translating'].includes(status)
   const ready = status === 'ready'
@@ -997,11 +1053,20 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
             </div>
             {cwpCol && (
               <button
-                onClick={() => setColorByCwp((v) => !v)}
+                onClick={() => setColorMode((m) => (m === 'cwp' ? 'none' : 'cwp'))}
                 title="Colorear el modelo por CWP: cada paquete con un color distinto"
-                className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', colorByCwp ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+                className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', colorMode === 'cwp' ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
               >
                 <Layers className="h-3.5 w-3.5" /> Por CWP
+              </button>
+            )}
+            {avanceCol && (
+              <button
+                onClick={() => setColorMode((m) => (m === 'avance' ? 'none' : 'avance'))}
+                title="Mapa de calor de avance: rojo (E1) → ámbar → verde (E4)"
+                className={['inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition', colorMode === 'avance' ? 'bg-brand-500 text-white hover:bg-brand-600 dark:bg-accent dark:text-ink-900' : 'border border-slate-200 text-slate-600 hover:text-brand-600 dark:border-white/10 dark:text-slate-300'].join(' ')}
+              >
+                <Gauge className="h-3.5 w-3.5" /> Por avance
               </button>
             )}
             <button
@@ -1033,7 +1098,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
       </div>
 
       {/* Leyenda: color por CWP */}
-      {ready && colorByCwp && cwpLegend.length > 0 && (
+      {ready && colorMode === 'cwp' && cwpLegend.length > 0 && (
         <div className={`absolute right-3 top-16 z-10 max-h-[55%] w-56 overflow-y-auto p-2 ${glass}`}>
           <p className="mb-1.5 px-1 text-[11px] font-bold text-slate-700 dark:text-white">Color por CWP · {cwpLegend.length}</p>
           {cwpLegend.map((l) => (
@@ -1046,8 +1111,20 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         </div>
       )}
 
+      {/* Leyenda: mapa de calor de avance (escala fija) */}
+      {ready && colorMode === 'avance' && (
+        <div className={`absolute right-3 top-16 z-10 w-56 p-2.5 ${glass}`}>
+          <p className="mb-1.5 px-1 text-[11px] font-bold text-slate-700 dark:text-white">Avance</p>
+          <div className="h-2.5 w-full rounded-full" style={{ background: 'linear-gradient(to right, #dc2626, #f59e0b, #16a34a)' }} />
+          <div className="mt-1 flex justify-between px-0.5 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+            <span>E1</span><span>E2</span><span>E3</span><span>E4</span>
+          </div>
+          <p className="mt-1.5 px-0.5 text-[10px] text-slate-400">Gris = sin estado</p>
+        </div>
+      )}
+
       {/* Listado de componentes del/los paquete(s) */}
-      {ready && !colorByCwp && awpSel.length > 0 && packageTags.length > 0 && (
+      {ready && colorMode === 'none' && awpSel.length > 0 && packageTags.length > 0 && (
         <div className={`absolute right-3 top-16 z-10 max-h-[45%] w-56 overflow-y-auto p-2 ${glass}`}>
           <p className="mb-1 px-1 text-[11px] font-bold text-slate-700 dark:text-white">{awpSel.length === 1 ? awpSel[0] : `${awpSel.length} paquetes`} · {packageTags.length} comp.</p>
           {packageTags.map((t) => (
