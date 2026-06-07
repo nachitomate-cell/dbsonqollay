@@ -9,20 +9,20 @@
  * Ver docs/firebase-migration.md para el plan completo.
  */
 
-import { authEnabled, accessToken, authFetch, isDemoSession } from '../lib/auth.js'
+import { accessToken, authFetch } from '../lib/auth.js'
 
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
 const getAPI = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
 
 /**
- * Trae el dataset publicado en la base de datos (GET autenticado con el JWT del
- * usuario). Es lo que permite que la grilla RECUPERE lo guardado al reabrir, en
- * cualquier equipo (no solo del localStorage de un navegador). Devuelve
- * { headers, rows, ... } o null (sin sesión real, sin backend, o no publicado).
+ * Trae el dataset publicado en la base de datos (GET autenticado con el token de
+ * la sesión: JWT real o 'demo'). Permite que la grilla RECUPERE lo guardado al
+ * reabrir, en cualquier equipo (no solo del localStorage). Incluye la sesión de
+ * prueba para que el cliente pueda probar la persistencia real. Devuelve
+ * { headers, rows, ... } o null (sin sesión, sin backend, o no publicado).
  */
 export async function fetchDbDataset(dataKey) {
-  // Solo con sesión REAL de Supabase (la de prueba no tiene JWT válido).
-  if (!authEnabled() || !accessToken() || isDemoSession()) return null
+  if (!accessToken()) return null // sin sesión, no hay nada que recuperar
   try {
     const res = await authFetch(`${getAPI()}/api/datasets/${encodeURIComponent(dataKey)}`, { cache: 'no-store' })
     if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) return null

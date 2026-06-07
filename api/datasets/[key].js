@@ -57,12 +57,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      // Autoriza al PLUGIN (token SQY_API_TOKEN) o a un USUARIO logueado (JWT de
-      // Supabase). Así la web puede leer de la DB lo último guardado (no solo el
-      // plugin) → la grilla recupera sus datos al reabrir, en cualquier equipo.
+      // Autoriza al PLUGIN (token SQY_API_TOKEN), a un USUARIO logueado (JWT de
+      // Supabase), o a la SESIÓN DE PRUEBA (token 'demo') para que el cliente pueda
+      // probar la persistencia real sin login. Así la web recupera de la DB lo
+      // último guardado al reabrir, en cualquier equipo.
+      // TODO (cierre): quitar `okDemo` y scopear por project_id (migración 002).
       const okPlugin = pluginAuthorized(req)
-      const user = okPlugin ? null : await getUserFromRequest(req)
-      if (!okPlugin && !user) {
+      const okDemo = (req.headers?.authorization || '') === 'Bearer demo'
+      const user = (okPlugin || okDemo) ? null : await getUserFromRequest(req)
+      if (!okPlugin && !okDemo && !user) {
         return send(res, 401, { error: 'No autorizado: inicia sesión o usa el token del plugin.' })
       }
       const data = await readJsonObject(objectKey)
