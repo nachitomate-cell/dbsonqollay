@@ -31,10 +31,19 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const { user, isDemo, signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [activeDiscipline, setActiveDiscipline] = useState('electrico')
-  const [showAll, setShowAll] = useState(false) // vista "Todas las disciplinas" (índice global de planillas)
-  const [openSubs, setOpenSubs] = useState([])
-  const [activeSub, setActiveSub] = useState(null)
+  // Navegación interna persistida por proyecto (sessionStorage): si el service
+  // worker se actualiza y recarga la página, el usuario vuelve a la misma
+  // disciplina/planilla en vez de rebotar al inicio del proyecto.
+  const NAVK = `sqy-nav-${project.id}`
+  const initNav = () => { try { return JSON.parse(sessionStorage.getItem(NAVK) || 'null') || {} } catch { return {} } }
+  const [activeDiscipline, setActiveDiscipline] = useState(() => initNav().activeDiscipline ?? 'electrico')
+  const [showAll, setShowAll] = useState(() => initNav().showAll ?? false) // vista "Todas las disciplinas"
+  const [openSubs, setOpenSubs] = useState(() => initNav().openSubs ?? [])
+  const [activeSub, setActiveSub] = useState(() => initNav().activeSub ?? null)
+
+  useEffect(() => {
+    try { sessionStorage.setItem(NAVK, JSON.stringify({ activeDiscipline, showAll, openSubs, activeSub })) } catch { /* cuota */ }
+  }, [NAVK, activeDiscipline, showAll, openSubs, activeSub])
   const [theme, setTheme] = useState(() => {
     // Si el usuario ya eligió tema, se respeta; si no, se usa el del sistema.
     const saved = localStorage.getItem('sqy-theme')

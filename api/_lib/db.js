@@ -162,29 +162,41 @@ export async function ensureDisciplines(seed) {
     await client.query(
       'create index if not exists sqy_subcategories_disc on sqy_subcategories(discipline_id)')
 
-    // Siembra inicial: solo si la tabla está vacía (no pisa ediciones manuales).
-    const { rows: cnt } = await client.query('select count(*)::int as n from sqy_disciplines')
-    if (cnt[0].n === 0 && Array.isArray(seed) && seed.length) {
-      await client.query('begin')
-      try {
-        let di = 0
-        for (const d of seed) {
-          await client.query(
-            `insert into sqy_disciplines (id, name, icon, description, coming_soon, sort_order)
-             values ($1,$2,$3,$4,$5,$6) on conflict (id) do nothing`,
-            [d.id, d.name, d.icon || null, d.description || null, !!d.comingSoon, di++])
-          let si = 0
-          for (const s of (d.subcategories || [])) {
+    // Sincronización ADITIVA del seed en cada llamada: inserta las disciplinas y
+    // subcategorías de la estructura que FALTEN (no pisa lo existente ni borra lo
+    // extra). Así el menú de la DB se mantiene completo aunque la estructura haya
+    // cambiado desde la siembra inicial (evita que falten planillas en el menú).
+    if (Array.isArray(seed) && seed.length) {
+      const { rows: exD } = await client.query('select id from sqy_disciplines')
+      const haveD = new Set(exD.map((r) => r.id))
+      const { rows: exS } = await client.query('select id from sqy_subcategories')
+      const haveS = new Set(exS.map((r) => r.id))
+      const needD = []
+      const needS = []
+      seed.forEach((d, di) => {
+        if (!haveD.has(d.id)) needD.push([d, di])
+        ;(d.subcategories || []).forEach((s, si) => { if (!haveS.has(s.id)) needS.push([s, d.id, si]) })
+      })
+      if (needD.length || needS.length) {
+        await client.query('begin')
+        try {
+          for (const [d, di] of needD) { // disciplinas primero (FK de subcategorías)
+            await client.query(
+              `insert into sqy_disciplines (id, name, icon, description, coming_soon, sort_order)
+               values ($1,$2,$3,$4,$5,$6) on conflict (id) do nothing`,
+              [d.id, d.name, d.icon || null, d.description || null, !!d.comingSoon, di])
+          }
+          for (const [s, did, si] of needS) {
             await client.query(
               `insert into sqy_subcategories (id, discipline_id, code, name, icon, description, data_key, sort_order)
                values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (id) do nothing`,
-              [s.id, d.id, s.code || null, s.name, s.icon || null, s.description || null, s.dataKey || null, si++])
+              [s.id, did, s.code || null, s.name, s.icon || null, s.description || null, s.dataKey || null, si])
           }
+          await client.query('commit')
+        } catch (e) {
+          try { await client.query('rollback') } catch {}
+          throw e
         }
-        await client.query('commit')
-      } catch (e) {
-        try { await client.query('rollback') } catch {}
-        throw e
       }
     }
 
