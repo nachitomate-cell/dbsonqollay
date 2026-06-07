@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { loadWorking, removeWorking, saveWorking } from '../utils/datastore'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { fetchDbDataset, loadWorking, removeWorking, saveWorking } from '../utils/datastore'
 
 /**
  * Capa editable sobre un dataset (headers + rows). Permite editar valores,
@@ -50,12 +50,34 @@ export function useEditableDataset(dataKey, dataset) {
   // actual a `past` y limpia `future`; deshacer/rehacer mueven entre las pilas.
   const [hist, setHist] = useState(() => ({ past: [], present: init(dataKey, dataset), future: [] }))
   const state = hist.present
+  const userEditedRef = useRef(false) // ¿el usuario editó en esta sesión? (no pisar con la DB)
 
   useEffect(() => {
     if (state.dirty) saveWorking(dataKey, state)
   }, [dataKey, state])
 
+  // Al abrir la planilla, recupera de la BASE DE DATOS lo último guardado (la
+  // fuente de verdad), para que los cambios persistan entre equipos/sesiones y no
+  // dependan del localStorage. Solo si hay sesión real (JWT) y el usuario aún no
+  // editó en esta sesión (para no pisar ediciones en curso).
+  useEffect(() => {
+    let cancelled = false
+    fetchDbDataset(dataKey).then((db) => {
+      if (cancelled || !db || userEditedRef.current) return
+      const present = {
+        columns: (db.headers ?? []).map((h) => ({ key: h, visible: true })),
+        rows: (db.rows ?? []).map((r) => ({ ...upperPatch(r), _id: genId() })),
+        dirty: false,
+      }
+      setHist({ past: [], present, future: [] })
+      saveWorking(dataKey, present)
+    }).catch(() => { /* sin DB: queda el localStorage / dataset base */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey])
+
   const mutate = (fn) => setHist((h) => {
+    userEditedRef.current = true
     const next = { ...fn(h.present), dirty: true }
     if (next.rows === h.present.rows && next.columns === h.present.columns) return h // no-op
     return { past: [...h.past, h.present].slice(-HISTORY_LIMIT), present: next, future: [] }

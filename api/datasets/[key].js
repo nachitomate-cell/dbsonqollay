@@ -1,5 +1,6 @@
 import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, removeFromDatasetIndex, deleteObject, pluginAuthorized, send, fail } from '../_lib/aps.js'
 import { upsertDatasetToDb, deleteDatasetFromDb } from '../_lib/db.js'
+import { getUserFromRequest } from '../_lib/auth.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -56,8 +57,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'GET') {
-      if (!pluginAuthorized(req)) {
-        return send(res, 401, { error: 'No autorizado: falta o no coincide el token (Authorization: Bearer <SQY_API_TOKEN>).' })
+      // Autoriza al PLUGIN (token SQY_API_TOKEN) o a un USUARIO logueado (JWT de
+      // Supabase). Así la web puede leer de la DB lo último guardado (no solo el
+      // plugin) → la grilla recupera sus datos al reabrir, en cualquier equipo.
+      const okPlugin = pluginAuthorized(req)
+      const user = okPlugin ? null : await getUserFromRequest(req)
+      if (!okPlugin && !user) {
+        return send(res, 401, { error: 'No autorizado: inicia sesión o usa el token del plugin.' })
       }
       const data = await readJsonObject(objectKey)
       if (!data) return send(res, 404, { error: 'Dataset no publicado todavía para esa key.' })

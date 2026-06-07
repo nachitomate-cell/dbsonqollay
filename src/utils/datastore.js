@@ -9,7 +9,29 @@
  * Ver docs/firebase-migration.md para el plan completo.
  */
 
+import { authEnabled, accessToken, authFetch, isDemoSession } from '../lib/auth.js'
+
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
+const getAPI = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+
+/**
+ * Trae el dataset publicado en la base de datos (GET autenticado con el JWT del
+ * usuario). Es lo que permite que la grilla RECUPERE lo guardado al reabrir, en
+ * cualquier equipo (no solo del localStorage de un navegador). Devuelve
+ * { headers, rows, ... } o null (sin sesión real, sin backend, o no publicado).
+ */
+export async function fetchDbDataset(dataKey) {
+  // Solo con sesión REAL de Supabase (la de prueba no tiene JWT válido).
+  if (!authEnabled() || !accessToken() || isDemoSession()) return null
+  try {
+    const res = await authFetch(`${getAPI()}/api/datasets/${encodeURIComponent(dataKey)}`, { cache: 'no-store' })
+    if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) return null
+    const d = await res.json()
+    return d && Array.isArray(d.rows) ? d : null
+  } catch {
+    return null
+  }
+}
 
 /** Lee el estado editable persistido. Devuelve { columns, rows } o null. */
 export function loadWorking(dataKey) {
