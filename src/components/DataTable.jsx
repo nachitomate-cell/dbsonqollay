@@ -861,12 +861,12 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     return [...set].sort((a, b) => a.localeCompare(b, 'es'))
   }, [rows, packageCol])
 
-  // Conecta los componentes seleccionados a un CWA/CWP (del CSV de Aura AWP):
-  // escribe el CWA y el CWP en las columnas correspondientes de la planilla
-  // (las crea si faltan). Es un solo paso de deshacer.
-  function connectToAwp(cwp) {
-    const ids = [...selected]
-    if (!ids.length) { flash('Selecciona componentes primero.'); return }
+  // Conecta un conjunto de componentes (por _id) a un CWA/CWP del CSV de Aura
+  // AWP: escribe el CWA y el CWP en las columnas correspondientes de la planilla
+  // (las crea si faltan). Es un solo paso de deshacer. Reutilizable desde la
+  // grilla (selección por checkbox) y desde el visor 3D (selección de objetos).
+  const connectIdsToAwp = useCallback((ids, cwp) => {
+    if (!ids?.length || !cwp) { flash('Selecciona componentes primero.'); return }
     const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
     const findCol = (kw, fallback) =>
       columns.find((c) => norm(c.key) === norm(kw))?.key ||
@@ -876,9 +876,13 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     if (!columns.some((c) => c.key === cwaCol)) addColumn(cwaCol)
     if (!columns.some((c) => c.key === cwpCol)) addColumn(cwpCol)
     updateRecords(ids, { [cwaCol]: cwp.cwa, [cwpCol]: cwp.codigo })
-    setShowConnectAwp(false)
     flash(`${ids.length} componente(s) conectados a ${cwp.codigo} (${cwp.cwa}).`)
     logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns])
+  function connectToAwp(cwp) {
+    connectIdsToAwp([...selected], cwp)
+    setShowConnectAwp(false)
   }
 
   // Asigna el paquete `name` a las filas seleccionadas (crea la columna si falta).
@@ -1351,6 +1355,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
                   onSelect={handleApsSelect}
                   onEditRecord={(id, patch) => { updateRecord(id, patch); logAction('Editó un registro') }}
                   onEditRecords={(ids, patch) => { updateRecords(ids, patch); logAction(`Editó ${ids.length} registros`) }}
+                  awpCwps={awpCwps}
+                  onImportCwps={importCwps}
+                  onConnectAwp={connectIdsToAwp}
                   dataKey={subcategory.dataKey}
                   isFiltered={activeFilters.length > 0 || query.trim() !== ''}
                 />

@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Layers, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { BoxSelect, Camera, ChevronDown, Check, FolderOpen, Layers, Link2, ListChecks, Loader2, Save, Search, Sparkles, Trash2, Upload, X } from 'lucide-react'
 import { addProject, deleteProjectRemote, fetchAllProjects, listProjects } from '../utils/apsProjects.js'
 import { getApsViewer, parkApsViewer } from './apsViewerSingleton.js'
+import ConnectAwpModal from './ConnectAwpModal.jsx'
 
 /**
  * Visor de modelos reales con el SDK de Autodesk (APS Viewer) + comportamientos
@@ -176,7 +177,7 @@ function frameModel(viewer) {
   requestAnimationFrame(fit)
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, dataKey = 'default', isFiltered = false }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, awpCwps = [], onImportCwps, onConnectAwp, dataKey = 'default', isFiltered = false }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
@@ -291,6 +292,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const [bulkSaved, setBulkSaved] = useState(false)
   // Conjunto a editar elegido por filtro/paquete (sin clic en 3D): { ids, tags, label }.
   const [bulkSet, setBulkSet] = useState(null)
+  const [showConnectAwp, setShowConnectAwp] = useState(false) // modal "Conectar a AWP" desde el 3D
   // Modo "selección por área" (arrastre): activa la extensión BoxSelection.
   const [areaMode, setAreaMode] = useState(false)
   const multiRows = useMemo(() => {
@@ -995,6 +997,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                 <button onClick={saveBulk} disabled={!bulkField} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600 disabled:opacity-50 dark:bg-accent dark:text-ink-900">
                   {bulkSaved ? <><Check className="h-3.5 w-3.5" /> Aplicado</> : <><Save className="h-3.5 w-3.5" /> Aplicar a {activeBulk.ids.length}</>}
                 </button>
+                {onConnectAwp && (
+                  <button onClick={() => setShowConnectAwp(true)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand-300 bg-brand-50/50 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-100 dark:border-accent/40 dark:bg-accent/10 dark:text-accent">
+                    <Link2 className="h-3.5 w-3.5" /> Conectar a AWP
+                  </button>
+                )}
                 <p className="mt-2 mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Elementos</p>
                 <div className="flex flex-wrap gap-1">
                   {activeBulk.tags.slice(0, 80).map((t, i) => (
@@ -1006,6 +1013,21 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           </div>
         </div>
       )}
+
+      {/* Modal: conectar a un CWA/CWP los elementos seleccionados en el modelo
+          (selección múltiple) o el único objeto vinculado a una fila. */}
+      {showConnectAwp && (() => {
+        const ids = activeBulk?.ids?.length ? activeBulk.ids : (linkRow ? [linkRow.id] : [])
+        return (
+          <ConnectAwpModal
+            cwps={awpCwps}
+            count={ids.length}
+            onImport={onImportCwps}
+            onConnect={(cwp) => { onConnectAwp?.(ids, cwp); setShowConnectAwp(false) }}
+            onClose={() => setShowConnectAwp(false)}
+          />
+        )
+      })()}
 
       {/* Panel de propiedades del objeto pinchado */}
       {ready && objProps && showProps && (
@@ -1038,6 +1060,11 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                 <button onClick={saveLinked} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-brand-500 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
                   {savedField ? <><Check className="h-3.5 w-3.5" /> Guardado</> : <><Save className="h-3.5 w-3.5" /> Guardar en planilla</>}
                 </button>
+                {onConnectAwp && linkRow && (
+                  <button onClick={() => setShowConnectAwp(true)} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand-300 bg-white py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50 dark:border-accent/40 dark:bg-ink-900 dark:text-accent dark:hover:bg-accent/10">
+                    <Link2 className="h-3.5 w-3.5" /> Conectar a AWP
+                  </button>
+                )}
               </div>
             ) : (
               <p className="mb-3 rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-400 dark:bg-white/5">Sin registro en la planilla para este objeto (el TAG no coincide).</p>
