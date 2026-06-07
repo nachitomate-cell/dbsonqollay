@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client'
 import LoginGate from './components/LoginGate.jsx'
-import ProjectGate from './components/ProjectGate.jsx'
+import OrgGate from './components/OrgGate.jsx'
 import './index.css'
 
 // Nota: NO se usa <React.StrictMode>. El visor de Autodesk (APS Viewer) no es
@@ -13,6 +13,6 @@ import './index.css'
 // de Supabase, además aparece el login real de email/contraseña. Ver src/lib/auth.js.
 ReactDOM.createRoot(document.getElementById('root')).render(
   <LoginGate>
-    <ProjectGate />
+    <OrgGate />
   </LoginGate>,
 )

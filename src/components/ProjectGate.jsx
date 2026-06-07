@@ -17,10 +17,11 @@ import { useProjects } from '../hooks/useProjects.js'
 // dentro de la misma pestaña (p. ej. cuando el service worker se actualiza y
 // recarga la página) pero NO entre pestañas/sesiones nuevas, donde se vuelve a
 // mostrar el selector "bienvenido de nuevo".
-const SKEY = 'sqy-active-project-session'
+const skey = (orgId) => `sqy-active-project-session${orgId ? `-${orgId}` : ''}`
 
-export default function ProjectGate() {
-  const { projects, opened, lastOpenedId, addProject, removeProject, markOpened } = useProjects()
+export default function ProjectGate({ org, onChangeOrg }) {
+  const SKEY = skey(org?.id)
+  const { projects, opened, lastOpenedId, addProject, removeProject, markOpened } = useProjects(org?.id)
   // Restaura el proyecto activo de la sesión (evita que una recarga del SW te
   // devuelva al selector). Si no hay, arranca en el selector.
   const [active, setActive] = useState(() => {
@@ -50,7 +51,7 @@ export default function ProjectGate() {
     if (p) open(p)
   }
 
-  if (active) return <App key={active.id} project={active} onChangeProject={change} />
+  if (active) return <App key={active.id} project={active} onChangeProject={change} org={org} onChangeOrg={onChangeOrg} />
 
   return (
     <>
@@ -59,6 +60,8 @@ export default function ProjectGate() {
         opened={opened}
         lastOpenedId={lastOpenedId}
         busyId={entering?.id || null}
+        org={org}
+        onChangeOrg={onChangeOrg}
         onSelect={open}
         onNew={() => setShowNew(true)}
         onRemove={removeProject}

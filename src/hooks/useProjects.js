@@ -9,19 +9,21 @@ import { DEMO_PROJECTS } from '../data/projects.js'
  *
  * Retorna { projects, opened, lastOpenedId, addProject, removeProject, markOpened }
  */
-const LS_PROJECTS = 'sqy-projects-v1'
-const LS_OPENED = 'sqy-projects-opened'
+const lsProjects = (orgId) => `sqy-projects-v1${orgId ? `-${orgId}` : ''}`
+const lsOpened = (orgId) => `sqy-projects-opened${orgId ? `-${orgId}` : ''}`
 
 function load(key, fb) {
   try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fb } catch { return fb }
 }
 
-export function useProjects() {
-  const [custom, setCustom] = useState(() => load(LS_PROJECTS, []))
-  const [opened, setOpened] = useState(() => load(LS_OPENED, {}))
+export function useProjects(orgId) {
+  const KEY = lsProjects(orgId)
+  const KEY_OPENED = lsOpened(orgId)
+  const [custom, setCustom] = useState(() => load(KEY, []))
+  const [opened, setOpened] = useState(() => load(KEY_OPENED, {}))
 
-  useEffect(() => { try { localStorage.setItem(LS_PROJECTS, JSON.stringify(custom)) } catch { /* cuota */ } }, [custom])
-  useEffect(() => { try { localStorage.setItem(LS_OPENED, JSON.stringify(opened)) } catch { /* cuota */ } }, [opened])
+  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(custom)) } catch { /* cuota */ } }, [KEY, custom])
+  useEffect(() => { try { localStorage.setItem(KEY_OPENED, JSON.stringify(opened)) } catch { /* cuota */ } }, [KEY_OPENED, opened])
 
   const projects = [...DEMO_PROJECTS, ...custom]
 

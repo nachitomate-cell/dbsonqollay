@@ -27,7 +27,7 @@ import { exportProjectToExcel } from './utils/projectExport.js'
  * Los datasets importados (hook) se fusionan con los base, y sus subcategorías
  * se inyectan dinámicamente en la disciplina correspondiente.
  */
-export default function App({ project, onChangeProject }) {
+export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const { user, isDemo, signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -151,8 +151,11 @@ export default function App({ project, onChangeProject }) {
     .filter(Boolean)
 
   const crumbs = useMemo(() => {
-    // El nombre del proyecto es la raíz y, al clicar, vuelve al selector.
-    const list = [{ label: project.name, onClick: onChangeProject }]
+    // Organización (vuelve al selector de org) → proyecto (vuelve al selector de
+    // proyecto) → disciplina/planilla.
+    const list = []
+    if (org) list.push({ label: org.name, onClick: onChangeOrg })
+    list.push({ label: project.name, onClick: onChangeProject })
     if (activeSub) {
       // Una planilla abierta: muestra su disciplina real (sirve también cuando se
       // abrió desde "Todas las disciplinas") y su nombre.
@@ -265,6 +268,8 @@ export default function App({ project, onChangeProject }) {
           isDemo={isDemo}
           onSignOut={signOut}
           onChangeProject={onChangeProject}
+          onChangeOrg={onChangeOrg}
+          orgName={org?.name}
         />
 
         <main className="min-h-0 flex-1 overflow-hidden">

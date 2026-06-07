@@ -29,9 +29,9 @@ function timeAgo(ts) {
   const mo = Math.floor(d / 30); return `hace ${mo} mes${mo > 1 ? 'es' : ''}`
 }
 
-export default function ProjectSelector({ projects = [], opened = {}, lastOpenedId, busyId, onSelect, onNew, onRemove }) {
+export default function ProjectSelector({ projects = [], opened = {}, lastOpenedId, busyId, org, onChangeOrg, onSelect, onNew, onRemove }) {
   const { user, signOut } = useAuth()
-  const company = companyName(user)
+  const company = org?.name || companyName(user)
   const last = lastOpenedId ? projects.find((p) => p.id === lastOpenedId) : null
 
   return (
@@ -51,12 +51,17 @@ export default function ProjectSelector({ projects = [], opened = {}, lastOpened
             <Building2 className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Empresa</p>
+            <p className="text-[11px] uppercase tracking-wide text-slate-400">Organización</p>
             <h1 className="truncate text-lg font-extrabold tracking-tight text-slate-800 dark:text-white">{company}</h1>
           </div>
           <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-white/10 dark:text-slate-400">
             {projects.length} proyecto{projects.length === 1 ? '' : 's'}
           </span>
+          {onChangeOrg && (
+            <button onClick={onChangeOrg} title="Cambiar de organización" className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:text-slate-400 dark:hover:text-accent">
+              Cambiar
+            </button>
+          )}
         </div>
 
         {/* Continuar en el último proyecto abierto */}
