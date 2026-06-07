@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchDbDataset, loadWorking, removeWorking, saveWorking } from '../utils/datastore'
+import { cloudEnabled, fetchDbDataset, loadWorking, removeWorking, saveWorking } from '../utils/datastore'
 
 /**
  * Capa editable sobre un dataset (headers + rows). Permite editar valores,
@@ -40,6 +40,21 @@ function init(dataKey, dataset) {
   return build(dataset)
 }
 
+// ¿El estado `a` ya muestra el mismo contenido que el de la nube `b`? Compara
+// las filas por las columnas de `b` (ignora `_id` y columnas ocultas). Sirve para
+// NO re-renderizar la grilla cuando la nube coincide con lo que ya se ve (evita
+// el "parpadeo"/salto al abrir una planilla).
+function sameData(a, b) {
+  const keys = b.columns.map((c) => c.key)
+  if ((a.rows?.length ?? 0) !== (b.rows?.length ?? 0)) return false
+  for (let i = 0; i < b.rows.length; i++) {
+    const ra = a.rows[i], rb = b.rows[i]
+    if (!ra) return false
+    for (const k of keys) if (String(ra[k] ?? '') !== String(rb[k] ?? '')) return false
+  }
+  return true
+}
+
 // Profundidad máxima del historial de deshacer/rehacer. Como las mutaciones son
 // inmutables (cada cambio crea nuevos arrays), guardar estados previos es barato
 // (solo referencias), pero igual lo acotamos para no acumular sin límite.
@@ -51,6 +66,10 @@ export function useEditableDataset(dataKey, dataset) {
   const [hist, setHist] = useState(() => ({ past: [], present: init(dataKey, dataset), future: [] }))
   const state = hist.present
   const userEditedRef = useRef(false) // ¿el usuario editó en esta sesión? (no pisar con la DB)
+  // Carga inicial desde la nube: solo BLOQUEA con "cargando" cuando NO hay caché
+  // local (primer ingreso) — así no se muestran datos viejos y luego saltan. Si
+  // ya hay caché, se muestra al instante y la nube solo actualiza si difiere.
+  const [loading, setLoading] = useState(() => cloudEnabled() && loadWorking(dataKey) == null)
 
   useEffect(() => {
     if (state.dirty) saveWorking(dataKey, state)
@@ -58,20 +77,25 @@ export function useEditableDataset(dataKey, dataset) {
 
   // Al abrir la planilla, recupera de la BASE DE DATOS lo último guardado (la
   // fuente de verdad), para que los cambios persistan entre equipos/sesiones y no
-  // dependan del localStorage. Solo si hay sesión real (JWT) y el usuario aún no
-  // editó en esta sesión (para no pisar ediciones en curso).
+  // dependan del localStorage. No pisa ediciones en curso (userEditedRef) ni
+  // re-renderiza si la nube coincide con lo que ya se ve (sameData → sin parpadeo).
   useEffect(() => {
     let cancelled = false
+    if (!cloudEnabled()) { setLoading(false); return }
     fetchDbDataset(dataKey).then((db) => {
-      if (cancelled || !db || userEditedRef.current) return
+      if (cancelled || !db) return
       const present = {
         columns: (db.headers ?? []).map((h) => ({ key: h, visible: true })),
         rows: (db.rows ?? []).map((r) => ({ ...upperPatch(r), _id: genId() })),
         dirty: false,
       }
-      setHist({ past: [], present, future: [] })
-      saveWorking(dataKey, present)
+      setHist((h) => {
+        if (userEditedRef.current || sameData(h.present, present)) return h
+        saveWorking(dataKey, present)
+        return { past: [], present, future: [] }
+      })
     }).catch(() => { /* sin DB: queda el localStorage / dataset base */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey])
@@ -206,5 +230,6 @@ export function useEditableDataset(dataKey, dataset) {
   return {
     columns: state.columns, rows: state.rows, dirty: state.dirty, ...api,
     undo, redo, canUndo: hist.past.length > 0, canRedo: hist.future.length > 0,
+    loading,
   }
 }

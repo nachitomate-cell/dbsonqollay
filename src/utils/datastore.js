@@ -14,6 +14,9 @@ import { accessToken, authFetch } from '../lib/auth.js'
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
 const getAPI = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
 
+/** ¿Hay sesión (real o de prueba) para leer/escribir en la nube? */
+export const cloudEnabled = () => !!accessToken()
+
 /**
  * Trae el dataset publicado en la base de datos (GET autenticado con el token de
  * la sesión: JWT real o 'demo'). Permite que la grilla RECUPERE lo guardado al

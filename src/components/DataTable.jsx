@@ -85,7 +85,7 @@ const defaultWidth = (h) => {
 
 export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
   const { cwps: awpCwps = [], importCwps, clearCwps } = awp
-  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo } =
+  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo, loading } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
@@ -945,6 +945,19 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
   const headBg = 'bg-slate-100 dark:bg-ink-700'
   const cellStickyBg = (isSel) =>
     isSel ? 'bg-brand-50 dark:bg-ink-700' : 'bg-white group-hover:bg-slate-50 dark:bg-ink-800 dark:group-hover:bg-ink-700'
+
+  // Primer ingreso sin caché local: mientras llega lo de la nube mostramos un
+  // estado de carga en vez de datos viejos que después saltan.
+  if (loading) {
+    return (
+      <div className="grid min-h-0 flex-1 place-items-center border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-800">
+        <div className="flex flex-col items-center gap-3 text-slate-400 dark:text-slate-500">
+          <Loader2 className="h-7 w-7 animate-spin text-brand-500 dark:text-accent" />
+          <p className="text-sm font-medium">Cargando datos…</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={[
