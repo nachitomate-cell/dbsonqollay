@@ -14,6 +14,7 @@ import { datasets as baseDatasets, defaultColumns, emptyDataset } from './data/d
 import { useDisciplines } from './hooks/useDisciplines.js'
 import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { useCustomDisciplines } from './hooks/useCustomDisciplines.js'
+import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 
 /**
@@ -73,6 +74,8 @@ export default function App({ project, onChangeProject }) {
   const { customDisciplines, addDiscipline, removeDiscipline } = useCustomDisciplines(project.id)
 
   const { datasets: importedDatasets, extraSubs, importFile, removeImported, clearAll: clearImports, importing, error } = useImportedDatasets(project.id)
+  // CWPs (AWP) importados del CSV de Aura AWP, por proyecto. Para "Conectar a AWP".
+  const { cwps: awpCwps, importCwps, clearCwps } = useAwpCwps(project.id)
 
   useEffect(() => {
     const root = document.documentElement
@@ -272,6 +275,7 @@ export default function App({ project, onChangeProject }) {
               onSwitch={setActiveSub}
               onClose={closeTab}
               onReturn={() => setActiveSub(null)}
+              awp={{ cwps: awpCwps, importCwps, clearCwps }}
             />
           ) : showAll ? (
             <div className="h-full overflow-y-auto">

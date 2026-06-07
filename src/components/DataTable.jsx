@@ -31,9 +31,11 @@ import {
   RotateCw,
   Search,
   Share2,
+  Redo2,
   Tag,
   Trash2,
   TriangleAlert,
+  Undo2,
   Upload,
   X,
 } from 'lucide-react'
@@ -42,6 +44,7 @@ import {
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import RecordDrawer from './RecordDrawer.jsx'
+import ConnectAwpModal from './ConnectAwpModal.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 
 /* ----------------------------- helpers ----------------------------- */
@@ -77,8 +80,9 @@ const defaultWidth = (h) => {
 
 /* --------------------------- component ----------------------------- */
 
-export default function DataTable({ dataset, subcategory, onBack }) {
-  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty } =
+export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
+  const { cwps: awpCwps = [], importCwps, clearCwps } = awp
+  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
@@ -126,6 +130,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [ctxMenu, setCtxMenu] = useState(null) // menú contextual de fila: { x, y, rowId }
   const [clipboardRow, setClipboardRow] = useState(null) // fila copiada (datos sin _id)
   const [showPackage, setShowPackage] = useState(false) // modal "Agrupar en paquete"
+  const [showConnectAwp, setShowConnectAwp] = useState(false) // modal "Conectar a AWP"
   // Publicación a Navisworks: { status:'publishing'|'done'|'error', count, key, ms, error }
   const [publish, setPublish] = useState(null)
   const [publishElapsed, setPublishElapsed] = useState(0) // ms transcurridos (cronómetro en vivo)
@@ -507,12 +512,14 @@ export default function DataTable({ dataset, subcategory, onBack }) {
   const [editingCell, setEditingCell] = useState(null) // { id, key } | null
   const [cellDraft, setCellDraft] = useState('')
   const cancelEditRef = useRef(false)
+  const suppressBlurRef = useRef(false) // Tab/Enter ya guarda: el blur no debe re-guardar
   function startInlineEdit(id, key, value) {
     cancelEditRef.current = false
     setCellDraft(value == null ? '' : String(value))
     setEditingCell({ id, key })
   }
   function commitInlineEdit() {
+    if (suppressBlurRef.current) { suppressBlurRef.current = false; return } // ya se guardó al navegar
     setEditingCell((cur) => {
       if (cur && !cancelEditRef.current) {
         updateRecord(cur.id, { [cur.key]: cellDraft })
@@ -520,6 +527,55 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       }
       return null
     })
+  }
+  // Navegación tipo planilla: guarda la celda y pasa a editar otra. Enter = abajo,
+  // Tab = derecha; con Shift, sentido inverso. Tab en el borde salta de fila.
+  function commitAndMove(id, key, dRow, dCol) {
+    updateRecord(id, { [key]: cellDraft })
+    logAction('Editó una celda')
+    const rowIdx = filtered.findIndex((r) => r._id === id)
+    const colIdx = headers.indexOf(key)
+    let nr = rowIdx + dRow
+    let nc = colIdx + dCol
+    if (dCol > 0 && nc >= headers.length) { nc = 0; nr = rowIdx + 1 }
+    else if (dCol < 0 && nc < 0) { nc = headers.length - 1; nr = rowIdx - 1 }
+    const nextRow = filtered[nr]
+    const nextKey = headers[nc]
+    suppressBlurRef.current = true // el blur del input actual no debe re-guardar
+    if (nextRow && nextKey) {
+      setActiveId(nextRow._id)
+      startInlineEdit(nextRow._id, nextKey, nextRow[nextKey])
+      try { rowVirtualizer.scrollToIndex(nr, { align: 'auto' }) } catch { /* noop */ }
+    } else {
+      setEditingCell(null) // no hay celda siguiente: cierra la edición
+    }
+  }
+  // Pega un bloque copiado de Excel/Sheets (TSV) desde la celda actual,
+  // rellenando hacia abajo/derecha sobre las filas y columnas existentes.
+  function handleCellPaste(e, id, key) {
+    const text = e.clipboardData?.getData('text/plain') ?? ''
+    // Solo intercepta si es multi-celda (tabs o varias líneas); un valor simple
+    // deja el pegado normal dentro del input.
+    if (!text.includes('\t') && !/\n/.test(text.trim())) return
+    e.preventDefault()
+    const matrix = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').map((l) => l.split('\t'))
+    const startRow = filtered.findIndex((r) => r._id === id)
+    const startCol = headers.indexOf(key)
+    if (startRow < 0 || startCol < 0) return
+    let applied = 0, trunc = 0
+    const patches = {}
+    matrix.forEach((cells, rOff) => {
+      const target = filtered[startRow + rOff]
+      if (!target) { trunc++; return }
+      const patch = {}
+      cells.forEach((val, cOff) => { const col = headers[startCol + cOff]; if (col) patch[col] = val })
+      if (Object.keys(patch).length) { patches[target._id] = patch; applied++ }
+    })
+    applyPatches(patches) // un solo paso de deshacer para todo el pegado
+    suppressBlurRef.current = true
+    setEditingCell(null)
+    logAction(`Pegó ${applied} fila(s) desde el portapapeles`)
+    flash(`Pegado: ${applied} fila(s)${trunc ? ` · ${trunc} del portapapeles excedían la planilla` : ''}.`)
   }
 
   // Handler estable para el visor APS (evita re-renders por nueva fn cada render).
@@ -662,6 +718,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
       const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable
       if (typing) return
 
+      // Deshacer / rehacer (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl/Cmd+Y). Solo
+      // sobre la planilla: si se está editando una celda/campo (input), el guard
+      // de arriba ya salió y el navegador maneja el deshacer del texto.
+      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return }
+      if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); return }
+
       if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault()
         setSelected(new Set(filtered.map((r) => r._id)))
@@ -697,7 +759,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editingId, filtered, selected, activeId, deleteRecord])
+  }, [editingId, filtered, selected, activeId, deleteRecord, undo, redo])
 
   const fileRef = useRef(null)
   const [showStats, setShowStats] = useState(false)
@@ -799,6 +861,26 @@ export default function DataTable({ dataset, subcategory, onBack }) {
     return [...set].sort((a, b) => a.localeCompare(b, 'es'))
   }, [rows, packageCol])
 
+  // Conecta los componentes seleccionados a un CWA/CWP (del CSV de Aura AWP):
+  // escribe el CWA y el CWP en las columnas correspondientes de la planilla
+  // (las crea si faltan). Es un solo paso de deshacer.
+  function connectToAwp(cwp) {
+    const ids = [...selected]
+    if (!ids.length) { flash('Selecciona componentes primero.'); return }
+    const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    const findCol = (kw, fallback) =>
+      columns.find((c) => norm(c.key) === norm(kw))?.key ||
+      columns.find((c) => norm(c.key).includes(norm(kw)))?.key || fallback
+    const cwaCol = findCol('cwa', 'CWA')
+    const cwpCol = findCol('cwp', 'CWP')
+    if (!columns.some((c) => c.key === cwaCol)) addColumn(cwaCol)
+    if (!columns.some((c) => c.key === cwpCol)) addColumn(cwpCol)
+    updateRecords(ids, { [cwaCol]: cwp.cwa, [cwpCol]: cwp.codigo })
+    setShowConnectAwp(false)
+    flash(`${ids.length} componente(s) conectados a ${cwp.codigo} (${cwp.cwa}).`)
+    logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo}`)
+  }
+
   // Asigna el paquete `name` a las filas seleccionadas (crea la columna si falta).
   function groupIntoPackage(name) {
     const value = String(name || '').trim()
@@ -884,6 +966,8 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
             <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
               <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
+              <ToolIcon icon={Undo2} title="Deshacer (Ctrl+Z)" onClick={undo} disabled={!canUndo} />
+              <ToolIcon icon={Redo2} title="Rehacer (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo} />
               <ToolIcon icon={Plus} title="Nuevo registro" onClick={newRecord} />
               <ToolIcon icon={Copy} title="Copiar filas (seleccionadas o filtradas)" onClick={copySelection} />
               <ToolIcon icon={Pencil} title="Editar la fila seleccionada" onClick={editSelected} />
@@ -1060,15 +1144,11 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                 </div>
               ) : (
                 <button
-                  onClick={() =>
-                    selected.size >= 2
-                      ? setShowPackage(true)
-                      : flash('Aún no hay paquetes. Selecciona 2 o más elementos y usa “Agrupar en paquete” para crear el primero.')
-                  }
-                  title="Crear el primer paquete"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-500 transition hover:border-brand-400 hover:text-brand-600 dark:border-white/15 dark:bg-ink-900 dark:text-slate-400 dark:hover:border-accent/50 dark:hover:text-accent"
+                  onClick={() => setShowConnectAwp(true)}
+                  title="Conectar los componentes seleccionados a un CWA/CWP de Aura AWP"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-brand-300 bg-white px-3 py-1.5 text-sm font-medium text-brand-600 transition hover:border-brand-400 hover:bg-brand-50 dark:border-accent/40 dark:bg-ink-900 dark:text-accent dark:hover:bg-accent/10"
                 >
-                  <Boxes className="h-4 w-4" /> Crear un paquete
+                  <Link2 className="h-4 w-4" /> Conectar a AWP
                 </button>
               )}
             </Labeled>
@@ -1087,8 +1167,7 @@ export default function DataTable({ dataset, subcategory, onBack }) {
 
           {/* Update buttons */}
           <div className="flex flex-wrap gap-2 px-4 pb-2">
-            <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => bulkUpdate('awp')}>Actualizar relación AWP</UpdateButton>
-            <UpdateButton icon={Boxes} disabled={selected.size < 2} onClick={() => setShowPackage(true)}>Agrupar en paquete</UpdateButton>
+            <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => setShowConnectAwp(true)}>Conectar a AWP</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -1223,10 +1302,12 @@ export default function DataTable({ dataset, subcategory, onBack }) {
                                 onClick={(e) => e.stopPropagation()}
                                 onKeyDown={(e) => {
                                   e.stopPropagation()
-                                  if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                                  if (e.key === 'Enter') { e.preventDefault(); commitAndMove(r._id, h, e.shiftKey ? -1 : 1, 0) }
+                                  else if (e.key === 'Tab') { e.preventDefault(); commitAndMove(r._id, h, 0, e.shiftKey ? -1 : 1) }
                                   else if (e.key === 'Escape') { e.preventDefault(); cancelEditRef.current = true; e.currentTarget.blur() }
                                 }}
                                 onBlur={commitInlineEdit}
+                                onPaste={(e) => handleCellPaste(e, r._id, h)}
                                 className="w-full rounded border border-brand-400 bg-white px-1.5 py-1 text-xs text-slate-900 outline-none ring-2 ring-brand-100 dark:border-accent/50 dark:bg-ink-900 dark:text-slate-100 dark:ring-accent/20"
                               />
                             ) : (
@@ -1299,6 +1380,18 @@ export default function DataTable({ dataset, subcategory, onBack }) {
           existing={existingPackages}
           onConfirm={groupIntoPackage}
           onClose={() => setShowPackage(false)}
+        />
+      )}
+
+      {/* Modal: conectar componentes a un CWA/CWP de Aura AWP */}
+      {showConnectAwp && (
+        <ConnectAwpModal
+          cwps={awpCwps}
+          count={selected.size}
+          onImport={importCwps}
+          onClear={clearCwps}
+          onConnect={connectToAwp}
+          onClose={() => setShowConnectAwp(false)}
         />
       )}
 
@@ -1511,16 +1604,19 @@ function ColumnManager({ columns, onToggle, onRemove, onMove, newField, setNewFi
   )
 }
 
-function ToolIcon({ icon: IconCmp, title, onClick, active }) {
+function ToolIcon({ icon: IconCmp, title, onClick, active, disabled }) {
   return (
     <button
       onClick={onClick}
       title={title}
+      disabled={disabled}
       className={[
         'grid h-8 w-8 place-items-center rounded-md transition',
-        active
-          ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900'
-          : 'text-slate-500 hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-ink-700 dark:hover:text-accent',
+        disabled
+          ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
+          : active
+            ? 'bg-brand-500 text-white dark:bg-accent dark:text-ink-900'
+            : 'text-slate-500 hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-slate-400 dark:hover:bg-ink-700 dark:hover:text-accent',
       ].join(' ')}
     >
       <IconCmp className="h-4 w-4" />
