@@ -888,8 +888,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     setShowConnectAwp(false)
   }
 
-  // Columna CWP de la planilla (la que escribe "Conectar a AWP").
+  // Columna CWP de la planilla (la que escribe "Conectar a AWP") y la de avance.
   const cwpCol = useMemo(() => headers.find((h) => /cwp/i.test(h)), [headers.join('|')])
+  const avanceCol = useMemo(() => headers.find((h) => /AVANCE/i.test(h)), [headers.join('|')])
   // Filtra la grilla a un CWP (o a "sin CWP" con code === '') y va a Elementos.
   function filterByCwp(code) {
     if (cwpCol) setColumnFilter(cwpCol, { type: 'values', values: [code] })
@@ -975,7 +976,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
 
       {activeTab !== 'elements' ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <AwpCoveragePanel cwps={awpCwps} rows={rows} cwpCol={cwpCol} onSelectCwp={filterByCwp} onImport={importCwps} />
+          <AwpCoveragePanel cwps={awpCwps} rows={rows} cwpCol={cwpCol} avanceCol={avanceCol} onSelectCwp={filterByCwp} onImport={importCwps} />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
