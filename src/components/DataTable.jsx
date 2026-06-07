@@ -29,6 +29,7 @@ import {
   Plus,
   RotateCcw,
   RotateCw,
+  Rows3,
   Search,
   Share2,
   Redo2,
@@ -90,6 +91,17 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
 
   const visibleCols = columns.filter((c) => c.visible)
   const headers = visibleCols.map((c) => c.key)
+
+  // Densidad de la planilla (Cómodo / Compacto): preferencia global persistida.
+  // Compacto reduce el alto/padding de las filas para ver más en pantalla.
+  const [density, setDensity] = useState(() => {
+    try { return localStorage.getItem('sqy-density') === 'compact' ? 'compact' : 'normal' } catch { return 'normal' }
+  })
+  useEffect(() => { try { localStorage.setItem('sqy-density', density) } catch { /* ignore */ } }, [density])
+  const compact = density === 'compact'
+  const rowH = compact ? 26 : 33 // alto de fila para el virtualizador
+  const cellPad = compact ? 'px-2 py-0.5' : 'px-3 py-1.5'
+  const bodyText = compact ? 'text-[12px]' : 'text-[13px]'
 
   // Estado de la vista persistido por planilla (orden, filtros, modo de vista):
   // se restaura al reabrir. El ancho de columnas se guarda aparte (colWidths) y el
@@ -415,9 +427,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
   const rowVirtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 33,
+    estimateSize: () => rowH,
     overscan: 16,
   })
+  // Recalcula el alto virtual al cambiar la densidad (Cómodo ↔ Compacto).
+  useEffect(() => { try { rowVirtualizer.measure() } catch { /* noop */ } }, [rowH]) // eslint-disable-line react-hooks/exhaustive-deps
   const virtualItems = rowVirtualizer.getVirtualItems()
   const totalSize = rowVirtualizer.getTotalSize()
   const padTop = virtualItems.length ? virtualItems[0].start : 0
@@ -1019,6 +1033,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
+              <ToolIcon icon={Rows3} title={compact ? 'Vista cómoda (filas más altas)' : 'Vista compacta (más filas en pantalla)'} active={compact} onClick={() => setDensity((d) => (d === 'compact' ? 'normal' : 'compact'))} />
               <ToolIcon icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'} active={fullscreen} onClick={() => setFullscreen((v) => !v)} />
             </div>
 
@@ -1240,7 +1255,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
           <div className="mx-4 mb-4 flex min-h-0 flex-1 gap-3">
             {(viewMode === 'grid' || viewMode === 'split') && (
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
-              <table className="w-max table-fixed border-separate border-spacing-0 text-[13px]">
+              <table className={`w-max table-fixed border-separate border-spacing-0 ${bodyText}`}>
                 <colgroup>
                   <col style={{ width: CHECK_W }} />
                   {headers.map((h) => (
@@ -1318,7 +1333,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
                     const isActive = r._id === activeId
                     return (
                       <tr key={r._id} onClick={() => activate(r._id)} onDoubleClick={() => openFicha(r._id)} onContextMenu={(e) => openRowMenu(e, r._id)} title="Clic en una celda: editar · doble clic: abrir ficha · clic derecho: copiar/duplicar" className={['group cursor-pointer transition-colors', isActive ? 'bg-brand-100/70 dark:bg-accent/15' : isSel ? 'bg-brand-50/50 dark:bg-accent/5' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'].join(' ')}>
-                        <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 px-3 py-1.5 dark:border-white/5 ${cellStickyBg(isSel)}`}>
+                        <td onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 border-b border-slate-100 ${cellPad} dark:border-white/5 ${cellStickyBg(isSel)}`}>
                           <input type="checkbox" checked={isSel} onChange={() => toggleRow(r._id)} className="h-4 w-4 cursor-pointer accent-brand-500 dark:accent-accent" />
                         </td>
                         {headers.map((h, idx) => {
@@ -1329,7 +1344,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
                             onClick={() => { if (!editing) startInlineEdit(r._id, h, r[h]) }}
                             style={{ left: idx === 0 ? CHECK_W : undefined }}
                             className={[
-                              'overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 px-3 py-1.5 dark:border-white/5',
+                              `overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 ${cellPad} dark:border-white/5`,
                               idx === 0
                                 ? `sticky z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
                                 : 'text-slate-600 dark:text-slate-300',
