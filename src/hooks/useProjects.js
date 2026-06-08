@@ -27,17 +27,22 @@ export function useProjects(orgId) {
 
   const projects = [...DEMO_PROJECTS, ...custom]
 
-  const addProject = useCallback(({ name, icon, empty } = {}) => {
-    const clean = String(name || '').trim()
-    if (!clean) return null
+  // Acepta toda la metadata del wizard (code, cliente, division, contratista,
+  // tipo, contrato, sector, fase, pais, region, ciudad, fechas, moneda,
+  // presupuesto, hh, miembros, icon, empty, description…). Solo `name` es obligatorio.
+  const addProject = useCallback((data = {}) => {
+    const name = String(data.name || '').trim()
+    if (!name) return null
     const p = {
-      id: `proj-${Date.now()}`,
-      name: clean,
-      icon: icon || 'Building2',
-      description: empty
+      icon: 'Building2',
+      estado: 'Activo',
+      description: data.empty
         ? 'Proyecto en blanco. Agrega disciplinas e importa tus planillas para empezar.'
         : 'Proyecto con las disciplinas base de la plataforma listas para cargar datos.',
-      empty: !!empty,
+      ...data,
+      id: `proj-${Date.now()}`,
+      name,
+      empty: !!data.empty,
       custom: true,
       createdAt: Date.now(),
     }

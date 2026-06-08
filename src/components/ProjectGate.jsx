@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import App from '../App.jsx'
 import ProjectSelector from './ProjectSelector.jsx'
-import NewProjectModal from './NewProjectModal.jsx'
+import NewProjectWizard from './NewProjectWizard.jsx'
 import { useProjects } from '../hooks/useProjects.js'
 
 /**
@@ -45,8 +45,8 @@ export default function ProjectGate({ org, onChangeOrg }) {
     try { sessionStorage.removeItem(SKEY) } catch { /* ignore */ }
     setActive(null)
   }
-  function createAndOpen({ name, icon, empty }) {
-    const p = addProject({ name, icon, empty })
+  function createAndOpen(data) {
+    const p = addProject(data)
     setShowNew(false)
     if (p) open(p)
   }
@@ -66,7 +66,7 @@ export default function ProjectGate({ org, onChangeOrg }) {
         onNew={() => setShowNew(true)}
         onRemove={removeProject}
       />
-      {showNew && <NewProjectModal onCreate={createAndOpen} onClose={() => setShowNew(false)} />}
+      {showNew && <NewProjectWizard onCreate={createAndOpen} onClose={() => setShowNew(false)} />}
     </>
   )
 }
