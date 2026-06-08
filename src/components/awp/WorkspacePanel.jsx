@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Archive, Boxes, CalendarDays, FileCheck2, FileText, LayoutDashboard, LogOut, Map, MessagesSquare, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
+import { Archive, Boxes, CalendarDays, FileCheck2, FileText, LayoutDashboard, LogOut, Map, MapPin, MessagesSquare, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
 import { genCode } from '../../utils/awpCodes.js'
+import { useAwpPlanos } from '../../hooks/useAwpPlanos.js'
 import { CWA_COLORS, Donut, Sunburst } from './charts.jsx'
 import { printCwaReport, printCwpReport } from '../../utils/awpReports.js'
 import WorkspaceCronograma from './WorkspaceCronograma.jsx'
 import WorkspaceRestricciones from './WorkspaceRestricciones.jsx'
 import WorkspaceRevisiones from './WorkspaceRevisiones.jsx'
 import WorkspaceSesiones from './WorkspaceSesiones.jsx'
+import WorkspacePlano from './WorkspacePlano.jsx'
 
 /**
  * Workspace AWP del proyecto (modelo de Aura AWP): Dashboard + entidades
@@ -22,6 +24,7 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
 
   const { config } = cfg
   const nom = config.awp.nomenclatura
+  const planosApi = useAwpPlanos(project.id)
   const disciplinas = useMemo(() => config.disciplinas.filter((d) => d.activa), [config.disciplinas])
   const discById = (id) => config.disciplinas.find((d) => d.id === id)
   const { cwas, cwps, iwps } = entities
@@ -86,6 +89,7 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
     { id: 'cwas', label: 'CWAs', icon: Map, count: cwas.length },
     { id: 'cwps', label: 'CWPs', icon: Archive, count: cwps.length },
     { id: 'iwps', label: 'IWPs', icon: Boxes, count: iwps.length },
+    { id: 'plano', label: 'Plot Plan', icon: MapPin, count: planosApi.planos.length || null },
     { id: 'cronograma', label: 'Cronograma', icon: CalendarDays, count: null },
     { id: 'restricciones', label: 'Restricciones', icon: TriangleAlert, count: entities.restricciones?.length || 0 },
     { id: 'sesiones', label: 'Sesiones IPS', icon: MessagesSquare, count: entities.sesiones?.length || 0 },
@@ -244,6 +248,8 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
             {section === 'restricciones' && (
               <WorkspaceRestricciones restricciones={entities.restricciones || []} cwas={cwas} cwps={cwps} addRestriccion={entities.addRestriccion} updateRestriccion={entities.updateRestriccion} removeRestriccion={entities.removeRestriccion} />
             )}
+
+            {section === 'plano' && <WorkspacePlano planosApi={planosApi} cwas={cwas} />}
 
             {section === 'sesiones' && (
               <WorkspaceSesiones sesiones={entities.sesiones || []} addSesion={entities.addSesion} updateSesion={entities.updateSesion} removeSesion={entities.removeSesion} project={project} config={config} />
