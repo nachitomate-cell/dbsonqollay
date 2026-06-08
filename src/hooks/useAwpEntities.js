@@ -10,9 +10,10 @@ const KEY = (pid) => `sqy-awp-entities-${pid}`
 let _seq = 0
 const uid = (p) => `${p}_${Date.now().toString(36)}_${(_seq++).toString(36)}`
 
+const EMPTY = { cwas: [], cwps: [], iwps: [], restricciones: [], revisiones: [], sesiones: [] }
 function load(pid) {
-  try { const r = localStorage.getItem(KEY(pid)); if (r) { const d = JSON.parse(r); return { cwas: d.cwas || [], cwps: d.cwps || [], iwps: d.iwps || [], restricciones: d.restricciones || [] } } } catch { /* ignore */ }
-  return { cwas: [], cwps: [], iwps: [], restricciones: [] }
+  try { const r = localStorage.getItem(KEY(pid)); if (r) { return { ...EMPTY, ...JSON.parse(r) } } } catch { /* ignore */ }
+  return { ...EMPTY }
 }
 
 export function useAwpEntities(projectId) {
@@ -55,5 +56,19 @@ export function useAwpEntities(projectId) {
   const updateRestriccion = useCallback((id, patch) => setData((d) => ({ ...d, restricciones: d.restricciones.map((r) => (r.id === id ? { ...r, ...patch } : r)) })), [])
   const removeRestriccion = useCallback((id) => setData((d) => ({ ...d, restricciones: d.restricciones.filter((r) => r.id !== id) })), [])
 
-  return { ...data, addCwa, updateCwa, removeCwa, addCwp, updateCwp, removeCwp, setIwpsForCwp, clearIwpsForCwp, addRestriccion, updateRestriccion, removeRestriccion }
+  // Revisiones (control de revisiones de reportes/entregables).
+  const addRevision = useCallback((r) => { const id = uid('rev'); setData((d) => ({ ...d, revisiones: [...d.revisiones, { id, createdAt: Date.now(), ...r }] })); return id }, [])
+  const updateRevision = useCallback((id, patch) => setData((d) => ({ ...d, revisiones: d.revisiones.map((r) => (r.id === id ? { ...r, ...patch } : r)) })), [])
+  const removeRevision = useCallback((id) => setData((d) => ({ ...d, revisiones: d.revisiones.filter((r) => r.id !== id) })), [])
+
+  // Sesiones IPS (Interactive Planning Sessions).
+  const addSesion = useCallback((s) => {
+    const id = uid('ips')
+    setData((d) => { const num = d.sesiones.reduce((m, x) => Math.max(m, x.num || 0), 0) + 1; return { ...d, sesiones: [...d.sesiones, { id, num, codigo: `IPS-${String(num).padStart(3, '0')}`, estado: 'Programada', decisiones: [], actionItems: [], createdAt: Date.now(), ...s }] } })
+    return id
+  }, [])
+  const updateSesion = useCallback((id, patch) => setData((d) => ({ ...d, sesiones: d.sesiones.map((s) => (s.id === id ? { ...s, ...patch } : s)) })), [])
+  const removeSesion = useCallback((id) => setData((d) => ({ ...d, sesiones: d.sesiones.filter((s) => s.id !== id) })), [])
+
+  return { ...data, addCwa, updateCwa, removeCwa, addCwp, updateCwp, removeCwp, setIwpsForCwp, clearIwpsForCwp, addRestriccion, updateRestriccion, removeRestriccion, addRevision, updateRevision, removeRevision, addSesion, updateSesion, removeSesion }
 }

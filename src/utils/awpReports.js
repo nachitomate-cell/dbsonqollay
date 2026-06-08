@@ -64,6 +64,20 @@ export function printCwaReport({ cwa, cwps, iwps, discById, project, config }) {
   openPrint(`Ficha ${cwa.codigo}`, body)
 }
 
+export function printPocReport({ sesion, project, config }) {
+  const dec = (sesion.decisiones || []).map((d) => `<li>${esc(d)}</li>`).join('') || '<li style="color:#94a3b8">Sin decisiones</li>'
+  const ai = (sesion.actionItems || []).map((a) => `<tr><td>${esc(a.texto)}</td><td>${esc(a.responsable || '—')}</td><td>${esc(a.estado || '')}</td></tr>`).join('') || '<tr><td colspan="3" style="color:#94a3b8">Sin action items</td></tr>'
+  const body =
+    head(project, config, sesion.codigo) +
+    `<div class="titlebar"><h1>Informe PoC — Sesión de Planificación (IPS)</h1><h2>${esc(sesion.codigo)} — ${esc(sesion.titulo)}</h2></div>` +
+    `<div class="grid">${cell('Fecha', fdate(sesion.fecha))}${cell('Facilitador', sesion.facilitador || '—')}${cell('Estado', sesion.estado || '—')}</div>` +
+    (sesion.asistentes ? `<h3>Asistentes</h3><p class="desc">${esc(sesion.asistentes)}</p>` : '') +
+    `<h3>Decisiones</h3><ul style="font-size:12px;line-height:1.6;color:#334155">${dec}</ul>` +
+    `<h3>Action Items</h3><table><thead><tr><th>Tarea</th><th>Responsable</th><th>Estado</th></tr></thead><tbody>${ai}</tbody></table>` +
+    foot(config, project)
+  openPrint(`Informe PoC ${sesion.codigo}`, body)
+}
+
 export function printCwpReport({ cwp, cwa, disc, iwps, project, config }) {
   const myIwps = iwps.filter((i) => i.cwpId === cwp.id)
   const rows = myIwps.map((i) => `<tr><td class="mono">${esc(i.codigo)}</td><td>${esc(i.nombre)}</td><td class="num">${fmt(i.hh)}</td><td>${esc(i.estado || '')}</td></tr>`).join('') || `<tr><td colspan="4" style="color:#94a3b8">Sin IWPs (el CWP no está abierto)</td></tr>`

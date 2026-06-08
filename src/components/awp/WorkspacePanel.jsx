@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Archive, Boxes, CalendarDays, FileText, LayoutDashboard, LogOut, Map, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
+import { Archive, Boxes, CalendarDays, FileCheck2, FileText, LayoutDashboard, LogOut, Map, MessagesSquare, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
 import { genCode } from '../../utils/awpCodes.js'
 import { CWA_COLORS, Donut, Sunburst } from './charts.jsx'
 import { printCwaReport, printCwpReport } from '../../utils/awpReports.js'
 import WorkspaceCronograma from './WorkspaceCronograma.jsx'
 import WorkspaceRestricciones from './WorkspaceRestricciones.jsx'
+import WorkspaceRevisiones from './WorkspaceRevisiones.jsx'
+import WorkspaceSesiones from './WorkspaceSesiones.jsx'
 
 /**
  * Workspace AWP del proyecto (modelo de Aura AWP): Dashboard + entidades
@@ -86,6 +88,8 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
     { id: 'iwps', label: 'IWPs', icon: Boxes, count: iwps.length },
     { id: 'cronograma', label: 'Cronograma', icon: CalendarDays, count: null },
     { id: 'restricciones', label: 'Restricciones', icon: TriangleAlert, count: entities.restricciones?.length || 0 },
+    { id: 'sesiones', label: 'Sesiones IPS', icon: MessagesSquare, count: entities.sesiones?.length || 0 },
+    { id: 'revisiones', label: 'Revisiones', icon: FileCheck2, count: entities.revisiones?.length || 0 },
   ]
 
   return (
@@ -239,6 +243,14 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
 
             {section === 'restricciones' && (
               <WorkspaceRestricciones restricciones={entities.restricciones || []} cwas={cwas} cwps={cwps} addRestriccion={entities.addRestriccion} updateRestriccion={entities.updateRestriccion} removeRestriccion={entities.removeRestriccion} />
+            )}
+
+            {section === 'sesiones' && (
+              <WorkspaceSesiones sesiones={entities.sesiones || []} addSesion={entities.addSesion} updateSesion={entities.updateSesion} removeSesion={entities.removeSesion} project={project} config={config} />
+            )}
+
+            {section === 'revisiones' && (
+              <WorkspaceRevisiones revisiones={entities.revisiones || []} addRevision={entities.addRevision} updateRevision={entities.updateRevision} removeRevision={entities.removeRevision} />
             )}
           </div>
         </div>
