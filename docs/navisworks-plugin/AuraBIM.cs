@@ -42,7 +42,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.10.0";
+        private const string Version = "1.11.0";
 
         // El ribbon invoca este método con el id del botón.
         public override int ExecuteCommand(string commandId, params string[] parameters)
@@ -99,7 +99,7 @@ namespace AuraBIM
 
             // 3-4) Índice + aplicar, con ventana de progreso propia (logos + barra +
             // cancelar): mantiene la UI viva (sin "no responde") en modelos grandes.
-            int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0;
+            int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0, totalSkipped = 0;
             var errores = new List<string>();
             var progress = new ProgressForm();
             progress.Show();
@@ -121,6 +121,7 @@ namespace AuraBIM
                             totalMatched += res.matched;
                             totalApplied += res.applied;
                             totalMissing += res.missing;
+                            totalSkipped += res.skipped;
                         }
                         catch (Exception ex)
                         {
@@ -138,9 +139,10 @@ namespace AuraBIM
 
             // Log para soporte (en %LOCALAPPDATA%\AuraBIM\AuraBIM.log).
             WriteLog(string.Format(
-                "sync v{0} | planillas={1} filas={2} matched={3} aplicados={4} sinGeom={5} cancelado={6}{7}",
+                "sync v{0} | planillas={1} filas={2} matched={3} aplicados={4} sinCambios={8} sinGeom={5} cancelado={6}{7}",
                 Version, chosen.Count, totalRows, totalMatched, totalApplied, totalMissing, progress.Canceled,
-                errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : ""));
+                errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : "",
+                totalSkipped));
 
             string msg =
                 "Aura BIM v" + Version + "\n\n" +
@@ -148,6 +150,7 @@ namespace AuraBIM
                 "Filas: " + totalRows + "\n" +
                 "TAGs encontrados: " + totalMatched + "\n" +
                 "Elementos actualizados: " + totalApplied + "\n" +
+                "Sin cambios (omitidos): " + totalSkipped + "\n" +
                 "TAGs sin geometría: " + totalMissing + "\n\n" +
                 "Guarda el archivo (.nwf/.nwd) para conservar las propiedades.";
             if (errores.Count > 0)
@@ -173,7 +176,7 @@ namespace AuraBIM
         }
 
         // ---- Aplicar un dataset al modelo --------------------------------
-        private struct ApplyResult { public int matched, applied, missing; }
+        private struct ApplyResult { public int matched, applied, missing, skipped; }
 
         private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data,
                                          ProgressForm progress)
@@ -203,10 +206,65 @@ namespace AuraBIM
                 if (!tagIndex.TryGetValue(tag, out items) || items.Count == 0) { res.missing++; continue; }
                 res.matched++;
 
-                WriteCustomTab(items, row, tagField);
-                res.applied += items.Count;
+                // Solo reescribir los elementos cuyo tab "Aura BIM" difiere de la
+                // fila. Leer las propiedades actuales es barato; reescribirlas con
+                // SetUserDefined (COM) es lo caro. Así un re-sync tras un cambio
+                // chico toca apenas unos elementos en vez de TODO el modelo.
+                ModelItemCollection changed = null;
+                foreach (ModelItem item in items)
+                {
+                    if (NeedsUpdate(item, row))
+                    {
+                        if (changed == null) changed = new ModelItemCollection();
+                        changed.Add(item);
+                    }
+                    else res.skipped++;
+                }
+                if (changed != null && changed.Count > 0)
+                {
+                    WriteCustomTab(changed, row, tagField);
+                    res.applied += changed.Count;
+                }
             }
             return res;
+        }
+
+        // ¿El elemento necesita reescritura? true si aún no tiene el tab "Aura BIM"
+        // o si algún valor de la fila difiere del que ya está escrito. Comparar
+        // contra el tab existente evita el costoso SetUserDefined cuando nada cambió.
+        private bool NeedsUpdate(ModelItem item, Dictionary<string, string> row)
+        {
+            PropertyCategory existing = null;
+            foreach (PropertyCategory cat in item.PropertyCategories)
+            {
+                if (string.Equals(cat.DisplayName, Cfg.TabName, StringComparison.OrdinalIgnoreCase))
+                { existing = cat; break; }
+            }
+            if (existing == null) return true; // todavía no tiene el tab
+
+            var cur = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataProperty p in existing.Properties)
+                cur[p.DisplayName] = p.Value != null ? p.Value.ToDisplayString() : "";
+
+            // Cada columna de la fila debe coincidir (ausente == vacío, porque
+            // Navisworks puede no almacenar propiedades con valor vacío).
+            foreach (var kv in row)
+            {
+                string c;
+                string cv = cur.TryGetValue(kv.Key, out c) ? (c ?? "") : "";
+                if (!string.Equals(cv, kv.Value ?? "", StringComparison.Ordinal)) return true;
+            }
+            // Alguna columna previa con valor que ya no viene en la fila => reescribir.
+            foreach (var kv in cur)
+                if (!string.IsNullOrEmpty(kv.Value) && !RowHasKey(row, kv.Key)) return true;
+            return false;
+        }
+
+        private static bool RowHasKey(Dictionary<string, string> row, string key)
+        {
+            foreach (var k in row.Keys)
+                if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
         }
 
         // ---- HTTP --------------------------------------------------------
