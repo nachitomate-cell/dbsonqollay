@@ -493,7 +493,6 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     setColFilters({})
     setSort({ key: null, dir: 'asc' })
     setFilterByCol('')
-    setFilterByVal('')
   }
 
   function startResize(e, header) {
@@ -1297,7 +1296,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
                               )}
                             </button>
                             <button
-                              onClick={() => { setFilterByCol(h); setFilterByVal('') }}
+                              onClick={() => setFilterByCol(h)}
                               title="Filtrar por esta columna"
                               className={`shrink-0 ${filterActive ? 'text-brand-600 dark:text-accent' : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'}`}
                             >

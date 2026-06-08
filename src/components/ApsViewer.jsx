@@ -338,8 +338,10 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     multiNames.forEach((nm) => {
       const t = normTag(nm)
       if (!t) return
+      // Match exacto por TAG; el fallback por substring solo para TAGs largos
+      // (>=4 chars) para evitar falsos positivos con TAGs cortos como "P1"/"01".
       const row = rows.find((r) => normTag(r[tagk]) === t)
-        || rows.find((r) => normTag(r[tagk]) && t.includes(normTag(r[tagk])))
+        || rows.find((r) => { const nt = normTag(r[tagk]); return nt && nt.length >= 4 && t.includes(nt) })
       if (row) map.set(row._id, row[tagk])
     })
     return { ids: [...map.keys()], tags: [...map.values()] }
@@ -383,6 +385,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   function closeBulk() {
     if (bulkSet) setBulkSet(null)
     else { setMultiNames(null); safe(() => viewerRef.current?.clearSelection?.()) }
+    setBulkField(''); setBulkValue('') // no dejar el campo/valor pre-cargados para la próxima selección
   }
   // Edita TODO el conjunto activo sin seleccionar a mano: el paquete AWP elegido,
   // o si no, las filas actualmente filtradas en la planilla (lo que se ve).

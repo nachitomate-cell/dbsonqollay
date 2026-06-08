@@ -107,6 +107,14 @@ export function rememberEmail(email) {
 
 export function signOut() {
   setSession(null)
+  // Limpia el scope de la sesión (org/proyecto/navegación activos) para que el
+  // próximo usuario en el mismo navegador no herede dónde estaba el anterior.
+  try {
+    sessionStorage.removeItem('sqy-active-org')
+    for (const k of Object.keys(sessionStorage)) {
+      if (k.startsWith('sqy-active-project-session') || k.startsWith('sqy-nav-')) sessionStorage.removeItem(k)
+    }
+  } catch { /* ignore */ }
 }
 
 // Renueva el access_token con el refresh_token (los access_token duran ~1h).

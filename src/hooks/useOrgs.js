@@ -36,7 +36,16 @@ export function useOrgs(user) {
     return o
   }, [])
 
-  const removeOrg = useCallback((id) => setOrgs((prev) => prev.filter((o) => o.id !== id)), [])
+  const removeOrg = useCallback((id) => {
+    setOrgs((prev) => prev.filter((o) => o.id !== id))
+    // Limpia las claves scopeadas a esa organización (evita datos huérfanos).
+    try {
+      localStorage.removeItem(`sqy-projects-v1-${id}`)
+      localStorage.removeItem(`sqy-projects-opened-${id}`)
+      sessionStorage.removeItem(`sqy-active-project-session-${id}`)
+      if (sessionStorage.getItem('sqy-active-org') === id) sessionStorage.removeItem('sqy-active-org')
+    } catch { /* ignore */ }
+  }, [])
 
   return { orgs, addOrg, removeOrg }
 }
