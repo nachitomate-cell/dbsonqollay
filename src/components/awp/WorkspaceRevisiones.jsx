@@ -27,7 +27,8 @@ export default function WorkspaceRevisiones({ revisiones, addRevision, updateRev
     const doc = (form.documentoNuevo || '').trim() || form.documento
     if (!doc) return
     const prev = revisiones.filter((r) => r.documento === doc)
-    const rev = String.fromCharCode(65 + prev.length) // A, B, C…
+    // Siguiente letra = máxima existente + 1 (robusto si se borró una intermedia).
+    const rev = String.fromCharCode(prev.reduce((m, r) => Math.max(m, (r.rev || 'A').charCodeAt(0)), 64) + 1) // A, B, C…
     prev.forEach((r) => { if (r.estado !== 'Reemplazada') updateRevision(r.id, { estado: 'Reemplazada' }) })
     addRevision({ documento: doc, rev, estado: 'En revisión', fecha: form.fecha, autor: form.autor, revisoresTotal: Number(form.revisoresTotal) || 1, revisoresAprobados: 0 })
     setModal(false)

@@ -32,10 +32,20 @@ export default function WorkspaceCronograma({ cwas, cwps, config, discById }) {
 
   const start = startOfMonth(Math.min(...dates))
   const end = nextMonth(Math.max(...dates))
-  const total = end - start || 1
   const months = listMonths(start, end)
   const trackW = months.length * COLW
-  const pct = (ms) => ((ms - start) / total) * 100
+  // Posición por MES (columnas de ancho fijo): índice del mes + fracción del día
+  // dentro del mes. Así las barras se alinean con las columnas (los meses tienen
+  // distinta cantidad de días).
+  const pct = (ms) => {
+    const c = Math.max(start, Math.min(end, ms))
+    let i = months.length - 1
+    for (let k = 0; k < months.length; k++) { if (k === months.length - 1 || c < months[k + 1].ms) { i = k; break } }
+    const segStart = months[i].ms
+    const segEnd = i < months.length - 1 ? months[i + 1].ms : end
+    const frac = segEnd > segStart ? (c - segStart) / (segEnd - segStart) : 0
+    return ((i + frac) / months.length) * 100
+  }
 
   function Bar({ a, b, color, label }) {
     const s = parseD(a), e = parseD(b)
