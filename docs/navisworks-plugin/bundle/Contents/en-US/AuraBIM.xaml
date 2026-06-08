@@ -8,27 +8,27 @@
         <nw:NWRibbonButton x:Uid="ID_AsignarProps" Id="ID_AsignarProps"
                            Size="Large" ShowText="True"
                            Text="Asignar&#xD;&#xA;Propiedades"
-                           LargeImage="AuraBIM32.png" SmallImage="AuraBIM16.png"
+                           LargeImage="AuraBIM32.png"
                            Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_AsignarSeleccion" Id="ID_AsignarSeleccion"
                            Size="Large" ShowText="True"
                            Text="Solo&#xD;&#xA;seleccion"
-                           LargeImage="seleccion32.png" SmallImage="seleccion16.png"
+                           LargeImage="seleccion32.png"
                            Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_Conjuntos" Id="ID_Conjuntos"
                            Size="Large" ShowText="True"
                            Text="Crear&#xD;&#xA;conjuntos"
-                           LargeImage="conjuntos32.png" SmallImage="conjuntos16.png"
+                           LargeImage="conjuntos32.png"
                            Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_Config" Id="ID_Config"
                            Size="Large" ShowText="True"
                            Text="Configu-&#xD;&#xA;racion"
-                           LargeImage="config32.png" SmallImage="config16.png"
+                           LargeImage="config32.png"
                            Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_AcercaDe" Id="ID_AcercaDe"
                            Size="Large" ShowText="True"
                            Text="Acerca&#xD;&#xA;de"
-                           LargeImage="acerca32.png" SmallImage="acerca16.png"
+                           LargeImage="acerca32.png"
                            Orientation="Vertical" />
       </RibbonPanelSource>
     </RibbonPanel>

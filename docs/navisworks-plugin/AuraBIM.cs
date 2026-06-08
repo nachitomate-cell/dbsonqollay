@@ -46,7 +46,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.17.0";
+        private const string Version = "1.18.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
@@ -363,10 +363,10 @@ namespace AuraBIM
 
             WriteLog("sets v" + Version + " | creados=" + creados);
             MessageBox.Show("Conjuntos de selección creados: " + creados + "\n\n" +
-                            "Agrupados por CWA, CWP y Disciplina (prefijo \"AWP —\"). Mirá la ventana " +
-                            "\"Conjuntos\" del panel de selección: hacé clic en uno para seleccionar ese " +
+                            "Agrupados por CWA, CWP y Disciplina (prefijo \"AWP —\"). Mira la ventana " +
+                            "\"Conjuntos\" del panel de selección: haz clic en uno para seleccionar ese " +
                             "paquete de trabajo y aislarlo/ocultarlo.\n\n" +
-                            "Para regenerarlos tras cargar más datos, borrá los conjuntos \"AWP —\" y vuelve a crearlos.");
+                            "Para regenerarlos tras cargar más datos, borra los conjuntos \"AWP —\" y vuelve a crearlos.");
         }
 
         // Lee una propiedad de la pestaña indicada (sin distinguir mayúsculas).
@@ -1254,7 +1254,7 @@ namespace AuraBIM
 
                 Controls.Add(new Label { Text = "Hay una nueva versión", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 128, Width = W - 40, Height = 26, ForeColor = green, Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold) });
                 Controls.Add(new Label { Text = "Instalada: v" + actual + "        Disponible: v" + nueva, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 156, Width = W - 40, Height = 20, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 9.5f, System.Drawing.FontStyle.Bold) });
-                Controls.Add(new Label { Text = "Cerrá Navisworks y ejecutá el instalador para actualizar.", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 182, Width = W - 40, Height = 34, ForeColor = soft });
+                Controls.Add(new Label { Text = "Cierra Navisworks y ejecuta el instalador para actualizar.", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 182, Width = W - 40, Height = 34, ForeColor = soft });
 
                 int y = 226;
                 var btnDl = new Button { Text = "Descargar", Width = 130, Height = 32, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White, DialogResult = DialogResult.OK };

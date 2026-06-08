@@ -57,7 +57,7 @@ $tut = New-Object System.Windows.Forms.Label
 $tut.Text = @"
 Como usar (despues de instalar):
 
-  1.  Abri Navisworks y tu modelo.
+  1.  Abre Navisworks y tu modelo.
   2.  Pestana "Aura BIM" -> boton "Asignar Propiedades".
   3.  Marca las planillas a sincronizar -> Sincronizar.
   4.  Guarda el modelo (.nwf / .nwd) para conservar los datos.
@@ -68,7 +68,7 @@ $form.Controls.Add($tut)
 
 # --- Estado + botones ---------------------------------------------------------
 $status = New-Object System.Windows.Forms.Label
-$status.Text = 'Listo para instalar. (Cerra Navisworks antes de instalar.)'
+$status.Text = 'Listo para instalar. (Cierra Navisworks antes de instalar.)'
 $status.AutoSize = $false; $status.TextAlign = 'MiddleCenter'
 $status.Left = 20; $status.Top = 304; $status.Width = 420; $status.Height = 34
 $status.ForeColor = $soft
@@ -154,11 +154,11 @@ $btnInstall.Add_Click({
     }
 
     $status.ForeColor = [System.Drawing.Color]::FromArgb(30, 150, 70)
-    $status.Text = 'Instalado OK. Abri (o reinicia) Navisworks -> pestana "Aura BIM".'
+    $status.Text = 'Instalado OK. Abre (o reinicia) Navisworks -> pestana "Aura BIM".'
     $btnInstall.Enabled = $false
   } catch {
     $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No se pudo instalar. Cerra Navisworks y reintenta.  ' + $_.Exception.Message
+    $status.Text = 'No se pudo instalar. Cierra Navisworks y reintenta.  ' + $_.Exception.Message
   }
 })
 
