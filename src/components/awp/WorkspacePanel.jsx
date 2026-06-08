@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Archive, Boxes, FileText, LayoutDashboard, LogOut, Map, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
+import { Archive, Boxes, CalendarDays, FileText, LayoutDashboard, LogOut, Map, Pencil, Plus, Sigma, TriangleAlert, Trash2, X } from 'lucide-react'
 import { genCode } from '../../utils/awpCodes.js'
 import { CWA_COLORS, Donut, Sunburst } from './charts.jsx'
 import { printCwaReport, printCwpReport } from '../../utils/awpReports.js'
+import WorkspaceCronograma from './WorkspaceCronograma.jsx'
+import WorkspaceRestricciones from './WorkspaceRestricciones.jsx'
 
 /**
  * Workspace AWP del proyecto (modelo de Aura AWP): Dashboard + entidades
@@ -82,6 +84,8 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
     { id: 'cwas', label: 'CWAs', icon: Map, count: cwas.length },
     { id: 'cwps', label: 'CWPs', icon: Archive, count: cwps.length },
     { id: 'iwps', label: 'IWPs', icon: Boxes, count: iwps.length },
+    { id: 'cronograma', label: 'Cronograma', icon: CalendarDays, count: null },
+    { id: 'restricciones', label: 'Restricciones', icon: TriangleAlert, count: entities.restricciones?.length || 0 },
   ]
 
   return (
@@ -223,6 +227,18 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
                   </Table>
                 )}
               </>
+            )}
+
+            {section === 'cronograma' && (
+              <>
+                <h1 className="mb-1 text-xl font-extrabold text-slate-800 dark:text-white">Cronograma de CWAs / CWPs</h1>
+                <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">Línea de tiempo de áreas y paquetes según sus fechas planificadas.</p>
+                <WorkspaceCronograma cwas={cwas} cwps={cwps} config={config} discById={discById} />
+              </>
+            )}
+
+            {section === 'restricciones' && (
+              <WorkspaceRestricciones restricciones={entities.restricciones || []} cwas={cwas} cwps={cwps} addRestriccion={entities.addRestriccion} updateRestriccion={entities.updateRestriccion} removeRestriccion={entities.removeRestriccion} />
             )}
           </div>
         </div>
