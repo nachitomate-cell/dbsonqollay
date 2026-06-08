@@ -155,6 +155,19 @@ $btnInstall.Add_Click({
     if (-not (Test-Path $dllDest)) {
       throw 'El bundle se copio pero falta Contents\AuraBIM.dll.'
     }
+    # Validar el ribbon copiado: debe ser XML valido y SIN atributos que
+    # Navisworks rechaza (p.ej. SmallImage), que dan "Fail to load AIRLook Ribbon
+    # file ... corrupt" al abrir. Asi no mostramos "Instalado OK" enganoso con un
+    # ribbon que va a reventar.
+    $xamlDest = Join-Path $dest 'Contents\en-US\AuraBIM.xaml'
+    if (-not (Test-Path $xamlDest)) {
+      throw 'El bundle se copio pero falta Contents\en-US\AuraBIM.xaml (la pestana no cargaria).'
+    }
+    try { [xml](Get-Content $xamlDest -Raw) | Out-Null }
+    catch { throw "El ribbon AuraBIM.xaml no es XML valido: $($_.Exception.Message)" }
+    if (Select-String -Path $xamlDest -Pattern 'SmallImage' -Quiet) {
+      throw 'El ribbon AuraBIM.xaml trae "SmallImage", que rompe el ribbon en Navisworks. Reempaqueta con un bundle actualizado.'
+    }
     $blocked = Get-ChildItem $dest -Recurse -File |
       Where-Object { Get-Item $_.FullName -Stream Zone.Identifier -ErrorAction SilentlyContinue }
     if ($blocked) {

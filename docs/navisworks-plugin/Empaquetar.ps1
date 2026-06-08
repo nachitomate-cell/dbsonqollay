@@ -34,6 +34,22 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 $bundle = Join-Path $stage 'AuraBIM.bundle'
 New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents\en-US') | Out-Null
 
+# Valida el ribbon ANTES de empaquetar: debe ser XML bien formado y NO traer
+# atributos que Navisworks rechaza al cargar (p.ej. SmallImage en NWRibbonButton,
+# que hace "Fail to load AIRLook Ribbon file ... The file is corrupt"). Asi no
+# entregamos un ZIP cuyo ribbon revienta recien al abrir Navisworks.
+function Test-RibbonXaml([string]$path) {
+  if (!(Test-Path $path)) { throw "No encuentro el ribbon: $path" }
+  try { [xml](Get-Content $path -Raw) | Out-Null }
+  catch { throw "El ribbon $path no es XML valido: $($_.Exception.Message)" }
+  $bad = Select-String -Path $path -Pattern 'SmallImage' -AllMatches
+  if ($bad) {
+    throw ("El ribbon $path trae 'SmallImage', que Navisworks NO acepta en " +
+           "NWRibbonButton (rompe el ribbon). Quitalo antes de empaquetar.")
+  }
+}
+Test-RibbonXaml (Join-Path $root 'bundle\Contents\en-US\AuraBIM.xaml')
+
 # Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM").
 Copy-Item (Join-Path $root 'bundle\PackageContents.xml') $bundle
 Copy-Item (Join-Path $root 'bundle\Contents\en-US\*') (Join-Path $bundle 'Contents\en-US')
