@@ -38,22 +38,48 @@ namespace AuraBIM
     [RibbonLayout("AuraBIM.xaml")]
     [RibbonTab("ID_TabAuraBIM", LoadForCanExecute = true)]
     [Command("ID_AsignarProps", LoadForCanExecute = true)]
+    [Command("ID_AsignarSeleccion", LoadForCanExecute = true)]
+    [Command("ID_Config", LoadForCanExecute = true)]
+    [Command("ID_AcercaDe", LoadForCanExecute = true)]
     public class AuraBIM : CommandHandlerPlugin
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.12.0";
+        private const string Version = "1.13.0";
 
-        // El ribbon invoca este método con el id del botón.
+        // El ribbon invoca este método con el id del botón pulsado.
         public override int ExecuteCommand(string commandId, params string[] parameters)
         {
-            return commandId == "ID_AsignarProps" ? RunSync() : 0;
+            try
+            {
+                switch (commandId)
+                {
+                    case "ID_AsignarSeleccion": return RunSync(true);
+                    case "ID_Config": ShowConfig(); return 0;
+                    case "ID_AcercaDe": ShowAbout(); return 0;
+                    default: return RunSync(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Aura BIM: " + ex.Message);
+                return 0;
+            }
         }
 
-        // El botón siempre está habilitado (la validación de "hay modelo abierto"
-        // ya está dentro de RunSync).
+        // El botón "Solo selección" solo se habilita si hay algo seleccionado; el
+        // resto siempre está habilitado (la validación de "hay modelo" va en RunSync).
         public override CommandState CanExecuteCommand(string commandId)
         {
+            if (commandId == "ID_AsignarSeleccion")
+            {
+                try
+                {
+                    Document d = Autodesk.Navisworks.Api.Application.ActiveDocument;
+                    return new CommandState(d != null && d.CurrentSelection != null && d.CurrentSelection.SelectedItems.Count > 0);
+                }
+                catch { return new CommandState(true); }
+            }
             return new CommandState(true);
         }
 
@@ -62,7 +88,9 @@ namespace AuraBIM
         // y el archivo de ejemplo en instalador/. Así NO hay que recompilar para
         // cambiar el token o la URL: se distribuye el mismo DLL para todos.
 
-        private int RunSync()
+        // selectionOnly = escribir únicamente sobre los elementos seleccionados en
+        // el 3D (rápido y quirúrgico). false = todo el modelo.
+        private int RunSync(bool selectionOnly)
         {
             // Vercel exige TLS 1.2+. En net48 suele estar por defecto, pero lo
             // forzamos para evitar errores de handshake en máquinas viejas.
@@ -73,6 +101,24 @@ namespace AuraBIM
             {
                 MessageBox.Show("Abre primero un modelo en Navisworks.");
                 return 0;
+            }
+
+            // Raíces a escanear: la selección actual (modo quirúrgico) o todo el modelo.
+            List<ModelItem> roots;
+            if (selectionOnly)
+            {
+                roots = (doc.CurrentSelection != null)
+                    ? doc.CurrentSelection.SelectedItems.ToList()
+                    : new List<ModelItem>();
+                if (roots.Count == 0)
+                {
+                    MessageBox.Show("No hay elementos seleccionados.\n\nSelecciona en el 3D los elementos a los que quieras escribir las propiedades y vuelve a pulsar \"Solo selección\".");
+                    return 0;
+                }
+            }
+            else
+            {
+                roots = doc.Models.Select(m => m.RootItem).ToList();
             }
 
             // 1) Listar las planillas publicadas.
@@ -101,19 +147,23 @@ namespace AuraBIM
             // cancelar): mantiene la UI viva (sin "no responde") en modelos grandes.
             int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0, totalSkipped = 0;
             var errores = new List<string>();
+            var porPlanilla = new List<PlanillaResult>();
             var progress = new ProgressForm();
+            progress.Scope = selectionOnly ? "Solo selección" : "Modelo completo";
             progress.Show();
             progress.Refresh();
             try
             {
-                Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(doc, progress);
+                Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(roots, progress);
 
                 if (!progress.Canceled)
                 {
+                    int done = 0;
                     foreach (var info in chosen)
                     {
                         try
                         {
+                            progress.Planilla = info.name + "  (" + (done + 1) + "/" + chosen.Count + ")";
                             progress.Report(0.80, "Sincronizando: " + info.name);
                             Dataset data = FetchDataset(info.key);
                             var res = ApplyDataset(tagIndex, data, progress);
@@ -122,11 +172,13 @@ namespace AuraBIM
                             totalApplied += res.applied;
                             totalMissing += res.missing;
                             totalSkipped += res.skipped;
+                            porPlanilla.Add(new PlanillaResult { Name = info.name, Rows = data.rows.Count, Matched = res.matched, Applied = res.applied, Skipped = res.skipped, Missing = res.missing });
                         }
                         catch (Exception ex)
                         {
                             errores.Add(info.name + ": " + ex.Message);
                         }
+                        done++;
                         if (progress.Canceled) break;
                     }
                 }
@@ -139,15 +191,33 @@ namespace AuraBIM
 
             // Log para soporte (en %LOCALAPPDATA%\AuraBIM\AuraBIM.log).
             WriteLog(string.Format(
-                "sync v{0} | planillas={1} filas={2} matched={3} aplicados={4} sinCambios={8} sinGeom={5} cancelado={6}{7}",
+                "sync v{0} | modo={9} planillas={1} filas={2} matched={3} aplicados={4} sinCambios={8} sinGeom={5} cancelado={6}{7}",
                 Version, chosen.Count, totalRows, totalMatched, totalApplied, totalMissing, progress.Canceled,
                 errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : "",
-                totalSkipped));
+                totalSkipped, selectionOnly ? "seleccion" : "completo"));
 
-            using (var rf = new ResultForm(Version, chosen.Count, totalRows, totalMatched,
-                                           totalApplied, totalSkipped, totalMissing, errores, progress.Canceled))
+            using (var rf = new ResultForm(Version, selectionOnly, chosen.Count, totalRows, totalMatched,
+                                           totalApplied, totalSkipped, totalMissing, errores, progress.Canceled, porPlanilla))
                 rf.ShowDialog();
             return 0;
+        }
+
+        // Resultado por planilla (para el desglose del resumen).
+        private sealed class PlanillaResult
+        {
+            public string Name;
+            public int Rows, Matched, Applied, Skipped, Missing;
+        }
+
+        private void ShowAbout()
+        {
+            using (var f = new AboutForm(Version)) f.ShowDialog();
+        }
+
+        private void ShowConfig()
+        {
+            using (var f = new ConfigForm())
+                if (f.ShowDialog() == DialogResult.OK) Cfg.Reload();
         }
 
         // Log best-effort de cada sincronización (para diagnóstico remoto). Se
@@ -480,13 +550,13 @@ namespace AuraBIM
         // Recorre todos los elementos una vez y arma un índice TAG -> elementos,
         // leyendo la propiedad de vínculo directamente (sin distinción de
         // mayúsculas ni dependencia del idioma del Search API).
-        private Dictionary<string, ModelItemCollection> BuildTagIndex(Document doc, ProgressForm progress)
+        private Dictionary<string, ModelItemCollection> BuildTagIndex(IEnumerable<ModelItem> roots, ProgressForm progress)
         {
             var map = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
             int n = 0;
-            foreach (Model m in doc.Models)
+            foreach (ModelItem root in roots)
             {
-                foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
+                foreach (ModelItem item in root.DescendantsAndSelf)
                 {
                     // Refresca la ventana cada 1000 elementos: bombea la UI (evita
                     // "no responde") y permite cancelar. Fracción asintótica 0..0.8
@@ -615,8 +685,13 @@ namespace AuraBIM
         private sealed class ProgressForm : Form
         {
             private readonly ProgressBar _bar;
-            private readonly Label _status;
+            private readonly Label _status;   // acción actual ("Sincronizando: …")
+            private readonly Label _detail;   // planilla + % + tiempo
+            private readonly Label _scopeLbl; // modo (completo / selección)
+            private readonly System.Diagnostics.Stopwatch _sw = System.Diagnostics.Stopwatch.StartNew();
             public bool Canceled { get; private set; }
+            public string Planilla { get; set; }
+            public string Scope { set { _scopeLbl.Text = value; } }
 
             public ProgressForm()
             {
@@ -626,56 +701,76 @@ namespace AuraBIM
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
                 TopMost = true;
                 BackColor = System.Drawing.Color.White;
-                ClientSize = new Size(380, 234);
+                ClientSize = new Size(400, 258);
+                var gray = System.Drawing.Color.FromArgb(80, 90, 100);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
 
                 var sqy = LoadLogo("aurabim.png");   // ~108x104
-
-                // Logo Aura BIM, protagonista y centrado arriba.
-                var pbSqy = new PictureBox
-                {
-                    Image = sqy,
-                    SizeMode = PictureBoxSizeMode.AutoSize,
-                    Top = 18,
-                };
+                var pbSqy = new PictureBox { Image = sqy, SizeMode = PictureBoxSizeMode.AutoSize, Top = 16 };
                 pbSqy.Left = (ClientSize.Width - (sqy?.Width ?? 86)) / 2;
 
+                _scopeLbl = new Label
+                {
+                    Text = "", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 128, Width = ClientSize.Width - 40, Height = 16, ForeColor = soft,
+                    Font = new System.Drawing.Font(Font.FontFamily, 8f, System.Drawing.FontStyle.Bold),
+                };
                 _status = new Label
                 {
-                    Text = "Preparando…",
-                    AutoSize = false,
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Left = 20, Top = 140, Width = ClientSize.Width - 40, Height = 20,
-                    ForeColor = System.Drawing.Color.FromArgb(80, 90, 100),
+                    Text = "Preparando…", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 148, Width = ClientSize.Width - 40, Height = 20, ForeColor = gray,
                 };
-
                 _bar = new ProgressBar
                 {
-                    Left = 24, Top = 166, Width = ClientSize.Width - 48, Height = 18,
+                    Left = 24, Top = 178, Width = ClientSize.Width - 48, Height = 16,
                     Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous,
                 };
-
-                var btnCancel = new Button
+                _detail = new Label
                 {
-                    Text = "Cancelar", Width = 90, Height = 28,
-                    Top = 196, Left = (ClientSize.Width - 90) / 2,
+                    Text = "", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 198, Width = ClientSize.Width - 40, Height = 16, ForeColor = soft,
+                    Font = new System.Drawing.Font(Font.FontFamily, 8f),
                 };
+
+                var btnCancel = new Button { Text = "Cancelar", Width = 90, Height = 28, Top = 220, Left = (ClientSize.Width - 90) / 2 };
                 btnCancel.Click += (s, e) => { Canceled = true; btnCancel.Enabled = false; _status.Text = "Cancelando…"; };
 
                 Controls.Add(pbSqy);
+                Controls.Add(_scopeLbl);
                 Controls.Add(_status);
                 Controls.Add(_bar);
+                Controls.Add(_detail);
                 Controls.Add(btnCancel);
 
                 ControlBox = false; // sin botón cerrar: se usa Cancelar
             }
 
-            // Actualiza barra + texto y bombea la UI (evita "no responde").
+            // Actualiza barra + texto, calcula % y tiempo restante, y bombea la UI.
             public void Report(double fraction, string text)
             {
-                int v = (int)(Math.Max(0, Math.Min(1, fraction)) * 100);
+                double f = Math.Max(0, Math.Min(1, fraction));
+                int v = (int)(f * 100);
                 if (_bar.Value != v) _bar.Value = v;
                 if (text != null) _status.Text = text;
+
+                string eta = "";
+                double secs = _sw.Elapsed.TotalSeconds;
+                if (f > 0.02 && f < 1)
+                {
+                    double rest = secs * (1 - f) / f;
+                    eta = rest >= 1 ? "  ·  ~" + FormatSecs(rest) + " restantes" : "";
+                }
+                string pl = string.IsNullOrEmpty(Planilla) ? "" : Planilla + "  ·  ";
+                _detail.Text = pl + v + "%" + eta;
+
                 System.Windows.Forms.Application.DoEvents();
+            }
+
+            private static string FormatSecs(double s)
+            {
+                if (s < 60) return ((int)Math.Ceiling(s)) + "s";
+                int m = (int)(s / 60); int r = (int)(s % 60);
+                return m + "m " + r + "s";
             }
 
             private static Image LoadLogo(string resourceName)
@@ -697,8 +792,9 @@ namespace AuraBIM
         // ---- Ventana de resultado (resumen premium: logo + métricas) ----
         private sealed class ResultForm : Form
         {
-            public ResultForm(string version, int planillas, int filas, int matched,
-                              int aplicados, int skipped, int missing, List<string> errores, bool canceled)
+            public ResultForm(string version, bool selectionOnly, int planillas, int filas, int matched,
+                              int aplicados, int skipped, int missing, List<string> errores, bool canceled,
+                              List<PlanillaResult> porPlanilla)
             {
                 bool hayErr = errores != null && errores.Count > 0;
                 var gray = System.Drawing.Color.FromArgb(80, 90, 100);
@@ -713,7 +809,7 @@ namespace AuraBIM
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
                 BackColor = System.Drawing.Color.White;
-                const int W = 430;
+                const int W = 440;
 
                 var logo = LoadLogo("aurabim.png");
                 var pb = new PictureBox { Image = logo, SizeMode = PictureBoxSizeMode.AutoSize, Top = 16 };
@@ -725,13 +821,21 @@ namespace AuraBIM
                     Text = canceled ? "Sincronización cancelada"
                                     : (hayErr ? "Sincronización con avisos" : "Sincronización completada"),
                     AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
-                    Left = 20, Top = 128, Width = W - 40, Height = 24,
+                    Left = 20, Top = 126, Width = W - 40, Height = 24,
                     ForeColor = canceled ? amber : (hayErr ? amber : green),
                     Font = new System.Drawing.Font(Font.FontFamily, 11, System.Drawing.FontStyle.Bold),
                 };
                 Controls.Add(title);
 
-                int y = 162;
+                Controls.Add(new Label
+                {
+                    Text = selectionOnly ? "Modo: solo selección" : "Modo: modelo completo",
+                    AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 150, Width = W - 40, Height = 16, ForeColor = soft,
+                    Font = new System.Drawing.Font(Font.FontFamily, 8f, System.Drawing.FontStyle.Bold),
+                });
+
+                int y = 174;
                 Action<string, string, System.Drawing.Color> row = (label, val, col) =>
                 {
                     Controls.Add(new Label { Text = label, AutoSize = false, Left = 44, Top = y, Width = 250, Height = 22, ForeColor = gray, TextAlign = ContentAlignment.MiddleLeft });
@@ -744,6 +848,25 @@ namespace AuraBIM
                 row("Elementos actualizados", aplicados.ToString("N0"), orange);
                 row("Sin cambios (omitidos)", skipped.ToString("N0"), soft);
                 row("TAGs sin geometría", missing.ToString("N0"), missing > 0 ? amber : soft);
+
+                // Desglose por planilla (cuando hay más de una): tabla con scroll.
+                if (porPlanilla != null && porPlanilla.Count > 1)
+                {
+                    y += 6;
+                    Controls.Add(new Label { Text = "Detalle por planilla", AutoSize = false, Left = 44, Top = y, Width = W - 88, Height = 18, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 8.5f, System.Drawing.FontStyle.Bold) });
+                    y += 20;
+                    int panelH = Math.Min(porPlanilla.Count * 20 + 4, 120);
+                    var panel = new Panel { Left = 44, Top = y, Width = W - 88, Height = panelH, AutoScroll = true, BorderStyle = BorderStyle.FixedSingle };
+                    int py = 2;
+                    foreach (var p in porPlanilla)
+                    {
+                        panel.Controls.Add(new Label { Text = p.Name, AutoSize = false, Left = 4, Top = py, Width = 175, Height = 18, ForeColor = gray, TextAlign = ContentAlignment.MiddleLeft });
+                        panel.Controls.Add(new Label { Text = "act " + p.Applied + "  ·  om " + p.Skipped + (p.Missing > 0 ? "  ·  s/geom " + p.Missing : ""), AutoSize = false, Left = 182, Top = py, Width = W - 88 - 182 - 22, Height = 18, ForeColor = soft, TextAlign = ContentAlignment.MiddleRight, Font = new System.Drawing.Font(Font.FontFamily, 8f) });
+                        py += 20;
+                    }
+                    Controls.Add(panel);
+                    y += panelH + 4;
+                }
 
                 y += 6;
                 Controls.Add(new Label
@@ -802,6 +925,138 @@ namespace AuraBIM
             }
         }
 
+        // Logo embebido compartido por las ventanas "Acerca de" / "Configuración".
+        private static Image LoadLogoImage()
+        {
+            try
+            {
+                using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("aurabim.png"))
+                {
+                    if (s == null) return null;
+                    using (var tmp = Image.FromStream(s)) return new Bitmap(tmp);
+                }
+            }
+            catch { return null; }
+        }
+
+        // ---- Ventana "Acerca de" (versión, servidor, token, link a la web) ----
+        private sealed class AboutForm : Form
+        {
+            public AboutForm(string version)
+            {
+                var gray = System.Drawing.Color.FromArgb(80, 90, 100);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
+                var orange = System.Drawing.Color.FromArgb(235, 110, 40);
+                var green = System.Drawing.Color.FromArgb(30, 150, 70);
+                const int W = 420;
+
+                Text = "Acerca de Aura BIM";
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                BackColor = System.Drawing.Color.White;
+
+                var logo = LoadLogoImage();
+                var pb = new PictureBox { Image = logo, SizeMode = PictureBoxSizeMode.AutoSize, Top = 18 };
+                pb.Left = (W - (logo?.Width ?? 86)) / 2;
+                Controls.Add(pb);
+
+                Controls.Add(new Label { Text = "Aura BIM", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 128, Width = W - 40, Height = 26, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 13, System.Drawing.FontStyle.Bold) });
+                Controls.Add(new Label { Text = "Plugin para Autodesk Navisworks", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 154, Width = W - 40, Height = 18, ForeColor = soft });
+
+                int y = 184;
+                bool tok = !string.IsNullOrEmpty(Cfg.ApiToken);
+                Action<string, string, System.Drawing.Color> row = (label, val, col) =>
+                {
+                    Controls.Add(new Label { Text = label, AutoSize = false, Left = 44, Top = y, Width = 120, Height = 22, ForeColor = soft, TextAlign = ContentAlignment.MiddleLeft });
+                    Controls.Add(new Label { Text = val, AutoSize = false, Left = 168, Top = y, Width = W - 168 - 44, Height = 22, ForeColor = col, TextAlign = ContentAlignment.MiddleLeft, Font = new System.Drawing.Font(Font.FontFamily, 9f, System.Drawing.FontStyle.Bold) });
+                    y += 26;
+                };
+                row("Versión", "v" + version, gray);
+                row("Servidor", Cfg.BaseUrl, gray);
+                row("Token", tok ? "Configurado" : "No configurado", tok ? green : orange);
+                row("Pestaña BIM", Cfg.TabName, gray);
+
+                y += 8;
+                var btnWeb = new Button { Text = "Abrir Aura BIM", Width = 140, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
+                btnWeb.FlatAppearance.BorderSize = 0;
+                btnWeb.Click += (s, e) => { try { System.Diagnostics.Process.Start(Cfg.BaseUrl); } catch { } };
+                Controls.Add(btnWeb);
+
+                var btnClose = new Button { Text = "Cerrar", Width = 110, Height = 30, Top = y, Left = W - 110 - 44, FlatStyle = FlatStyle.Flat, ForeColor = gray, DialogResult = DialogResult.OK };
+                btnClose.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                Controls.Add(btnClose);
+                AcceptButton = btnClose;
+
+                ClientSize = new Size(W, y + 48);
+            }
+        }
+
+        // ---- Ventana "Configuración" (edita el override local del usuario) ----
+        private sealed class ConfigForm : Form
+        {
+            public ConfigForm()
+            {
+                var gray = System.Drawing.Color.FromArgb(80, 90, 100);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
+                var orange = System.Drawing.Color.FromArgb(235, 110, 40);
+                var red = System.Drawing.Color.FromArgb(190, 40, 40);
+                const int W = 470;
+
+                Text = "Configuración de Aura BIM";
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                BackColor = System.Drawing.Color.White;
+
+                Controls.Add(new Label { Text = "Configuración", AutoSize = false, Left = 24, Top = 18, Width = W - 48, Height = 24, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold) });
+
+                int y = 54;
+                Func<string, string, TextBox> field = (label, val) =>
+                {
+                    Controls.Add(new Label { Text = label, AutoSize = false, Left = 24, Top = y, Width = W - 48, Height = 16, ForeColor = soft, Font = new System.Drawing.Font(Font.FontFamily, 8f, System.Drawing.FontStyle.Bold) });
+                    var tb = new TextBox { Left = 24, Top = y + 18, Width = W - 48, Text = val ?? "" };
+                    Controls.Add(tb);
+                    y += 50;
+                    return tb;
+                };
+                var tbUrl = field("Servidor (URL de la web)", Cfg.BaseUrl);
+                var tbTok = field("Token de API", Cfg.ApiToken);
+                var tbCat = field("Categoría de vínculo (pestaña del TAG)", Cfg.LinkCategory);
+                var tbProp = field("Propiedad de vínculo (TAG/Commodity)", Cfg.LinkProperty);
+                var tbTab = field("Pestaña a escribir", Cfg.TabName);
+
+                var note = new Label { Text = "Se guarda solo en tu equipo (no afecta a otros usuarios).", AutoSize = false, Left = 24, Top = y, Width = W - 48, Height = 18, ForeColor = soft };
+                Controls.Add(note);
+                y += 26;
+
+                var err = new Label { Text = "", AutoSize = false, Left = 24, Top = y, Width = W - 48, Height = 18, ForeColor = red };
+                Controls.Add(err);
+                y += 24;
+
+                var btnSave = new Button { Text = "Guardar", Width = 120, Height = 30, Top = y, Left = W - 120 - 24, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
+                btnSave.FlatAppearance.BorderSize = 0;
+                btnSave.Click += (s, e) =>
+                {
+                    try
+                    {
+                        Cfg.SaveLocal(tbUrl.Text.Trim(), tbTok.Text.Trim(), tbCat.Text.Trim(), tbProp.Text.Trim(), tbTab.Text.Trim());
+                        DialogResult = DialogResult.OK;
+                        Close();
+                    }
+                    catch (Exception ex) { err.Text = "No se pudo guardar: " + ex.Message; }
+                };
+                Controls.Add(btnSave);
+
+                var btnCancel = new Button { Text = "Cancelar", Width = 110, Height = 30, Top = y, Left = 24, FlatStyle = FlatStyle.Flat, ForeColor = gray, DialogResult = DialogResult.Cancel };
+                btnCancel.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                Controls.Add(btnCancel);
+                CancelButton = btnCancel;
+
+                ClientSize = new Size(W, y + 48);
+            }
+        }
+
         // ---- Configuración (AuraBIM.config.json junto al DLL) ------
         // Valores por defecto embebidos; el config.json los pisa si existe.
         // Así se distribuye el mismo DLL para todos y solo cambia el .json.
@@ -816,15 +1071,38 @@ namespace AuraBIM
             // TAG/Commodity → el sync es repetible). El config la puede pisar.
             public static string TabName = "BIM";
 
-            static Cfg() { Load(); }
+            static Cfg() { Reload(); }
 
-            private static void Load()
+            // Config junto al DLL (se distribuye igual para todos) y override del
+            // usuario en %LOCALAPPDATA%\AuraBIM (editable desde "Configuración",
+            // sin permisos de administrador). El local gana sobre el del bundle.
+            public static string LocalPath
+            {
+                get
+                {
+                    return Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "AuraBIM", "AuraBIM.config.json");
+                }
+            }
+
+            public static void Reload()
             {
                 try
                 {
-                    string dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                    string path = Path.Combine(dir, "AuraBIM.config.json");
-                    if (!File.Exists(path)) return;
+                    string bundle = Path.Combine(
+                        Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "AuraBIM.config.json");
+                    LoadFrom(bundle);   // base
+                    LoadFrom(LocalPath); // override del usuario
+                }
+                catch { /* ante cualquier error, se usan los valores por defecto */ }
+            }
+
+            private static void LoadFrom(string path)
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
                     var d = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path))
                             as Dictionary<string, object>;
                     if (d == null) return;
@@ -834,7 +1112,21 @@ namespace AuraBIM
                     if (d.ContainsKey("linkProperty")) LinkProperty = Convert.ToString(d["linkProperty"]);
                     if (d.ContainsKey("tabName")) TabName = Convert.ToString(d["tabName"]);
                 }
-                catch { /* ante cualquier error, se usan los valores por defecto */ }
+                catch { /* ignora un config inválido */ }
+            }
+
+            // Guarda el override del usuario (no toca el del bundle).
+            public static void SaveLocal(string baseUrl, string apiToken, string linkCategory,
+                                         string linkProperty, string tabName)
+            {
+                var d = new Dictionary<string, object>
+                {
+                    { "baseUrl", baseUrl }, { "apiToken", apiToken }, { "linkCategory", linkCategory },
+                    { "linkProperty", linkProperty }, { "tabName", tabName },
+                };
+                string json = new JavaScriptSerializer().Serialize(d);
+                Directory.CreateDirectory(Path.GetDirectoryName(LocalPath));
+                File.WriteAllText(LocalPath, json);
             }
         }
 
