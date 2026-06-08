@@ -45,7 +45,12 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.15.0";
+        private const string Version = "1.16.0";
+
+        // Repos/URLs para la auto-actualización y la descarga del instalador.
+        private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
+        private const string InstallerUrl = "https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip";
+        private static bool _updateNotified = false;
 
         // El ribbon invoca este método con el id del botón pulsado.
         public override int ExecuteCommand(string commandId, params string[] parameters)
@@ -120,6 +125,9 @@ namespace AuraBIM
             {
                 roots = doc.Models.Select(m => m.RootItem).ToList();
             }
+
+            // Aviso de nueva versión (una vez por sesión, no bloquea si falla).
+            MaybeNotifyUpdate();
 
             // 1) Listar las planillas publicadas.
             List<DatasetInfo> index;
@@ -218,6 +226,69 @@ namespace AuraBIM
         {
             using (var f = new ConfigForm())
                 if (f.ShowDialog() == DialogResult.OK) Cfg.Reload();
+        }
+
+        // ---- Auto-actualización -----------------------------------------
+        // Consulta el release 'latest' en GitHub y, si hay una versión más nueva
+        // que la instalada, lo avisa con opción de descargar. Una vez por sesión.
+        private void MaybeNotifyUpdate()
+        {
+            if (_updateNotified) return;
+            _updateNotified = true; // marcar aunque falle: no reintentar cada sync
+            try
+            {
+                string nv = GetUpdateVersion();
+                if (!string.IsNullOrEmpty(nv))
+                    using (var f = new UpdateForm(Version, nv)) f.ShowDialog();
+            }
+            catch { /* el aviso nunca debe romper la sincronización */ }
+        }
+
+        // Devuelve la versión nueva (string) si el 'latest' de GitHub es mayor que
+        // la instalada; si no hay novedad o falla la consulta, devuelve null.
+        private static string GetUpdateVersion()
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                string json;
+                using (var wc = new QuickClient())
+                {
+                    wc.Encoding = System.Text.Encoding.UTF8;
+                    wc.Headers[HttpRequestHeader.UserAgent] = "AuraBIM-Plugin"; // GitHub exige User-Agent
+                    wc.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
+                    json = wc.DownloadString(ReleasesApi);
+                }
+                var root = new JavaScriptSerializer().DeserializeObject(json) as Dictionary<string, object>;
+                string tag = (root != null && root.ContainsKey("tag_name")) ? Convert.ToString(root["tag_name"]) : null;
+                System.Version latest = ParseVer(tag);
+                System.Version cur = ParseVer(Version);
+                return (latest != null && cur != null && latest > cur) ? latest.ToString() : null;
+            }
+            catch { return null; }
+        }
+
+        // Extrae X.Y(.Z) de un texto ("plugin-v1.16" / "1.16.0") → System.Version.
+        private static System.Version ParseVer(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return null;
+            var m = System.Text.RegularExpressions.Regex.Match(s, @"(\d+)\.(\d+)(?:\.(\d+))?");
+            if (!m.Success) return null;
+            int a = int.Parse(m.Groups[1].Value);
+            int b = int.Parse(m.Groups[2].Value);
+            int c = m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0;
+            return new System.Version(a, b, c);
+        }
+
+        // WebClient con timeout corto: el chequeo de actualización no debe colgar.
+        private sealed class QuickClient : WebClient
+        {
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                var r = base.GetWebRequest(address);
+                if (r != null) r.Timeout = 4000;
+                return r;
+            }
         }
 
         // Log best-effort de cada sincronización (para diagnóstico remoto). Se
@@ -978,6 +1049,17 @@ namespace AuraBIM
                 row("Pestaña BIM", Cfg.TabName, gray);
 
                 y += 8;
+                var btnUpd = new Button { Text = "Buscar actualización", Width = W - 88, Height = 28, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, ForeColor = gray };
+                btnUpd.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                btnUpd.Click += (s, e) =>
+                {
+                    string nv = GetUpdateVersion();
+                    if (!string.IsNullOrEmpty(nv)) { using (var f = new UpdateForm(version, nv)) f.ShowDialog(); }
+                    else MessageBox.Show("Ya tienes la última versión instalada (v" + version + ").");
+                };
+                Controls.Add(btnUpd);
+                y += 36;
+
                 var btnWeb = new Button { Text = "Abrir Aura BIM", Width = 140, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
                 btnWeb.FlatAppearance.BorderSize = 0;
                 btnWeb.Click += (s, e) => { try { System.Diagnostics.Process.Start(Cfg.BaseUrl); } catch { } };
@@ -1054,6 +1136,47 @@ namespace AuraBIM
                 CancelButton = btnCancel;
 
                 ClientSize = new Size(W, y + 48);
+            }
+        }
+
+        // ---- Ventana de aviso de nueva versión --------------------------
+        private sealed class UpdateForm : Form
+        {
+            public UpdateForm(string actual, string nueva)
+            {
+                var gray = System.Drawing.Color.FromArgb(80, 90, 100);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
+                var orange = System.Drawing.Color.FromArgb(235, 110, 40);
+                var green = System.Drawing.Color.FromArgb(30, 150, 70);
+                const int W = 420;
+
+                Text = "Actualización de Aura BIM";
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                BackColor = System.Drawing.Color.White;
+
+                var logo = LoadLogoImage();
+                var pb = new PictureBox { Image = logo, SizeMode = PictureBoxSizeMode.AutoSize, Top = 18 };
+                pb.Left = (W - (logo?.Width ?? 86)) / 2;
+                Controls.Add(pb);
+
+                Controls.Add(new Label { Text = "Hay una nueva versión", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 128, Width = W - 40, Height = 26, ForeColor = green, Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold) });
+                Controls.Add(new Label { Text = "Instalada: v" + actual + "        Disponible: v" + nueva, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 156, Width = W - 40, Height = 20, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 9.5f, System.Drawing.FontStyle.Bold) });
+                Controls.Add(new Label { Text = "Cerrá Navisworks y ejecutá el instalador para actualizar.", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 182, Width = W - 40, Height = 34, ForeColor = soft });
+
+                int y = 226;
+                var btnDl = new Button { Text = "Descargar", Width = 130, Height = 32, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White, DialogResult = DialogResult.OK };
+                btnDl.FlatAppearance.BorderSize = 0;
+                btnDl.Click += (s, e) => { try { System.Diagnostics.Process.Start(InstallerUrl); } catch { } };
+                Controls.Add(btnDl);
+
+                var btnLater = new Button { Text = "Después", Width = 110, Height = 32, Top = y, Left = W - 110 - 44, FlatStyle = FlatStyle.Flat, ForeColor = gray, DialogResult = DialogResult.Cancel };
+                btnLater.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                Controls.Add(btnLater);
+                AcceptButton = btnDl; CancelButton = btnLater;
+
+                ClientSize = new Size(W, y + 50);
             }
         }
 
