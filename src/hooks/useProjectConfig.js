@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AWP_PRESETS, DISCIPLINAS_DEFAULT, NOMENCLATURA_DEFAULT } from '../data/awpCatalogs.js'
+import { loadStore, saveStore } from '../utils/cloudStore.js'
 
 /**
  * Configuración AWP de un proyecto (modelo de Aura AWP): identificación,
  * clasificación, ubicación, fechas, presupuesto, disciplinas (con prefijo+color)
- * y parámetros AWP + nomenclatura. Scaffold local por proyecto (localStorage);
- * preparado para mover a la base de datos sin cambiar la UI.
+ * y parámetros AWP + nomenclatura. Persiste en la NUBE (/api/store) además del
+ * localStorage, así se recupera en cualquier equipo.
  */
 const KEY = (projectId) => `sqy-awp-config-${projectId}`
+const cloudKey = (pid) => `awp-config-${pid}`
 
 function defaults(project) {
   return {
@@ -61,29 +63,46 @@ function load(projectId, project) {
 
 export function useProjectConfig(projectId, project) {
   const [config, setConfig] = useState(() => load(projectId, project))
+  const cloudReady = useRef(false)
+  const edited = useRef(false)
+  const mutate = useCallback((updater) => { edited.current = true; setConfig(updater) }, [])
+
+  // Carga desde la nube al montar (gana sobre localStorage). Si la nube está
+  // vacía, la siembra con lo local. Luego habilita el guardado a la nube.
+  useEffect(() => {
+    let alive = true
+    loadStore(cloudKey(projectId)).then((d) => {
+      if (!alive) return
+      if (d && !edited.current) setConfig((cur) => ({ ...cur, ...d, awp: { ...cur.awp, ...(d.awp || {}), nomenclatura: { ...cur.awp.nomenclatura, ...(d.awp?.nomenclatura || {}) } } }))
+      else if (!d) setConfig((cur) => { saveStore(cloudKey(projectId), cur); return cur })
+    }).finally(() => { if (alive) cloudReady.current = true })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   useEffect(() => {
     try { localStorage.setItem(KEY(projectId), JSON.stringify(config)) } catch { /* cuota */ }
+    if (cloudReady.current) saveStore(cloudKey(projectId), config)
   }, [projectId, config])
 
   // Setea un campo (soporta rutas tipo 'awp.hhMaxCwa').
   const setField = useCallback((path, value) => {
-    setConfig((c) => {
+    mutate((c) => {
       if (!path.includes('.')) return { ...c, [path]: value }
       const [a, b, d] = path.split('.')
       if (d) return { ...c, [a]: { ...c[a], [b]: { ...(c[a]?.[b] || {}), [d]: value } } }
       return { ...c, [a]: { ...(c[a] || {}), [b]: value } }
     })
-  }, [])
+  }, [mutate])
 
   const setDisciplina = useCallback((id, patch) => {
-    setConfig((c) => ({ ...c, disciplinas: c.disciplinas.map((d) => (d.id === id ? { ...d, ...patch } : d)) }))
-  }, [])
+    mutate((c) => ({ ...c, disciplinas: c.disciplinas.map((d) => (d.id === id ? { ...d, ...patch } : d)) }))
+  }, [mutate])
 
   const applyPreset = useCallback((presetId) => {
     const p = AWP_PRESETS[presetId]
-    if (p) setConfig((c) => ({ ...c, awp: { ...c.awp, ...p } }))
-  }, [])
+    if (p) mutate((c) => ({ ...c, awp: { ...c.awp, ...p } }))
+  }, [mutate])
 
   const disciplinasActivas = useMemo(() => config.disciplinas.filter((d) => d.activa), [config.disciplinas])
 
