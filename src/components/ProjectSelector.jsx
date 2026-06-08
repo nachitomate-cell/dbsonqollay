@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ArrowRight, Building2, Database, Layers, Loader2, LogOut, Plus, Sigma, Sprout, Trash2 } from 'lucide-react'
+import { ArrowRight, Building2, Clock, Database, Layers, Loader2, LogOut, MapPin, Plus, Sigma, Sprout, Tag, Trash2, Users } from 'lucide-react'
 import Icon from './Icon.jsx'
 import { useAuth } from './LoginGate.jsx'
 import { computeProjectStats } from '../utils/projectStats.js'
@@ -125,6 +125,7 @@ function ProjectCard({ project, openedAt, busy, disabled, onSelect, onRemove }) 
             <Icon name={project.icon} className="h-6 w-6" />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {project.estado && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{project.estado}</span>}
             {demo && <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white dark:bg-white dark:text-ink-900">Demo</span>}
             <span className={['inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold', project.empty ? 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'].join(' ')}>
               {project.empty ? <><Sprout className="h-3 w-3" /> Vacío</> : <><Database className="h-3 w-3" /> Con datos</>}
@@ -132,13 +133,28 @@ function ProjectCard({ project, openedAt, busy, disabled, onSelect, onRemove }) 
           </div>
         </div>
 
-        <h3 className="text-base font-bold text-slate-800 dark:text-white">{project.name}</h3>
-        <p className="mt-1 line-clamp-2 flex-1 text-sm text-slate-500 dark:text-slate-400">{project.description}</p>
+        {project.code && <p className="font-mono text-[11px] font-semibold tracking-wide text-slate-400">{project.code}</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-bold text-slate-800 dark:text-white">{project.name}</h3>
+          {project.fase && <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-accent/15 dark:text-accent">{project.fase}</span>}
+        </div>
+        <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{project.description}</p>
+
+        {/* Metadata del proyecto (estilo Aura) */}
+        {(project.cliente || project.pais || project.tipo) && (
+          <div className="mt-2.5 space-y-1.5 border-t border-slate-100 pt-2.5 text-xs text-slate-500 dark:border-white/5 dark:text-slate-400">
+            {project.cliente && <div className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" /><span className="truncate"><span className="font-medium text-slate-700 dark:text-slate-200">{project.cliente}</span>{project.division && <span className="text-slate-400"> / {project.division}</span>}</span></div>}
+            {project.pais && <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" /> {project.paisCode && <span className="text-[10px] font-semibold text-slate-400">{project.paisCode}</span>} {project.pais}</div>}
+            {project.tipo && <div className="flex items-center gap-1.5"><Tag className="h-3.5 w-3.5 shrink-0 text-slate-400" /> {project.tipo}</div>}
+          </div>
+        )}
 
         {/* Métricas */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        <div className="mt-3 flex flex-1 flex-wrap items-end content-end gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
           <span className="inline-flex items-center gap-1"><Layers className="h-3.5 w-3.5 text-slate-400" /> {stats.disciplines} disciplina{stats.disciplines === 1 ? '' : 's'}</span>
           <span className="inline-flex items-center gap-1"><Sigma className="h-3.5 w-3.5 text-slate-400" /> {stats.elements.toLocaleString('es-CL')} elemento{stats.elements === 1 ? '' : 's'}</span>
+          {project.miembros ? <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5 text-slate-400" /> {project.miembros} miembros</span> : null}
+          {project.hh ? <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-slate-400" /> {(project.hh / 1000).toLocaleString('es-CL')}K HH</span> : null}
           <span className="text-slate-400">· {ago ? `abierto ${ago}` : 'sin abrir'}</span>
         </div>
 

@@ -11,10 +11,21 @@
 export const DEMO_PROJECTS = [
   {
     id: 'demo-full',
+    code: 'SQY-2025-01',
     name: 'Planta Servicios Auxiliares',
     description: 'Proyecto con las disciplinas y planillas cargadas en la base de datos. Ideal para explorar la plataforma con datos reales.',
     icon: 'Building2',
     empty: false,
+    // Metadata mostrada en la tarjeta del selector.
+    estado: 'Activo',
+    fase: 'FEL-3',
+    cliente: 'Minera del Norte S.A.',
+    division: 'División Cobre Norte',
+    pais: 'Chile',
+    paisCode: 'CL',
+    tipo: 'Planta de Proceso Minero',
+    miembros: 7,
+    hh: 259000,
   },
   {
     id: 'demo-empty',
