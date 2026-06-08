@@ -45,7 +45,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.14.0";
+        private const string Version = "1.15.0";
 
         // El ribbon invoca este método con el id del botón pulsado.
         public override int ExecuteCommand(string commandId, params string[] parameters)
