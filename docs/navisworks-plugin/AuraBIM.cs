@@ -39,13 +39,14 @@ namespace AuraBIM
     [RibbonTab("ID_TabAuraBIM", LoadForCanExecute = true)]
     [Command("ID_AsignarProps", LoadForCanExecute = true)]
     [Command("ID_AsignarSeleccion", LoadForCanExecute = true)]
+    [Command("ID_Conjuntos", LoadForCanExecute = true)]
     [Command("ID_Config", LoadForCanExecute = true)]
     [Command("ID_AcercaDe", LoadForCanExecute = true)]
     public class AuraBIM : CommandHandlerPlugin
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.16.0";
+        private const string Version = "1.17.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
@@ -60,6 +61,7 @@ namespace AuraBIM
                 switch (commandId)
                 {
                     case "ID_AsignarSeleccion": return RunSync(true);
+                    case "ID_Conjuntos": CreateSets(); return 0;
                     case "ID_Config": ShowConfig(); return 0;
                     case "ID_AcercaDe": ShowAbout(); return 0;
                     default: return RunSync(false);
@@ -289,6 +291,95 @@ namespace AuraBIM
                 if (r != null) r.Timeout = 4000;
                 return r;
             }
+        }
+
+        // ---- Conjuntos de selección por CWA / CWP / Disciplina ----------
+        // Desde las propiedades ya escritas en el modelo, crea un conjunto de
+        // selección por cada valor distinto de CWA, CWP y Disciplina. Así se navega
+        // el modelo por paquete de trabajo con un clic (ventana "Conjuntos").
+        private const string SetPrefix = "AWP — "; // "AWP — "
+        private void CreateSets()
+        {
+            Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
+            if (doc == null || doc.Models.Count == 0) { MessageBox.Show("Abre primero un modelo en Navisworks."); return; }
+
+            // (etiqueta, propiedad en la pestaña BIM)
+            var fields = new[]
+            {
+                new[] { "CWA", "CWA" },
+                new[] { "CWP", "CWP" },
+                new[] { "Disciplina", "ESPECIALIDAD" },
+            };
+            var groups = new Dictionary<string, Dictionary<string, ModelItemCollection>>();
+            foreach (var f in fields) groups[f[0]] = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
+
+            var progress = new ProgressForm();
+            progress.Scope = "Conjuntos de selección";
+            progress.Show(); progress.Refresh();
+            int creados = 0;
+            try
+            {
+                int n = 0;
+                foreach (Model m in doc.Models)
+                    foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
+                    {
+                        if ((++n % 1000) == 0)
+                        {
+                            progress.Report(0.6 * (n / (double)(n + 20000)), "Analizando modelo: " + n.ToString("N0") + " elementos…");
+                            if (progress.Canceled) return;
+                        }
+                        foreach (var f in fields)
+                        {
+                            string val = GetProp(item, Cfg.TabName, f[1]);
+                            if (string.IsNullOrWhiteSpace(val)) continue;
+                            val = val.Trim();
+                            var g = groups[f[0]];
+                            ModelItemCollection coll;
+                            if (!g.TryGetValue(val, out coll)) { coll = new ModelItemCollection(); g[val] = coll; }
+                            coll.Add(item);
+                        }
+                    }
+
+                progress.Report(0.85, "Creando conjuntos…");
+                var ss = doc.SelectionSets;
+                // Nombres ya existentes: no duplicar al re-ejecutar.
+                var existentes = new HashSet<string>(
+                    ss.Value.Where(s => s != null && s.DisplayName != null).Select(s => s.DisplayName),
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (var f in fields)
+                    foreach (var kv in groups[f[0]].OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                    {
+                        if (kv.Value.Count == 0) continue;
+                        string name = SetPrefix + f[0] + " — " + kv.Key;
+                        if (existentes.Contains(name)) continue;
+                        ss.AddCopy(new SelectionSet(kv.Value) { DisplayName = name });
+                        existentes.Add(name);
+                        creados++;
+                    }
+            }
+            catch (Exception ex) { MessageBox.Show("No se pudieron crear los conjuntos: " + ex.Message); return; }
+            finally { progress.Close(); progress.Dispose(); }
+
+            WriteLog("sets v" + Version + " | creados=" + creados);
+            MessageBox.Show("Conjuntos de selección creados: " + creados + "\n\n" +
+                            "Agrupados por CWA, CWP y Disciplina (prefijo \"AWP —\"). Mirá la ventana " +
+                            "\"Conjuntos\" del panel de selección: hacé clic en uno para seleccionar ese " +
+                            "paquete de trabajo y aislarlo/ocultarlo.\n\n" +
+                            "Para regenerarlos tras cargar más datos, borrá los conjuntos \"AWP —\" y vuelve a crearlos.");
+        }
+
+        // Lee una propiedad de la pestaña indicada (sin distinguir mayúsculas).
+        private string GetProp(ModelItem item, string category, string propName)
+        {
+            foreach (PropertyCategory cat in item.PropertyCategories)
+            {
+                if (!string.Equals(cat.DisplayName, category, StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (DataProperty p in cat.Properties)
+                    if (string.Equals(p.DisplayName, propName, StringComparison.OrdinalIgnoreCase))
+                        return p.Value != null ? p.Value.ToDisplayString() : null;
+            }
+            return null;
         }
 
         // Log best-effort de cada sincronización (para diagnóstico remoto). Se

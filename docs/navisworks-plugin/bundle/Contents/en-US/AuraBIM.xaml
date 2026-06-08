@@ -15,6 +15,11 @@
                            Text="Solo&#xD;&#xA;seleccion"
                            LargeImage="seleccion32.png" SmallImage="seleccion16.png"
                            Orientation="Vertical" />
+        <nw:NWRibbonButton x:Uid="ID_Conjuntos" Id="ID_Conjuntos"
+                           Size="Large" ShowText="True"
+                           Text="Crear&#xD;&#xA;conjuntos"
+                           LargeImage="conjuntos32.png" SmallImage="conjuntos16.png"
+                           Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_Config" Id="ID_Config"
                            Size="Large" ShowText="True"
                            Text="Configu-&#xD;&#xA;racion"
