@@ -31,11 +31,18 @@ export default async function handler(req, res) {
       // limita el body a ~4.5MB). Una planilla real ronda cientos de filas.
       if (headers.length > 500) return send(res, 413, { error: 'Demasiadas columnas (máx 500).' })
       if (rows.length > 200000) return send(res, 413, { error: 'Demasiadas filas (máx 200000).' })
+      // Set completo de columnas con visibilidad (para la web): no se pierden las
+      // columnas ocultas al recuperar el dataset en otro equipo. `headers` (solo
+      // visibles) se conserva para el plugin de Navisworks.
+      const columns = Array.isArray(b.columns)
+        ? b.columns.filter((c) => c && typeof c.key === 'string').map((c) => ({ key: c.key, visible: c.visible !== false }))
+        : null
       const payload = {
         key,
         name: b.name || key,
         tagField: b.tagField || headers[0] || null,
         headers,
+        ...(columns ? { columns } : {}),
         rows,
         count: rows.length,
         updatedAt: new Date().toISOString(),

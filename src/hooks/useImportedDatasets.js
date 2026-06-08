@@ -52,7 +52,15 @@ function parseCsv(text) {
 }
 
 function aoaToDataset(aoa) {
-  const headers = (aoa[0] || []).map((h) => String(h ?? '').trim()).filter(Boolean)
+  // Headers únicos: si el archivo trae nombres de columna repetidos, se renombra
+  // el duplicado ("ESTADO" → "ESTADO (2)") para no perder su dato (last-wins) ni
+  // chocar las `key` de la grilla. No cambia la cantidad (mantiene la alineación
+  // con las celdas de cada fila).
+  const seen = new Map()
+  const headers = (aoa[0] || []).map((h) => String(h ?? '').trim()).filter(Boolean).map((h) => {
+    const n = (seen.get(h) || 0) + 1; seen.set(h, n)
+    return n === 1 ? h : `${h} (${n})`
+  })
   const ncol = headers.length
   const rows = []
   for (let i = 1; i < aoa.length; i++) {

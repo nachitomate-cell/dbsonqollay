@@ -26,8 +26,17 @@ const upperPatch = (obj) => {
 }
 const upperRows = (rows) => (rows ?? []).map(upperPatch)
 
+// Quita columnas con `key` repetida: el import masivo puede traer headers
+// duplicados, y como las filas solo tienen UNA clave por nombre, la segunda
+// columna mostraría lo mismo y rompería las `key` de React. Conserva la 1ª.
+const dedupeCols = (cols) => {
+  const seen = new Set()
+  return (cols ?? []).filter((c) => c && c.key != null && !seen.has(c.key) && seen.add(c.key))
+}
+const colsFromHeaders = (headers) => dedupeCols((headers ?? []).map((h) => ({ key: h, visible: true })))
+
 function build(dataset) {
-  const columns = (dataset?.headers ?? []).map((h) => ({ key: h, visible: true }))
+  const columns = colsFromHeaders(dataset?.headers)
   // Migra a MAYÚSCULAS lo ya ingresado al construir el estado editable.
   const rows = (dataset?.rows ?? []).map((r) => ({ ...upperPatch(r), _id: genId() }))
   return { columns, rows, dirty: false }
@@ -36,7 +45,7 @@ function build(dataset) {
 function init(dataKey, dataset) {
   const p = loadWorking(dataKey)
   // También normaliza a MAYÚSCULAS el trabajo previo guardado en localStorage.
-  if (p) return { ...p, rows: upperRows(p.rows), dirty: true }
+  if (p) return { ...p, columns: dedupeCols(p.columns), rows: upperRows(p.rows), dirty: true }
   return build(dataset)
 }
 
@@ -85,7 +94,9 @@ export function useEditableDataset(dataKey, dataset) {
     fetchDbDataset(dataKey).then((db) => {
       if (cancelled || !db) return
       const present = {
-        columns: (db.headers ?? []).map((h) => ({ key: h, visible: true })),
+        // Usa el set completo de columnas (con visibilidad) si la DB lo trae; si
+        // no (datasets viejos), reconstruye desde los headers visibles.
+        columns: db.columns?.length ? dedupeCols(db.columns) : colsFromHeaders(db.headers),
         rows: (db.rows ?? []).map((r) => ({ ...upperPatch(r), _id: genId() })),
         dirty: false,
       }

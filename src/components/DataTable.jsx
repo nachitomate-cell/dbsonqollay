@@ -249,6 +249,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
           name: subcategory.name,
           tagField: headers[0],
           headers,
+          columns, // set completo (con visibilidad) para no perder columnas ocultas
           rows: rows.map(({ _id, ...r }) => r),
         }),
       })
@@ -271,9 +272,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
   // aislamiento por usuario aún → S1/B4 pendientes). Datos siempre frescos vía
   // ref para que el guardado diferido no use una copia vieja.
   const saveDataRef = useRef(null)
-  saveDataRef.current = { rows, headers, name: subcategory.name, dataKey: subcategory.dataKey }
+  saveDataRef.current = { rows, headers, columns, name: subcategory.name, dataKey: subcategory.dataKey }
   async function autosaveToDb() {
-    const { rows, headers, name, dataKey } = saveDataRef.current
+    const { rows, headers, columns, name, dataKey } = saveDataRef.current
     const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
     const version = editVersionRef.current // versión que estamos por persistir
     setAutosave({ status: 'saving' })
@@ -281,7 +282,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
       const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, tagField: headers[0], headers, rows: rows.map(({ _id, ...r }) => r) }),
+        body: JSON.stringify({ name, tagField: headers[0], headers, columns, rows: rows.map(({ _id, ...r }) => r) }),
       })
       const ct = res.headers.get('content-type') || ''
       const j = ct.includes('application/json') ? await res.json() : {}
