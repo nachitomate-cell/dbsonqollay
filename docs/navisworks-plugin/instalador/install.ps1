@@ -95,7 +95,17 @@ $btnInstall.Add_Click({
   $bundleSrc = Join-Path $here 'AuraBIM.bundle'
   if (-not (Test-Path $bundleSrc)) {
     $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No encuentro AuraBIM.bundle junto al instalador.'; return
+    $status.Text = 'No encuentro AuraBIM.bundle. Extrae el ZIP y ejecuta Instalar.bat desde la carpeta.'; return
+  }
+
+  # Si Navisworks esta abierto, su DLL queda bloqueado y la copia falla con
+  # "Acceso denegado". Detectamos y avisamos claro ANTES de intentar.
+  $nav = @()
+  try { $nav = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match 'Roamer|Navisworks' }) } catch {}
+  if ($nav.Count -gt 0) {
+    $status.ForeColor = [System.Drawing.Color]::Red
+    $status.Text = 'Navisworks esta abierto y bloquea el plugin. Cierralo (guarda tu trabajo) y pulsa Instalar de nuevo.'
+    return
   }
 
   try {
@@ -158,7 +168,12 @@ $btnInstall.Add_Click({
     $btnInstall.Enabled = $false
   } catch {
     $status.ForeColor = [System.Drawing.Color]::Red
-    $status.Text = 'No se pudo instalar. Cierra Navisworks y reintenta.  ' + $_.Exception.Message
+    $msg = $_.Exception.Message
+    if ($msg -match 'denegado|denied|AuraBIM\.dll|en uso|being used') {
+      $status.Text = 'No se pudo instalar: Navisworks parece estar abierto (bloquea el plugin). Cierralo y reintenta.'
+    } else {
+      $status.Text = 'No se pudo instalar. Cierra Navisworks y reintenta.  ' + $msg
+    }
   }
 })
 
