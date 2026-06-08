@@ -42,7 +42,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.11.0";
+        private const string Version = "1.12.0";
 
         // El ribbon invoca este método con el id del botón.
         public override int ExecuteCommand(string commandId, params string[] parameters)
@@ -144,18 +144,9 @@ namespace AuraBIM
                 errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : "",
                 totalSkipped));
 
-            string msg =
-                "Aura BIM v" + Version + "\n\n" +
-                "Planillas: " + chosen.Count + "\n" +
-                "Filas: " + totalRows + "\n" +
-                "TAGs encontrados: " + totalMatched + "\n" +
-                "Elementos actualizados: " + totalApplied + "\n" +
-                "Sin cambios (omitidos): " + totalSkipped + "\n" +
-                "TAGs sin geometría: " + totalMissing + "\n\n" +
-                "Guarda el archivo (.nwf/.nwd) para conservar las propiedades.";
-            if (errores.Count > 0)
-                msg += "\n\nErrores:\n - " + string.Join("\n - ", errores);
-            MessageBox.Show(msg);
+            using (var rf = new ResultForm(Version, chosen.Count, totalRows, totalMatched,
+                                           totalApplied, totalSkipped, totalMissing, errores, progress.Canceled))
+                rf.ShowDialog();
             return 0;
         }
 
@@ -697,6 +688,114 @@ namespace AuraBIM
                         if (s == null) return null;
                         using (var tmp = Image.FromStream(s))
                             return new Bitmap(tmp); // copia: la imagen sobrevive al stream
+                    }
+                }
+                catch { return null; }
+            }
+        }
+
+        // ---- Ventana de resultado (resumen premium: logo + métricas) ----
+        private sealed class ResultForm : Form
+        {
+            public ResultForm(string version, int planillas, int filas, int matched,
+                              int aplicados, int skipped, int missing, List<string> errores, bool canceled)
+            {
+                bool hayErr = errores != null && errores.Count > 0;
+                var gray = System.Drawing.Color.FromArgb(80, 90, 100);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
+                var orange = System.Drawing.Color.FromArgb(235, 110, 40);
+                var green = System.Drawing.Color.FromArgb(30, 150, 70);
+                var amber = System.Drawing.Color.FromArgb(200, 140, 0);
+                var red = System.Drawing.Color.FromArgb(190, 40, 40);
+
+                Text = "Aura BIM";
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                BackColor = System.Drawing.Color.White;
+                const int W = 430;
+
+                var logo = LoadLogo("aurabim.png");
+                var pb = new PictureBox { Image = logo, SizeMode = PictureBoxSizeMode.AutoSize, Top = 16 };
+                pb.Left = (W - (logo?.Width ?? 86)) / 2;
+                Controls.Add(pb);
+
+                var title = new Label
+                {
+                    Text = canceled ? "Sincronización cancelada"
+                                    : (hayErr ? "Sincronización con avisos" : "Sincronización completada"),
+                    AutoSize = false, TextAlign = ContentAlignment.MiddleCenter,
+                    Left = 20, Top = 128, Width = W - 40, Height = 24,
+                    ForeColor = canceled ? amber : (hayErr ? amber : green),
+                    Font = new System.Drawing.Font(Font.FontFamily, 11, System.Drawing.FontStyle.Bold),
+                };
+                Controls.Add(title);
+
+                int y = 162;
+                Action<string, string, System.Drawing.Color> row = (label, val, col) =>
+                {
+                    Controls.Add(new Label { Text = label, AutoSize = false, Left = 44, Top = y, Width = 250, Height = 22, ForeColor = gray, TextAlign = ContentAlignment.MiddleLeft });
+                    Controls.Add(new Label { Text = val, AutoSize = false, Left = 294, Top = y, Width = W - 294 - 44, Height = 22, ForeColor = col, TextAlign = ContentAlignment.MiddleRight, Font = new System.Drawing.Font(Font.FontFamily, 9.5f, System.Drawing.FontStyle.Bold) });
+                    y += 26;
+                };
+                row("Planillas sincronizadas", planillas.ToString(), gray);
+                row("Filas leídas", filas.ToString("N0"), gray);
+                row("TAGs encontrados", matched.ToString("N0"), gray);
+                row("Elementos actualizados", aplicados.ToString("N0"), orange);
+                row("Sin cambios (omitidos)", skipped.ToString("N0"), soft);
+                row("TAGs sin geometría", missing.ToString("N0"), missing > 0 ? amber : soft);
+
+                y += 6;
+                Controls.Add(new Label
+                {
+                    Text = "Guarda el archivo (.nwf / .nwd) para conservar las propiedades.",
+                    AutoSize = false, Left = 44, Top = y, Width = W - 88, Height = 34, ForeColor = soft,
+                });
+                y += 40;
+
+                if (hayErr)
+                {
+                    Controls.Add(new Label
+                    {
+                        Text = "Avisos:\n - " + string.Join("\n - ", errores),
+                        AutoSize = false, Left = 44, Top = y, Width = W - 88, Height = 56, ForeColor = red,
+                    });
+                    y += 62;
+                }
+
+                var btnLog = new Button { Text = "Ver registro", Width = 110, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, ForeColor = gray };
+                btnLog.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                btnLog.Click += (s, e) =>
+                {
+                    try
+                    {
+                        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AuraBIM");
+                        Directory.CreateDirectory(dir);
+                        System.Diagnostics.Process.Start("explorer.exe", dir);
+                    }
+                    catch { /* no romper por no poder abrir el explorador */ }
+                };
+                Controls.Add(btnLog);
+
+                var btnOk = new Button { Text = "Aceptar", Width = 110, Height = 30, Top = y, Left = W - 110 - 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White, DialogResult = DialogResult.OK };
+                btnOk.FlatAppearance.BorderSize = 0;
+                Controls.Add(btnOk);
+                AcceptButton = btnOk;
+
+                var ver = new Label { Text = "v" + version, AutoSize = true, ForeColor = soft, Top = 6, Left = 8 };
+                Controls.Add(ver);
+
+                ClientSize = new Size(W, y + 46);
+            }
+
+            private static Image LoadLogo(string resourceName)
+            {
+                try
+                {
+                    using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+                    {
+                        if (s == null) return null;
+                        using (var tmp = Image.FromStream(s)) return new Bitmap(tmp);
                     }
                 }
                 catch { return null; }

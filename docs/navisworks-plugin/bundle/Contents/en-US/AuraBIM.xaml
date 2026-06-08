@@ -9,6 +9,8 @@
                            Size="Large"
                            ShowText="True"
                            Text="Asignar&#xD;&#xA;Propiedades"
+                           LargeImage="AuraBIM32.png"
+                           SmallImage="AuraBIM16.png"
                            Orientation="Vertical" />
       </RibbonPanelSource>
     </RibbonPanel>
