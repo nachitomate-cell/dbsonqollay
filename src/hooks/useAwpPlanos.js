@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
  */
 const KEY = (pid) => `sqy-awp-planos-${pid}`
 let _seq = 0
-const uid = (p) => `${p}_${Date.now().toString(36)}_${(_seq++).toString(36)}`
+const uid = (p) => `${p}_${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now().toString(36)}_${(_seq++).toString(36)}`}`
 
 function load(pid) {
   try { const r = localStorage.getItem(KEY(pid)); if (r) return JSON.parse(r) } catch { /* ignore */ }

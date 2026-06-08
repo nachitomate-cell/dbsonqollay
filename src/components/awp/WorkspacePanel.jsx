@@ -60,11 +60,13 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
   function doApertura() {
     const cwp = modal.cwp; const n = Math.max(1, Math.min(500, Number(form.n) || 1))
     const cwa = cwas.find((c) => c.id === cwp.cwaId); const disc = discById(cwp.disciplinaId)
-    const hhEach = Math.round((Number(cwp.hh) || 0) / n)
+    // Reparto exacto: base + 1 a las primeras `rem` (la suma cuadra con el CWP).
+    const totalHh = Number(cwp.hh) || 0
+    const base = Math.floor(totalHh / n), rem = totalHh - base * n
     const out = Array.from({ length: n }, (_, i) => ({
       id: `${cwp.id}-iwp-${i + 1}`, cwpId: cwp.id, num: i + 1,
       codigo: genCode(nom, 'iwp', { cwaNum: cwa?.num, disc: disc?.prefijo, cwpNum: cwp.num, corr: i + 1 }),
-      nombre: `${cwp.nombre} - ${String(i + 1).padStart(3, '0')}`, hh: hhEach, estado: 'Borrador',
+      nombre: `${cwp.nombre} - ${String(i + 1).padStart(3, '0')}`, hh: base + (i < rem ? 1 : 0), estado: 'Borrador',
     }))
     entities.setIwpsForCwp(cwp.id, out)
     setModal(null)
@@ -105,6 +107,9 @@ export default function WorkspacePanel({ project, cfg, entities, onClose }) {
         <span className="text-xs text-slate-400">· Workspace AWP</span>
         <button onClick={onClose} className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:text-slate-900 dark:border-white/10 dark:text-slate-300 dark:hover:text-white"><LogOut className="h-4 w-4" /> Salir</button>
       </div>
+      {entities.saveError && (
+        <div className="flex items-center gap-2 border-b border-amber-300 bg-amber-50 px-5 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"><TriangleAlert className="h-4 w-4 shrink-0" /> {entities.saveError}</div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         {/* Sub-nav */}

@@ -29,7 +29,7 @@ export default function WorkspacePlano({ planosApi, cwas }) {
     catch { /* ignore */ } finally { setBusy(false) }
   }
 
-  const pctXY = (e) => { const r = wrapRef.current.getBoundingClientRect(); return [clamp(((e.clientX - r.left) / r.width) * 100), clamp(((e.clientY - r.top) / r.height) * 100)] }
+  const pctXY = (e) => { const el = wrapRef.current; if (!el) return [0, 0]; const r = el.getBoundingClientRect(); return [clamp(((e.clientX - r.left) / r.width) * 100), clamp(((e.clientY - r.top) / r.height) * 100)] }
   function down(e) { if (!drawCwaId || !plano) return; const [x, y] = pctXY(e); setDraw({ x0: x, y0: y, x1: x, y1: y }) }
   function move(e) { if (!draw) return; const [x, y] = pctXY(e); setDraw((d) => ({ ...d, x1: x, y1: y })) }
   function up() {
@@ -82,7 +82,7 @@ export default function WorkspacePlano({ planosApi, cwas }) {
                 style={{ cursor: drawCwaId ? 'crosshair' : 'default' }}
               >
                 <img src={plano.imagen} alt={plano.nombre} draggable={false} className="block w-full" />
-                {show && plano.shapes.map((s) => (
+                {show && plano.shapes.filter((s) => cwas.some((c) => c.id === s.cwaId)).map((s) => (
                   <div key={s.id} className="group/sh absolute" style={{ left: `${s.x}%`, top: `${s.y}%`, width: `${s.w}%`, height: `${s.h}%`, border: `2px solid ${cwaColor(s.cwaId)}`, background: `${cwaColor(s.cwaId)}33` }}>
                     <span className="absolute left-0 top-0 max-w-full truncate px-1 text-[10px] font-bold leading-tight text-white" style={{ background: cwaColor(s.cwaId) }}>{cwaCode(s.cwaId)}</span>
                     <button onMouseDown={(e) => e.stopPropagation()} onClick={() => removeShape(plano.id, s.id)} className="absolute right-0.5 top-0.5 hidden h-5 w-5 place-items-center rounded bg-white/90 text-rose-500 shadow group-hover/sh:grid dark:bg-ink-900/90"><X className="h-3 w-3" /></button>

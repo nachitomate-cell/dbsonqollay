@@ -71,8 +71,8 @@ export function useProjectConfig(projectId, project) {
     setConfig((c) => {
       if (!path.includes('.')) return { ...c, [path]: value }
       const [a, b, d] = path.split('.')
-      if (d) return { ...c, [a]: { ...c[a], [b]: { ...c[a][b], [d]: value } } }
-      return { ...c, [a]: { ...c[a], [b]: value } }
+      if (d) return { ...c, [a]: { ...c[a], [b]: { ...(c[a]?.[b] || {}), [d]: value } } }
+      return { ...c, [a]: { ...(c[a] || {}), [b]: value } }
     })
   }, [])
 

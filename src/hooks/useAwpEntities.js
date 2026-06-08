@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
  */
 const KEY = (pid) => `sqy-awp-entities-${pid}`
 let _seq = 0
-const uid = (p) => `${p}_${Date.now().toString(36)}_${(_seq++).toString(36)}`
+const uid = (p) => `${p}_${(typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now().toString(36)}_${(_seq++).toString(36)}`}`
 
 const EMPTY = { cwas: [], cwps: [], iwps: [], restricciones: [], revisiones: [], sesiones: [] }
 function load(pid) {
@@ -18,8 +18,12 @@ function load(pid) {
 
 export function useAwpEntities(projectId) {
   const [data, setData] = useState(() => load(projectId))
+  const [saveError, setSaveError] = useState('')
 
-  useEffect(() => { try { localStorage.setItem(KEY(projectId), JSON.stringify(data)) } catch { /* cuota */ } }, [projectId, data])
+  useEffect(() => {
+    try { localStorage.setItem(KEY(projectId), JSON.stringify(data)); setSaveError('') }
+    catch { setSaveError('No se pudo guardar el Workspace (almacenamiento local lleno).') }
+  }, [projectId, data])
 
   const addCwa = useCallback((cwa) => {
     const id = uid('cwa')
@@ -29,7 +33,14 @@ export function useAwpEntities(projectId) {
   const updateCwa = useCallback((id, patch) => setData((d) => ({ ...d, cwas: d.cwas.map((c) => (c.id === id ? { ...c, ...patch } : c)) })), [])
   const removeCwa = useCallback((id) => setData((d) => {
     const cwpIds = new Set(d.cwps.filter((c) => c.cwaId === id).map((c) => c.id))
-    return { cwas: d.cwas.filter((c) => c.id !== id), cwps: d.cwps.filter((c) => c.cwaId !== id), iwps: d.iwps.filter((i) => !cwpIds.has(i.cwpId)) }
+    return {
+      ...d, // conserva restricciones/revisiones/sesiones
+      cwas: d.cwas.filter((c) => c.id !== id),
+      cwps: d.cwps.filter((c) => c.cwaId !== id),
+      iwps: d.iwps.filter((i) => !cwpIds.has(i.cwpId)),
+      // desvincula (no borra) las restricciones que apuntaban a lo eliminado
+      restricciones: d.restricciones.map((r) => ((r.cwaId === id || cwpIds.has(r.cwpId)) ? { ...r, cwaId: r.cwaId === id ? '' : r.cwaId, cwpId: cwpIds.has(r.cwpId) ? '' : r.cwpId } : r)),
+    }
   }), [])
 
   const addCwp = useCallback((cwp) => {
@@ -38,7 +49,7 @@ export function useAwpEntities(projectId) {
     return id
   }, [])
   const updateCwp = useCallback((id, patch) => setData((d) => ({ ...d, cwps: d.cwps.map((c) => (c.id === id ? { ...c, ...patch } : c)) })), [])
-  const removeCwp = useCallback((id) => setData((d) => ({ ...d, cwps: d.cwps.filter((c) => c.id !== id), iwps: d.iwps.filter((i) => i.cwpId !== id) })), [])
+  const removeCwp = useCallback((id) => setData((d) => ({ ...d, cwps: d.cwps.filter((c) => c.id !== id), iwps: d.iwps.filter((i) => i.cwpId !== id), restricciones: d.restricciones.map((r) => (r.cwpId === id ? { ...r, cwpId: '' } : r)) })), [])
 
   // Apertura: reemplaza los IWPs de un CWP por los generados.
   const setIwpsForCwp = useCallback((cwpId, iwps) => setData((d) => ({ ...d, iwps: [...d.iwps.filter((i) => i.cwpId !== cwpId), ...iwps] })), [])
@@ -70,5 +81,5 @@ export function useAwpEntities(projectId) {
   const updateSesion = useCallback((id, patch) => setData((d) => ({ ...d, sesiones: d.sesiones.map((s) => (s.id === id ? { ...s, ...patch } : s)) })), [])
   const removeSesion = useCallback((id) => setData((d) => ({ ...d, sesiones: d.sesiones.filter((s) => s.id !== id) })), [])
 
-  return { ...data, addCwa, updateCwa, removeCwa, addCwp, updateCwp, removeCwp, setIwpsForCwp, clearIwpsForCwp, addRestriccion, updateRestriccion, removeRestriccion, addRevision, updateRevision, removeRevision, addSesion, updateSesion, removeSesion }
+  return { ...data, saveError, addCwa, updateCwa, removeCwa, addCwp, updateCwp, removeCwp, setIwpsForCwp, clearIwpsForCwp, addRestriccion, updateRestriccion, removeRestriccion, addRevision, updateRevision, removeRevision, addSesion, updateSesion, removeSesion }
 }
