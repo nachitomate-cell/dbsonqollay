@@ -92,6 +92,10 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   // Configuración AWP del proyecto (modelo de Aura AWP) + overlays.
   const projectCfg = useProjectConfig(project.id, project)
   const awpEntities = useAwpEntities(project.id)
+  // OCULTOS por indicación del cliente: solo se quería el acceso inicial
+  // org→proyecto, no el clon de Aura AWP (Workspace + Configuración). El código y
+  // estos estados se conservan; para reactivar, volver a pasar onOpenWorkspace /
+  // onOpenProjectConfig al <Header> (ver más abajo).
   const [showProjectConfig, setShowProjectConfig] = useState(false)
   const [showWorkspace, setShowWorkspace] = useState(false)
 
@@ -282,8 +286,6 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
           onOpenSettings={() => setSettingsOpen(true)}
-          onOpenProjectConfig={() => setShowProjectConfig(true)}
-          onOpenWorkspace={() => setShowWorkspace(true)}
           user={user}
           isDemo={isDemo}
           onSignOut={signOut}
