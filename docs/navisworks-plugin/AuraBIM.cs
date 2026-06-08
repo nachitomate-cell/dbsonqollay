@@ -316,7 +316,7 @@ namespace AuraBIM
             var progress = new ProgressForm();
             progress.Scope = "Conjuntos de selección";
             progress.Show(); progress.Refresh();
-            int creados = 0;
+            int creados = 0, yaExistian = 0, candidatos = 0;
             try
             {
                 int n = 0;
@@ -351,8 +351,9 @@ namespace AuraBIM
                     foreach (var kv in groups[f[0]].OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
                     {
                         if (kv.Value.Count == 0) continue;
+                        candidatos++;
                         string name = SetPrefix + f[0] + " — " + kv.Key;
-                        if (existentes.Contains(name)) continue;
+                        if (existentes.Contains(name)) { yaExistian++; continue; }
                         ss.AddCopy(new SelectionSet(kv.Value) { DisplayName = name });
                         existentes.Add(name);
                         creados++;
@@ -361,12 +362,33 @@ namespace AuraBIM
             catch (Exception ex) { MessageBox.Show("No se pudieron crear los conjuntos: " + ex.Message); return; }
             finally { progress.Close(); progress.Dispose(); }
 
-            WriteLog("sets v" + Version + " | creados=" + creados);
-            MessageBox.Show("Conjuntos de selección creados: " + creados + "\n\n" +
-                            "Agrupados por CWA, CWP y Disciplina (prefijo \"AWP —\"). Mira la ventana " +
-                            "\"Conjuntos\" del panel de selección: haz clic en uno para seleccionar ese " +
-                            "paquete de trabajo y aislarlo/ocultarlo.\n\n" +
-                            "Para regenerarlos tras cargar más datos, borra los conjuntos \"AWP —\" y vuelve a crearlos.");
+            WriteLog("sets v" + Version + " | creados=" + creados + " yaExistian=" + yaExistian + " candidatos=" + candidatos);
+
+            // Mensaje segun el caso, para no confundir "0 nuevos" (normal: ya estaban)
+            // con "0 datos" (problema real: faltan las propiedades en el modelo).
+            string msg;
+            if (creados > 0)
+            {
+                msg = "Conjuntos de selección creados: " + creados +
+                      (yaExistian > 0 ? "  (otros " + yaExistian + " ya existían)" : "") + "\n\n" +
+                      "Agrupados por CWA, CWP y Disciplina (prefijo \"AWP —\"). Mira la ventana " +
+                      "\"Conjuntos\" del panel de selección: haz clic en uno para seleccionar ese " +
+                      "paquete de trabajo y aislarlo/ocultarlo.\n\n" +
+                      "Para regenerarlos tras cargar más datos, borra los conjuntos \"AWP —\" y vuelve a crearlos.";
+            }
+            else if (yaExistian > 0)
+            {
+                msg = "Los conjuntos ya estaban creados (" + yaExistian + " existentes). No se creó ninguno nuevo.\n\n" +
+                      "Búscalos en la ventana \"Conjuntos\" del panel de selección, con el prefijo \"AWP —\".\n\n" +
+                      "Para regenerarlos tras cargar más datos, borra los conjuntos \"AWP —\" y vuelve a crearlos.";
+            }
+            else
+            {
+                msg = "No se creó ningún conjunto: el modelo no tiene elementos con CWA, CWP ni Disciplina " +
+                      "en la pestaña \"" + Cfg.TabName + "\".\n\n" +
+                      "Primero usa \"Asignar Propiedades\" para escribir esos datos en el modelo, y vuelve a intentarlo.";
+            }
+            MessageBox.Show(msg);
         }
 
         // Lee una propiedad de la pestaña indicada (sin distinguir mayúsculas).
