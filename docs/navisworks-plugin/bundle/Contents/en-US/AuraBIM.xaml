@@ -5,51 +5,22 @@
   <RibbonTab x:Uid="ID_TabAuraBIM" Id="ID_TabAuraBIM" Title="Aura BIM">
     <RibbonPanel x:Uid="ID_PanelMain">
       <RibbonPanelSource x:Uid="ID_PanelMain_Src" Title="Herramientas">
-
         <nw:NWRibbonButton x:Uid="ID_AsignarProps" Id="ID_AsignarProps"
                            Size="Large" ShowText="True"
                            Text="Asignar&#xD;&#xA;Propiedades"
-                           LargeImage="AuraBIM32.png" SmallImage="AuraBIM16.png"
-                           Orientation="Vertical">
-          <nw:NWRibbonButton.ToolTip>
-            <RibbonToolTip Title="Asignar Propiedades"
-                           Content="Trae los datos editados en la web y los escribe en el modelo. Solo reescribe lo que cambió."
-                           ExpandedContent="Sincroniza por TAG/Commodity. Guarda el archivo (.nwf / .nwd) para conservar las propiedades." />
-          </nw:NWRibbonButton.ToolTip>
-        </nw:NWRibbonButton>
-
+                           Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_AsignarSeleccion" Id="ID_AsignarSeleccion"
                            Size="Large" ShowText="True"
-                           Text="Solo&#xD;&#xA;selección"
-                           LargeImage="AuraBIM32.png" SmallImage="AuraBIM16.png"
-                           Orientation="Vertical">
-          <nw:NWRibbonButton.ToolTip>
-            <RibbonToolTip Title="Sincronizar solo la selección"
-                           Content="Escribe las propiedades únicamente en los elementos seleccionados en el 3D."
-                           ExpandedContent="Útil para actualizar un equipo o área puntual sin recorrer todo el modelo." />
-          </nw:NWRibbonButton.ToolTip>
-        </nw:NWRibbonButton>
-
+                           Text="Solo&#xD;&#xA;seleccion"
+                           Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_Config" Id="ID_Config"
-                           Size="Standard" ShowText="True"
-                           Text="Configuración"
-                           SmallImage="AuraBIM16.png">
-          <nw:NWRibbonButton.ToolTip>
-            <RibbonToolTip Title="Configuración"
-                           Content="Servidor, token y propiedades de vínculo (se guarda en tu equipo)." />
-          </nw:NWRibbonButton.ToolTip>
-        </nw:NWRibbonButton>
-
+                           Size="Large" ShowText="True"
+                           Text="Configu-&#xD;&#xA;racion"
+                           Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_AcercaDe" Id="ID_AcercaDe"
-                           Size="Standard" ShowText="True"
-                           Text="Acerca de"
-                           SmallImage="AuraBIM16.png">
-          <nw:NWRibbonButton.ToolTip>
-            <RibbonToolTip Title="Acerca de Aura BIM"
-                           Content="Versión, servidor y estado del token. Acceso a la web." />
-          </nw:NWRibbonButton.ToolTip>
-        </nw:NWRibbonButton>
-
+                           Size="Large" ShowText="True"
+                           Text="Acerca&#xD;&#xA;de"
+                           Orientation="Vertical" />
       </RibbonPanelSource>
     </RibbonPanel>
   </RibbonTab>
