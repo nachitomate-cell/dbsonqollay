@@ -12,7 +12,7 @@ import DataTable from './DataTable.jsx'
  *  - activeSub: id de la subcategoría activa
  *  - onSwitch(subId), onClose(subId), onReturn()
  */
-export default function GridWorkspace({ tabs, activeSub, onSwitch, onClose, onReturn, awp }) {
+export default function GridWorkspace({ tabs, activeSub, onSwitch, onClose, onReturn, awp, focus }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-6 pt-4">
@@ -63,7 +63,9 @@ export default function GridWorkspace({ tabs, activeSub, onSwitch, onClose, onRe
       {(() => {
         const active = tabs.find((t) => t.subcategory.id === activeSub)
         if (!active) return null
-        return <DataTable key={active.subcategory.id} dataset={active.dataset} subcategory={active.subcategory} onBack={onReturn} awp={awp} />
+        // Foco del buscador global: solo se aplica a la planilla apuntada.
+        const f = focus && focus.sub === active.subcategory.id ? focus : null
+        return <DataTable key={active.subcategory.id} dataset={active.dataset} subcategory={active.subcategory} onBack={onReturn} awp={awp} focusQuery={f?.query} focusNonce={f?.nonce} />
       })()}
     </div>
   )

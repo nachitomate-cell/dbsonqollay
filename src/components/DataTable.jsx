@@ -86,7 +86,7 @@ const defaultWidth = (h) => {
 
 /* --------------------------- component ----------------------------- */
 
-export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
+export default function DataTable({ dataset, subcategory, onBack, awp = {}, focusQuery, focusNonce }) {
   const { cwps: awpCwps = [], importCwps, clearCwps } = awp
   const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo, loading } =
     useEditableDataset(subcategory.dataKey, dataset)
@@ -126,6 +126,12 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [fullscreen])
   const [query, setQuery] = useState('')
+  // "Saltar al elemento" desde el buscador global: siembra el filtro con el TAG.
+  // El nonce re-dispara aunque el texto sea el mismo (p. ej. dos saltos seguidos).
+  useEffect(() => {
+    if (focusNonce && focusQuery != null) setQuery(focusQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce])
   const [selected, setSelected] = useState(() => new Set())
   const [sort, setSort] = useState(persistedView.sort || { key: null, dir: 'asc' })
   const [colFilters, setColFilters] = useState(persistedView.colFilters || {})

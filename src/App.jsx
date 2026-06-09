@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Sprout } from 'lucide-react'
 import PwaPrompt from './components/PwaPrompt.jsx'
 import Sidebar from './components/Sidebar.jsx'
@@ -20,6 +20,7 @@ import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { useCustomDisciplines } from './hooks/useCustomDisciplines.js'
 import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
+import { globalSearch } from './utils/globalSearch.js'
 
 /**
  * Navegación simulada (sin router). El estado vive en App:
@@ -234,6 +235,23 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     })
   }
 
+  // --- Buscador global (header) -------------------------------------------------
+  // Foco para "saltar al elemento": al abrir una planilla desde un resultado, se
+  // siembra el buscador interno de la grilla con el TAG (nonce re-dispara aunque
+  // sea el mismo texto). El visor/grid lo lee por props.
+  const [gridFocus, setGridFocus] = useState(null) // { sub, query, nonce }
+  const runGlobalSearch = useCallback(
+    (q) => globalSearch(q, { disciplines, datasets: allDatasets, cwps: awpCwps }),
+    [disciplines, allDatasets, awpCwps],
+  )
+  function handleSearchResult(item) {
+    if (!item) return
+    if (item.type === 'cwp') { selectAllDisciplines(); return } // los CWP viven en "Todas las disciplinas"
+    if (!item.subId) return
+    openSubcategory(item.subId)
+    if (item.type === 'elemento') setGridFocus({ sub: item.subId, query: item.tag, nonce: Date.now() })
+  }
+
   function clearCreatedSheets() {
     setOpenSubs((prev) => prev.filter((id) => !createdSheets[id]))
     setActiveSub((cur) => (createdSheets[cur] ? null : cur))
@@ -292,6 +310,8 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           onChangeProject={onChangeProject}
           onChangeOrg={onChangeOrg}
           orgName={org?.name}
+          search={runGlobalSearch}
+          onSearchResult={handleSearchResult}
         />
 
         <main className="min-h-0 flex-1 overflow-hidden">
@@ -303,6 +323,7 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
               onClose={closeTab}
               onReturn={() => setActiveSub(null)}
               awp={{ cwps: awpCwps, importCwps, clearCwps }}
+              focus={gridFocus}
             />
           ) : showAll ? (
             <div className="h-full overflow-y-auto">
