@@ -29,8 +29,8 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
             <p className="text-lg font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white">
               Aura <span className="text-brand-600 dark:text-accent">GIP</span>
             </p>
-            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Gestor de Información de Proyectos
+            <p className="text-[10px] font-semibold uppercase leading-tight tracking-wide text-slate-400 dark:text-slate-500">
+              Gestor de Información<br />de Proyectos
             </p>
           </div>
         )}
