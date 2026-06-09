@@ -13,7 +13,7 @@
 import pg from 'pg'
 
 let pool = null
-function getPool() {
+export function getPool() {
   const url = process.env.SQY_DATABASE_URL
   if (!url) return null
   if (!pool) {

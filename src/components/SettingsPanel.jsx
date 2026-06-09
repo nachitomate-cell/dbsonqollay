@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Check, Download, History, Info, Loader2, Moon, Server, Sun, Trash2, X } from 'lucide-react'
+import { Check, Download, History, Info, Loader2, Moon, Server, ShieldCheck, Sun, Trash2, X } from 'lucide-react'
 import { fetchAllProjects } from '../utils/apsProjects.js'
+import AdminPanel from './AdminPanel.jsx'
 
 const DEFAULT_API = import.meta.env.VITE_APS_API || (import.meta.env.DEV ? 'http://localhost:3000' : '')
 
@@ -21,6 +22,7 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('sqy-api-url') || '')
   const [apiSaved, setApiSaved] = useState(false)
   const [clearing, setClearing] = useState(null)
+  const [showAdmin, setShowAdmin] = useState(false)
   // Historial de modificaciones: versiones publicadas de cada modelo + cambios
   // en los datos de las planillas (quién editó qué).
   const [showHistory, setShowHistory] = useState(false)
@@ -151,6 +153,21 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
             </a>
           </div>
 
+          {/* Administración (multi-empresa) */}
+          <div className={divider}>
+            <p className={label}><ShieldCheck className="h-3.5 w-3.5" /> Administración</p>
+            <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
+              Crea empresas, proyectos e invita usuarios con su rol. Requiere iniciar
+              sesión con tu cuenta.
+            </p>
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
+            >
+              <ShieldCheck className="h-4 w-4" /> Empresas, proyectos y usuarios
+            </button>
+          </div>
+
           {/* Historial de modelos */}
           <div className={divider}>
             <p className={label}><History className="h-3.5 w-3.5" /> Historial de modelos</p>
@@ -207,6 +224,9 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
           </div>
         </div>
       </aside>
+
+      {/* Modal: administración multi-empresa (empresas / proyectos / usuarios) */}
+      <AdminPanel open={showAdmin} onClose={() => setShowAdmin(false)} />
 
       {/* Modal: historial de modificaciones (versiones) de cada modelo */}
       {showHistory && (
