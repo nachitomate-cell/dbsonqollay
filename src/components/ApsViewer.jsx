@@ -558,6 +558,27 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     // Descarga modelos previos antes de cargar el nuevo (evita superposición).
     try { (viewer.getVisibleModels?.() || []).forEach((m) => viewer.unloadModel?.(m)) } catch { /* noop */ }
 
+    // Si la traducción aún no terminó, los derivados (SVF) todavía no existen y la
+    // carga falla con 403 / "sin acceso". En vez de mostrar un error que asusta,
+    // consultamos el progreso real y reintentamos solo, abriéndolo al terminar.
+    const waitAndRetry = async () => {
+      ctxRef.current.loadingUrn = null
+      const n = (ctxRef.current.retry?.urn === theUrn ? ctxRef.current.retry.n : 0) + 1
+      ctxRef.current.retry = { urn: theUrn, n }
+      if (n > 40) { setStatus('error'); setMessage('El modelo tardó demasiado en procesarse. Reintenta más tarde.'); return }
+      let st = '', progress = ''
+      try {
+        const s = await fetch(`${getAPI()}/api/aps/status/${theUrn}`, { cache: 'no-store' }).then((r) => r.json())
+        st = s.status; progress = s.progress
+      } catch { /* sin estado: igual reintentamos */ }
+      if (st === 'failed' || st === 'timeout') {
+        setStatus('error'); setMessage('La traducción del modelo falló en la nube. Vuelve a publicarlo.'); return
+      }
+      setStatus('translating')
+      setMessage(`Procesando el modelo en la nube${progress && progress !== 'complete' ? ` (${progress})` : ''}… se abrirá solo al terminar.`)
+      setTimeout(() => loadDocument(theUrn, { force: true }), 8000)
+    }
+
     setStatus('translating'); setMessage('Abriendo modelo…')
     window.Autodesk.Viewing.Document.load(
       `urn:${theUrn}`,
@@ -571,15 +592,13 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           const geoms = root.search({ type: 'geometry', role: '3d' })
           node = geoms?.[0] || root.search({ type: 'geometry' })?.[0]
         }
-        if (!node) {
-          ctxRef.current.loadingUrn = null
-          setStatus('error'); setMessage('El modelo no tiene una vista 3D para mostrar.')
-          return
-        }
+        // Sin vista 3D todavía: el derivado probablemente aún se está generando.
+        if (!node) { waitAndRetry(); return }
         const onGeom = () => {
           viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
           ctxRef.current.loadingUrn = null
           ctxRef.current.loadedUrn = theUrn
+          ctxRef.current.retry = null // cargó OK: resetea el contador de reintentos
           applyViewerStyle(viewer, hq)
           frameModel(viewer)
           setStatus('ready'); setMessage('')
@@ -589,17 +608,15 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           else ctxRef.current.pendingUrn = null
         }
         viewer.addEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
+        // Falla típica cuando el SVF aún no está disponible (403): reintentar.
         viewer.loadDocumentNode(doc, node).catch(() => {
-          ctxRef.current.loadingUrn = null
-          setStatus('error'); setMessage('No se pudo cargar la vista del modelo.')
+          viewer.removeEventListener(window.Autodesk.Viewing.GEOMETRY_LOADED_EVENT, onGeom)
+          waitAndRetry()
         })
       },
       (code) => {
-        ctxRef.current.loadingUrn = null
-        if (code === 9 || code === window.Autodesk.Viewing.ErrorCodes?.NETWORK_FAILED) {
-          setMessage('El modelo aún se está traduciendo… reintentando en 8 s.')
-          setTimeout(() => loadDocument(theUrn), 8000)
-        } else { setStatus('error'); setMessage(`No se pudo abrir el modelo (código ${code}).`) }
+        if (code === 9 || code === window.Autodesk.Viewing.ErrorCodes?.NETWORK_FAILED) waitAndRetry()
+        else { ctxRef.current.loadingUrn = null; setStatus('error'); setMessage(`No se pudo abrir el modelo (código ${code}).`) }
       },
     )
   }
