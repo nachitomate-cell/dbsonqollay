@@ -97,8 +97,8 @@ function LoginScreen({ onSuccess }) {
         <div className="relative z-10 flex items-center gap-3.5">
           <img src="/aura1.png" alt="Aura" className="h-14 w-14 object-contain" />
           <div className="leading-tight">
-            <p className="text-base font-extrabold tracking-tight text-slate-800 dark:text-white">GESTOR DE INFORMACIÓN</p>
-            <p className="text-base font-extrabold tracking-tight text-slate-800 dark:text-white">DE PROYECTOS</p>
+            <p className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Aura <span className="text-brand-600 dark:text-accent">GIP</span></p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-white/60">Gestor de Información de Proyectos</p>
           </div>
         </div>
 

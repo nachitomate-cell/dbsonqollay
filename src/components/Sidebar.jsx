@@ -26,11 +26,11 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
         <img src="/aura1.png" alt="Aura" className="h-10 w-10 shrink-0 object-contain" />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-sm font-extrabold leading-tight tracking-tight text-steel-700 dark:text-white">
-              GESTOR DE INFORMACIÓN DE PROYECTOS
+            <p className="text-lg font-extrabold leading-tight tracking-tight text-slate-900 dark:text-white">
+              Aura <span className="text-brand-600 dark:text-accent">GIP</span>
             </p>
-            <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
-              Todas las disciplinas
+            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Gestor de Información de Proyectos
             </p>
           </div>
         )}
