@@ -23,7 +23,7 @@ export default function OrgGate() {
 
   function select(o) { try { sessionStorage.setItem(OKEY, o.id) } catch { /* ignore */ }; setActive(o) }
   function change() { try { sessionStorage.removeItem(OKEY) } catch { /* ignore */ }; setActive(null) }
-  function createAndOpen(data) { const o = addOrg(data); if (o) select(o) }
+  async function createAndOpen(data) { const o = await addOrg(data); if (o) select(o) }
 
   if (active) return <ProjectGate key={active.id} org={active} onChangeOrg={change} />
   return <OrgSelector orgs={orgs} onSelect={select} onCreate={createAndOpen} onRemove={removeOrg} />

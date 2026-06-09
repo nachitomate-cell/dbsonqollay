@@ -45,8 +45,8 @@ export default function ProjectGate({ org, onChangeOrg }) {
     try { sessionStorage.removeItem(SKEY) } catch { /* ignore */ }
     setActive(null)
   }
-  function createAndOpen(data) {
-    const p = addProject(data)
+  async function createAndOpen(data) {
+    const p = await addProject(data)
     setShowNew(false)
     if (p) open(p)
   }
