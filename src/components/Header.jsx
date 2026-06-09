@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Moon, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
@@ -21,7 +21,7 @@ function initials(user) {
  *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
  *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, onOpenMobileNav, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
@@ -53,7 +53,14 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
   const panel = 'absolute right-0 top-11 z-40 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-ink-800'
 
   return (
-    <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-slate-200 bg-white/80 px-6 py-3.5 backdrop-blur-xl dark:border-white/5 dark:bg-ink-900/70">
+    <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/80 px-4 py-3.5 backdrop-blur-xl sm:gap-4 sm:px-6 dark:border-white/5 dark:bg-ink-900/70">
+      {/* Hamburguesa (cajón lateral) — solo en pantallas chicas */}
+      {onOpenMobileNav && (
+        <button onClick={onOpenMobileNav} className={`${iconBtn} shrink-0 lg:hidden`} aria-label="Menú" title="Menú">
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Breadcrumbs */}
       <nav className="flex min-w-0 items-center gap-1.5 text-sm">
         {crumbs.map((c, i) => {

@@ -12,15 +12,20 @@ import { disciplines as staticDisciplines } from '../data/disciplines.js'
  *  - disciplines: lista de disciplinas a mostrar. La provee App (viene de la base
  *    de datos vía useDisciplines). Si no se pasa, usa el menú estático de respaldo.
  */
-export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActive, homeActive, onSelectHome, onSelect, onSelectAll, onAddDiscipline, onRemoveDiscipline, projectName, onChangeProject, disciplines = staticDisciplines }) {
+export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActive, homeActive, onSelectHome, onSelect, onSelectAll, onAddDiscipline, onRemoveDiscipline, projectName, onChangeProject, disciplines = staticDisciplines, mobileOpen, onCloseMobile }) {
   return (
-    <aside
-      className={[
-        'relative flex h-full flex-col border-r border-slate-200 bg-white transition-[width] duration-300 ease-in-out',
-        'dark:border-white/5 dark:bg-ink-800/80 dark:backdrop-blur',
-        collapsed ? 'w-[76px]' : 'w-72',
-      ].join(' ')}
-    >
+    <>
+      {/* Backdrop del cajón en pantallas chicas */}
+      {mobileOpen && <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden" onClick={onCloseMobile} />}
+      <aside
+        className={[
+          'fixed inset-y-0 left-0 z-50 flex h-full w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-in-out',
+          'lg:relative lg:z-auto lg:translate-x-0 lg:transition-[width]',
+          'dark:border-white/5 dark:bg-ink-800/80 dark:backdrop-blur',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          collapsed ? 'lg:w-[76px]' : 'lg:w-72',
+        ].join(' ')}
+      >
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5">
         <img src="/aura1.png" alt="Aura" className="h-10 w-10 shrink-0 object-contain" />
@@ -154,7 +159,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-7 grid h-6 w-6 place-items-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-md transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-700 dark:text-slate-300 dark:hover:text-accent"
+        className="absolute -right-3 top-7 hidden h-6 w-6 place-items-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-md transition hover:text-brand-600 lg:grid dark:border-white/10 dark:bg-ink-700 dark:text-slate-300 dark:hover:text-accent"
         aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
       >
         {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -194,6 +199,7 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
           </p>
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

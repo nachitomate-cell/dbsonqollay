@@ -36,6 +36,7 @@ import { globalSearch } from './utils/globalSearch.js'
 export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const { user, isDemo, signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileNav, setMobileNav] = useState(false) // cajón lateral en pantallas chicas
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Navegación interna persistida por proyecto (sessionStorage): si el service
   // worker se actualiza y recarga la página, el usuario vuelve a la misma
@@ -200,12 +201,13 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discipline, activeSub, disciplines, showAll, showHome])
 
-  function selectHome() { setShowHome(true); setActiveSub(null); setShowAll(false) }
+  function selectHome() { setShowHome(true); setActiveSub(null); setShowAll(false); setMobileNav(false) }
   function selectDiscipline(id) {
     setActiveDiscipline(id)
     setActiveSub(null)
     setShowAll(false)
     setShowHome(false)
+    setMobileNav(false)
   }
   // Crea una disciplina nueva y la deja seleccionada.
   function createDiscipline({ name, icon }) {
@@ -224,6 +226,7 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     setShowAll(true)
     setActiveSub(null)
     setShowHome(false)
+    setMobileNav(false)
   }
   function openSubcategory(subId) {
     setOpenSubs((prev) => (prev.includes(subId) ? prev : [...prev, subId]))
@@ -329,11 +332,14 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
         onRemoveDiscipline={deleteDiscipline}
         projectName={project.name}
         onChangeProject={onChangeProject}
+        mobileOpen={mobileNav}
+        onCloseMobile={() => setMobileNav(false)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
           crumbs={crumbs}
+          onOpenMobileNav={() => setMobileNav(true)}
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
