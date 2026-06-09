@@ -1,11 +1,17 @@
 import { useState } from 'react'
 import { Check, Download, Info, Moon, Server, Sun, Trash2, X } from 'lucide-react'
 
-// Link estable al último instalador publicado en GitHub Releases.
-const PLUGIN_URL =
-  'https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip'
-
 const DEFAULT_API = import.meta.env.VITE_APS_API || (import.meta.env.DEV ? 'http://localhost:3000' : '')
+
+// El instalador se descarga DESDE el backend (no de un link público de GitHub),
+// así el repo puede ser privado y cada empresa baja su instalador con su token.
+// `key` (opcional) identifica a la empresa; cuando haya login se completará con
+// la llave del cliente logueado.
+function pluginDownloadUrl() {
+  const api = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+  const key = localStorage.getItem('sqy-plugin-key') || ''
+  return `${api}/api/plugin/download${key ? `?key=${encodeURIComponent(key)}` : ''}`
+}
 
 export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onClearSheets, onClearImports }) {
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('sqy-api-url') || '')
@@ -112,7 +118,8 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
               2024-2026). Descarga el .zip y doble clic en <span className="font-mono">Instalar.bat</span>.
             </p>
             <a
-              href={PLUGIN_URL}
+              href={pluginDownloadUrl()}
+              download
               className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-500 py-2 text-sm font-medium text-white transition hover:bg-brand-600 dark:bg-accent dark:hover:bg-accent-600"
             >
               <Download className="h-4 w-4" /> Descargar plugin Navisworks

@@ -4,6 +4,8 @@
  * entorno del proyecto Vercel (APS_CLIENT_ID / APS_CLIENT_SECRET), nunca en el
  * frontend. Carpeta `_lib` → Vercel no la expone como ruta.
  */
+import { activeClientTokens } from './clients.js'
+
 const BASE = 'https://developer.api.autodesk.com'
 export const BUCKET = (process.env.APS_BUCKET || 'sonqollay-models-2026').toLowerCase()
 
@@ -169,15 +171,22 @@ export async function removeFromDatasetIndex(key) {
   return list.length - next.length
 }
 
-/** Token compartido del plugin (Authorization: Bearer o ?token=). Solo lectura.
- *  Si SQY_API_TOKEN no está definido, la lectura queda abierta (modo dev). */
+/** Autoriza al plugin (Authorization: Bearer o ?token=). Solo lectura.
+ *  Acepta el token COMPARTIDO (SQY_API_TOKEN) o el token de cualquier EMPRESA
+ *  activa del registro (PLUGIN_CLIENTS) — así cada cliente tiene su propio token,
+ *  revocable, sin romper el compartido. Si no hay ninguno configurado, la lectura
+ *  queda abierta (modo dev). */
 export function pluginAuthorized(req) {
-  const expected = process.env.SQY_API_TOKEN
-  if (!expected) return true
+  const shared = process.env.SQY_API_TOKEN
+  const clientTokens = activeClientTokens()
+  if (!shared && clientTokens.length === 0) return true // nada configurado → dev abierto
+
   const auth = req.headers.authorization || ''
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
-  const qtok = req.query?.token
-  return bearer === expected || qtok === expected
+  const provided = bearer || req.query?.token || ''
+  if (!provided) return false
+  if (shared && provided === shared) return true
+  return clientTokens.includes(provided)
 }
 
 /** Respuesta de error que NO filtra internals: loguea el detalle en el server
