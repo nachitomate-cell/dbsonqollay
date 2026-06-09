@@ -72,6 +72,13 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
           </div>
         ) : (
           <>
+            {count === 0 && (
+              <div className="border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                <b>Primero seleccioná los componentes.</b> Marcá en la planilla las filas
+                que querés asignar (con los casilleros de la izquierda) y volvé a abrir
+                “Conectar a AWP”. Sin selección, los paquetes quedan deshabilitados.
+              </div>
+            )}
             <div className="border-b border-slate-200 px-4 py-3 dark:border-white/10">
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-900">
                 <Search className="h-4 w-4 text-slate-400" />
