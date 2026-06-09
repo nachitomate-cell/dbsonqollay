@@ -54,6 +54,14 @@ export default function AdminPanel({ open, onClose }) {
     try { const p = await call('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId: sel.id, name }) }); setProjects((x) => [...x, p]); setNewProj('') }
     catch (e) { setErr(e.message) }
   }
+  async function doBackfill(p) {
+    if (!window.confirm(`¿Copiar tus planillas globales actuales al proyecto “${p.name}”?\n(No pisa las que el proyecto ya tenga.)`)) return
+    try {
+      const r = await call('/api/datasets/backfill', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: p.id }) })
+      setErr('')
+      window.alert(`Listo: ${r.copied} planilla(s) copiadas al proyecto, ${r.skipped} omitidas.`)
+    } catch (e) { setErr(e.message) }
+  }
   async function doInvite() {
     const email = invite.email.trim(); if (!email || !sel) return
     try { await call('/api/members', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orgId: sel.id, email, role: invite.role }) }); setInvite({ email: '', role: 'editor' }); const m = await call(`/api/members?org=${sel.id}`); setMembers(m) }
@@ -115,7 +123,10 @@ export default function AdminPanel({ open, onClose }) {
                       <p className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400"><FolderPlus className="h-3.5 w-3.5" /> Proyectos de {sel.name}</p>
                       <div className="space-y-1">
                         {projects.map((p) => (
-                          <div key={p.id} className="rounded-lg border border-slate-100 px-3 py-1.5 text-sm text-slate-700 dark:border-white/5 dark:text-slate-200">{p.name}</div>
+                          <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-1.5 text-sm dark:border-white/5">
+                            <span className="truncate text-slate-700 dark:text-slate-200">{p.name}</span>
+                            <button onClick={() => doBackfill(p)} title="Copiar tus planillas globales actuales a este proyecto" className="shrink-0 text-[10px] font-medium text-brand-600 hover:underline dark:text-accent">Migrar planillas</button>
+                          </div>
                         ))}
                         {projects.length === 0 && <p className="text-xs text-slate-400">Sin proyectos.</p>}
                       </div>

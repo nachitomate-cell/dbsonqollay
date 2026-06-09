@@ -148,9 +148,12 @@ export async function deleteObject(objectKey) {
   return { ok: true }
 }
 
-/** Clave de objeto en el bucket para un dataset publicado (planilla editada). */
-export function datasetObjectKey(key) {
-  return `datasets/${String(key).replace(/[^\w.\-]/g, '_')}.json`
+/** Clave de objeto en el bucket para un dataset publicado (planilla editada).
+ *  Con `projectId` queda scopeada al proyecto (aislamiento entre empresas);
+ *  sin él, en el espacio global/legacy (compatibilidad con lo ya publicado). */
+export function datasetObjectKey(key, projectId) {
+  const safe = String(key).replace(/[^\w.\-]/g, '_')
+  return projectId ? `datasets/${projectId}/${safe}.json` : `datasets/${safe}.json`
 }
 
 /** Guarda un objeto JSON pequeño en el bucket (mismo flujo S3 firmado que los modelos). */
@@ -179,30 +182,30 @@ export async function readJsonObject(objectKey) {
   return file.json()
 }
 
-// Índice de datasets publicados, para que el plugin liste las planillas por
-// nombre sin tener que leerlas todas. Se mantiene en un objeto aparte.
-const INDEX_OBJECT_KEY = 'datasets/__index__.json'
+// Índice de datasets publicados (por proyecto, o global), para listar las
+// planillas por nombre sin leerlas todas. Se mantiene en un objeto aparte.
+const indexKey = (projectId) => (projectId ? `datasets/${projectId}/__index__.json` : 'datasets/__index__.json')
 
-/** Devuelve la lista de datasets publicados: [{ key, name, count, updatedAt }]. */
-export async function readDatasetIndex() {
-  const idx = await readJsonObject(INDEX_OBJECT_KEY)
+/** Lista de datasets publicados del proyecto (o globales): [{ key, name, count, updatedAt }]. */
+export async function readDatasetIndex(projectId) {
+  const idx = await readJsonObject(indexKey(projectId))
   return Array.isArray(idx?.datasets) ? idx.datasets : []
 }
 
-/** Agrega o actualiza una entrada del índice. */
-export async function upsertDatasetIndex(entry) {
-  const list = await readDatasetIndex()
+/** Agrega o actualiza una entrada del índice del proyecto (o global). */
+export async function upsertDatasetIndex(entry, projectId) {
+  const list = await readDatasetIndex(projectId)
   const i = list.findIndex((e) => e.key === entry.key)
   if (i >= 0) list[i] = entry
   else list.push(entry)
-  await putJsonObject(INDEX_OBJECT_KEY, { datasets: list })
+  await putJsonObject(indexKey(projectId), { datasets: list })
 }
 
 /** Quita una entrada del índice por key. Devuelve cuántas sacó (0 si no estaba). */
-export async function removeFromDatasetIndex(key) {
-  const list = await readDatasetIndex()
+export async function removeFromDatasetIndex(key, projectId) {
+  const list = await readDatasetIndex(projectId)
   const next = list.filter((e) => e.key !== key)
-  if (next.length !== list.length) await putJsonObject(INDEX_OBJECT_KEY, { datasets: next })
+  if (next.length !== list.length) await putJsonObject(indexKey(projectId), { datasets: next })
   return list.length - next.length
 }
 

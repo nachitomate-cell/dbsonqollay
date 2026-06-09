@@ -44,7 +44,7 @@ import {
 // El visor 3D (APS) se carga en un chunk aparte, solo al abrir la vista 3D.
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
-import { authFetch, currentUser } from '../lib/auth.js'
+import { activeProjectId, authFetch, currentUser } from '../lib/auth.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
@@ -243,7 +243,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     setPublishElapsed(0)
     setPublish({ status: 'publishing', count: rows.length, key: subcategory.dataKey })
     try {
-      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}`, {
+      const pid = activeProjectId()
+      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}${pid ? `?project=${pid}` : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -281,7 +282,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     const version = editVersionRef.current // versión que estamos por persistir
     setAutosave({ status: 'saving' })
     try {
-      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}`, {
+      const pid = activeProjectId()
+      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}${pid ? `?project=${pid}` : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // `author` = quién edita (para el historial de cambios). Con login real

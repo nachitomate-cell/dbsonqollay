@@ -27,6 +27,17 @@ export async function roleInOrg(userId, orgId) {
   return r.rows[0]?.role || null
 }
 
+/** Rol del usuario en la org dueña de un proyecto, o null si no tiene acceso. */
+export async function projectRole(userId, projectId) {
+  const r = await q(
+    `select m.role from sqy_projects p
+       join sqy_memberships m on m.org_id = p.org_id
+      where p.id = $1 and m.user_id = $2`,
+    [projectId, userId],
+  )
+  return r.rows[0]?.role || null
+}
+
 /** Empresas del usuario (donde es miembro), con su rol y nº de proyectos. */
 export async function listUserOrgs(userId) {
   const r = await q(

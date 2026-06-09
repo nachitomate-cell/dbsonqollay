@@ -49,11 +49,12 @@ function lit(s) {
  * Replica una planilla publicada en la base de datos y refresca su vista.
  * @param {{key:string,name?:string,tagField?:string,headers?:string[],rows?:object[]}} payload
  */
-export async function upsertDatasetToDb(payload) {
+export async function upsertDatasetToDb(payload, projectId) {
   const pool = getPool()
   if (!pool) return { skipped: true }
 
-  const { key } = payload
+  // Clave efectiva: con proyecto queda aislada (prefijo), si no, global/legacy.
+  const key = projectId ? `${projectId}:${payload.key}` : payload.key
   const headers = Array.isArray(payload.headers) ? payload.headers : []
   const rows = Array.isArray(payload.rows) ? payload.rows : []
   const tagField = payload.tagField || headers[0]
@@ -233,10 +234,11 @@ export async function ensureDisciplines(seed) {
 }
 
 /** Borra una planilla de la base de datos: su vista y sus filas. */
-export async function deleteDatasetFromDb(key) {
+export async function deleteDatasetFromDb(rawKey, projectId) {
   const pool = getPool()
   if (!pool) return { skipped: true }
-  if (!key) return { skipped: true, reason: 'sin key' }
+  const key = projectId ? `${projectId}:${rawKey}` : rawKey
+  if (!rawKey) return { skipped: true, reason: 'sin key' }
   const client = await pool.connect()
   try {
     await client.query(`drop view if exists ${ident(viewName(key))}`)

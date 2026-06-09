@@ -2,6 +2,19 @@ import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, re
 import { upsertDatasetToDb, deleteDatasetFromDb } from '../_lib/db.js'
 import { getUserFromRequest } from '../_lib/auth.js'
 import { recordDatasetEdit } from '../_lib/audit.js'
+import { clientByToken } from '../_lib/clients.js'
+
+// Proyecto al que pertenece la planilla (aislamiento). Viene de:
+//  - ?project=<id>  (la web manda el proyecto activo), o
+//  - el token del plugin (empresa) → su projectId en PLUGIN_CLIENTS.
+// Sin proyecto → espacio global/legacy (sesión de prueba y datos ya publicados).
+function resolveProject(req) {
+  const q = String(req.query?.project || '').trim()
+  if (q) return q
+  const auth = req.headers?.authorization || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : (req.query?.token || '')
+  return clientByToken(token)?.projectId || null
+}
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -13,7 +26,8 @@ export default async function handler(req, res) {
   try {
     const key = String(req.query.key || '').trim()
     if (!key) return send(res, 400, { error: 'Falta key' })
-    const objectKey = datasetObjectKey(key)
+    const projectId = resolveProject(req)
+    const objectKey = datasetObjectKey(key, projectId)
 
     if (req.method === 'POST') {
       const b = req.body || {}
@@ -67,14 +81,14 @@ export default async function handler(req, res) {
       }
 
       await putJsonObject(objectKey, payload)
-      await upsertDatasetIndex({ key, name: payload.name, count: rows.length, updatedAt: payload.updatedAt })
+      await upsertDatasetIndex({ key, name: payload.name, count: rows.length, updatedAt: payload.updatedAt }, projectId)
 
       // Aditivo: replicar a la base de datos (Postgres/Supabase) para que el
       // modelo la lea en vivo por DataTools. Si falla o no está configurada,
       // NO rompe el publish (el bucket APS ya quedó guardado arriba).
       let db = { skipped: true }
       try {
-        db = await upsertDatasetToDb(payload)
+        db = await upsertDatasetToDb(payload, projectId)
       } catch (e) {
         db = { error: e.message }
       }
@@ -105,11 +119,11 @@ export default async function handler(req, res) {
         return send(res, 401, { error: 'No autorizado: falta o no coincide el token (Authorization: Bearer <SQY_API_TOKEN>).' })
       }
       await deleteObject(objectKey)
-      const removedFromIndex = await removeFromDatasetIndex(key)
+      const removedFromIndex = await removeFromDatasetIndex(key, projectId)
 
       let db = { skipped: true }
       try {
-        db = await deleteDatasetFromDb(key)
+        db = await deleteDatasetFromDb(key, projectId)
       } catch (e) {
         db = { error: e.message }
       }

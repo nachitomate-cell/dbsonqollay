@@ -38,6 +38,19 @@ export function accessToken() {
   return getSession()?.access_token || null
 }
 
+// Proyecto activo de la sesión (para scopear las planillas por proyecto). Solo
+// devuelve proyectos REALES de la DB (uuid); los demo/locales → '' (global), así
+// la sesión de prueba y los datos legacy no cambian de comportamiento.
+export function activeProjectId() {
+  try {
+    const org = sessionStorage.getItem('sqy-active-org') || ''
+    const pid = sessionStorage.getItem(`sqy-active-project-session${org ? `-${org}` : ''}`) || ''
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid) ? pid : ''
+  } catch {
+    return ''
+  }
+}
+
 export function currentUser() {
   return getSession()?.user || null
 }

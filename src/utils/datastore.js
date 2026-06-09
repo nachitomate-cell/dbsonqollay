@@ -9,7 +9,7 @@
  * Ver docs/firebase-migration.md para el plan completo.
  */
 
-import { accessToken, authFetch } from '../lib/auth.js'
+import { accessToken, activeProjectId, authFetch } from '../lib/auth.js'
 
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
 const getAPI = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
@@ -27,7 +27,8 @@ export const cloudEnabled = () => !!accessToken()
 export async function fetchDbDataset(dataKey) {
   if (!accessToken()) return null // sin sesión, no hay nada que recuperar
   try {
-    const res = await authFetch(`${getAPI()}/api/datasets/${encodeURIComponent(dataKey)}`, { cache: 'no-store' })
+    const p = activeProjectId()
+    const res = await authFetch(`${getAPI()}/api/datasets/${encodeURIComponent(dataKey)}${p ? `?project=${p}` : ''}`, { cache: 'no-store' })
     if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) return null
     const d = await res.json()
     return d && Array.isArray(d.rows) ? d : null
