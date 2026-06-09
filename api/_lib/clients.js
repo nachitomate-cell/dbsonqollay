@@ -1,5 +1,5 @@
 /**
- * Registro de clientes (empresas) del plugin Aura BIM.
+ * Registro de clientes (empresas) del plugin Aura GIP.
  *
  * Cada empresa que contrata Aura tiene:
  *   - id:     slug corto y estable (p. ej. "acme")

@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Bundle de Navisworks para AuraBIM.
-     Define el plugin como ManagedPlugin; la pestaña "Aura BIM" y el botón
+     Define el plugin como ManagedPlugin; la pestaña "Aura GIP" y el botón
      "Asignar Propiedades" vienen del ribbon en Contents/en-US/AuraBIM.xaml.
      Nw21=2024, Nw22=2025, Nw23=2026, Nw24=2027. El DLL se compila contra el API
      2026; se permite cargar también en 2027 (API estable). Si en 2027 fallara la
      carga, recompilar contra ese API y dejar SeriesMax en Nw24. -->
 <ApplicationPackage
     SchemaVersion="1.0"
-    AppVersion="1.21.0"
+    AppVersion="1.22.0"
     ProductType="Application"
-    Name="Aura BIM"
-    Description="Aura BIM: asignar propiedades BIM al modelo desde la web"
-    Author="Aura BIM"
+    Name="Aura GIP"
+    Description="Aura GIP: asignar propiedades BIM al modelo desde la web"
+    Author="Aura GIP"
     ProductCode="{7B3F1A2C-9D4E-4F60-AE21-5C8B6D0E1F34}"
     UpgradeCode="{1E9C7A55-3B22-49D8-8F0A-6D2E4B7C9A10}">
 
-    <CompanyDetails Name="Aura BIM" Url="" Email="" />
+    <CompanyDetails Name="Aura GIP" Url="" Email="" />
 
-    <Components Description="Aura BIM Plugin">
+    <Components Description="Aura GIP Plugin">
         <RuntimeRequirements
             OS="Win64"
             Platform="NAVMAN"

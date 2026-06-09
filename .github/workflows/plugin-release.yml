@@ -47,7 +47,7 @@ jobs:
           $stage = "package"
           $bundle = Join-Path $stage 'AuraBIM.bundle'
           New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents/en-US') | Out-Null
-          # Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM")
+          # Estructura del bundle: PackageContents + ribbon (pestana "Aura GIP")
           Copy-Item bundle/PackageContents.xml $bundle
           Copy-Item bundle/Contents/en-US/* (Join-Path $bundle 'Contents/en-US')
           # DLL compilado -> Contents

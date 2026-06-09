@@ -50,7 +50,7 @@ function Test-RibbonXaml([string]$path) {
 }
 Test-RibbonXaml (Join-Path $root 'bundle\Contents\en-US\AuraBIM.xaml')
 
-# Estructura del bundle: PackageContents + ribbon (pestana "Aura BIM").
+# Estructura del bundle: PackageContents + ribbon (pestana "Aura GIP").
 Copy-Item (Join-Path $root 'bundle\PackageContents.xml') $bundle
 Copy-Item (Join-Path $root 'bundle\Contents\en-US\*') (Join-Path $bundle 'Contents\en-US')
 # DLL compilado + config (junto al DLL, en Contents).

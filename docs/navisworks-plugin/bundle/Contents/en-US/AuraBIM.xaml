@@ -2,7 +2,7 @@
                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                xmlns:nw="clr-namespace:Autodesk.Navisworks.Gui.Roamer.AIRLook;assembly=navisworks.gui.roamer"
                x:Uid="AuraBIMRibbon">
-  <RibbonTab x:Uid="ID_TabAuraBIM" Id="ID_TabAuraBIM" Title="Aura BIM">
+  <RibbonTab x:Uid="ID_TabAuraBIM" Id="ID_TabAuraBIM" Title="Aura GIP">
     <RibbonPanel x:Uid="ID_PanelMain">
       <RibbonPanelSource x:Uid="ID_PanelMain_Src" Title="Herramientas">
         <nw:NWRibbonButton x:Uid="ID_AsignarProps" Id="ID_AsignarProps"

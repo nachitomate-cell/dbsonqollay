@@ -123,7 +123,7 @@ Leyenda de áreas: 🔴 Bloqueante · 🟠 Estructural · 🟡 Madurez de ingeni
 
 ### D2 — Navisworks bidireccional + vínculo por GUID · **L**
 **Problema:** el vínculo es por TAG como texto normalizado; publish manual.
-**Acciones:** vincular por GUID/ObjectId estable además del TAG; sincronización en dos sentidos (traer estado del modelo a la web); auto-publish por webhook al guardar (sin clic manual). Construye sobre el plugin Aura BIM ya existente.
+**Acciones:** vincular por GUID/ObjectId estable además del TAG; sincronización en dos sentidos (traer estado del modelo a la web); auto-publish por webhook al guardar (sin clic manual). Construye sobre el plugin Aura GIP ya existente.
 **Aceptación:** match robusto sin colisiones de texto; cambios se reflejan sin pasos manuales.
 
 ### D3 — Dashboards y reportes · **L**

@@ -1,4 +1,4 @@
-# Distribución del plugin Aura BIM (Etapa 1)
+# Distribución del plugin Aura GIP (Etapa 1)
 
 Cómo se descarga el plugin **desde el backend de Aura** (no desde un link público
 de GitHub), para que el repositorio pueda ser **privado** y cada **empresa**

@@ -1,5 +1,5 @@
 /**
- * Prepara el instalador del plugin Aura BIM para descargarlo DESDE el backend
+ * Prepara el instalador del plugin Aura GIP para descargarlo DESDE el backend
  * (no desde un link público de GitHub). Así el repositorio puede ser privado y
  * cada empresa baja un instalador con SU token inyectado.
  *

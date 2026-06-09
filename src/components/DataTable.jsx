@@ -1542,8 +1542,8 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
               {error && 'No se pudo publicar'}
             </h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {publishing && `Enviando ${state.count.toLocaleString('es-CL')} elemento(s) al servidor para que el plugin Aura BIM los lea.`}
-              {done && `El plugin de Navisworks (Aura BIM) ya puede leer esta planilla en vivo.`}
+              {publishing && `Enviando ${state.count.toLocaleString('es-CL')} elemento(s) al servidor para que el plugin Aura GIP los lea.`}
+              {done && `El plugin de Navisworks (Aura GIP) ya puede leer esta planilla en vivo.`}
               {error && 'Revisa la conexión con el servidor e inténtalo de nuevo.'}
             </p>
           </div>

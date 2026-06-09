@@ -1,4 +1,4 @@
-# Aura BIM → Navisworks (API en vivo)
+# Aura GIP → Navisworks (API en vivo)
 
 Trae a Navisworks los datos editados en las planillas de
 `https://basesonqollay.synaptechspa.cl/` mediante un plugin .NET que los
@@ -8,7 +8,7 @@ del modelo, vinculando por **TAG**.
 ## Arquitectura
 
 ```
-Web Aura BIM (edita planilla)
+Web Aura GIP (edita planilla)
    │  POST /api/datasets/:key   (botón "Publicar para Navisworks")
    ▼
 Backend (Vercel) ── guarda el dataset como JSON en el bucket APS
@@ -80,9 +80,9 @@ Ver [`AuraBIM.cs`](./AuraBIM.cs). Hace tres cosas:
    solo lectura para propiedades.
 
 > **Nota:** el plugin solo reemplaza pestañas `BIM` **definidas por el usuario**
-> (las que dejó Aura BIM por COM). Si un modelo ya trae una pestaña `BIM`
+> (las que dejó Aura GIP por COM). Si un modelo ya trae una pestaña `BIM`
 > **nativa** del NWC, el plugin agrega su propia `BIM` al lado (quedarían dos). En
-> el pipeline normal la `BIM` la siembra Aura BIM por COM, así que hay una sola.
+> el pipeline normal la `BIM` la siembra Aura GIP por COM, así que hay una sola.
 
 ## Distribución a clientes (lo simple)
 
@@ -108,7 +108,7 @@ El cliente **no** compila ni edita nada. Recibe un `.zip` y hace **1 clic**.
 1. Descomprime el `.zip`.
 2. Doble clic en **`Instalar.bat`** (copia el plugin a la carpeta de Navisworks
    de su usuario — detecta Manage/Simulate 2024-2026, sin permisos de admin).
-3. Abre Navisworks → pestaña **Aura BIM** → botón **Asignar Propiedades**.
+3. Abre Navisworks → pestaña **Aura GIP** → botón **Asignar Propiedades**.
 
 > La configuración (URL + token + propiedad de vínculo) vive en
 > **`AuraBIM.config.json`** junto al DLL (gitignored; en el repo solo está el
@@ -160,7 +160,7 @@ botón funcionan igual.
 ### Usar
 1. En la web: edita cada planilla → **"Publicar para Navisworks"** (una vez por
    planilla; al re-editar, vuelves a publicar y se sobrescribe).
-2. En Navisworks: abre el modelo → pestaña **Aura BIM** → botón **Asignar Propiedades**.
+2. En Navisworks: abre el modelo → pestaña **Aura GIP** → botón **Asignar Propiedades**.
 3. Aparece la **lista de planillas publicadas** con checkboxes → marca las que
    quieras (vienen todas marcadas) → **Sincronizar**.
 4. El plugin descarga las elegidas, matchea por TAG y reescribe la pestaña de

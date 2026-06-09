@@ -1,5 +1,5 @@
-// Aura BIM — plugin de Navisworks 2026 que trae los datos editados en la
-// web Aura BIM y los escribe como propiedades custom en los elementos del
+// Aura GIP — plugin de Navisworks 2026 que trae los datos editados en la
+// web Aura GIP y los escribe como propiedades custom en los elementos del
 // modelo, vinculando por TAG.
 //
 // Al ejecutarlo, lista las planillas publicadas (GET /api/datasets) y te deja
@@ -29,11 +29,11 @@ using ComApiBridge = Autodesk.Navisworks.Api.ComApi.ComApiBridge;
 
 namespace AuraBIM
 {
-    // Ribbon propio: pestaña "Aura BIM" con botón "Asignar Propiedades" (definidos
+    // Ribbon propio: pestaña "Aura GIP" con botón "Asignar Propiedades" (definidos
     // en AuraBIM.xaml / .name del bundle).
     [Plugin("AuraBIM", "ABM",
-            DisplayName = "Aura BIM",
-            ToolTip = "Trae los datos editados en Aura BIM y los escribe en el modelo")]
+            DisplayName = "Aura GIP",
+            ToolTip = "Trae los datos editados en Aura GIP y los escribe en el modelo")]
     [Strings("AuraBIM.name")]
     [RibbonLayout("AuraBIM.xaml")]
     [RibbonTab("ID_TabAuraBIM", LoadForCanExecute = true)]
@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.21.0";
+        private const string Version = "1.22.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
@@ -71,7 +71,7 @@ namespace AuraBIM
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Aura BIM: " + ex.Message);
+                MessageBox.Show("Aura GIP: " + ex.Message);
                 return 0;
             }
         }
@@ -147,7 +147,7 @@ namespace AuraBIM
             if (index.Count == 0)
             {
                 MessageBox.Show("No hay planillas publicadas todavía.\n\n" +
-                                "En la web Aura BIM, abre cada planilla y pulsa \"Publicar para Navisworks\".");
+                                "En la web Aura GIP, abre cada planilla y pulsa \"Publicar para Navisworks\".");
                 return 0;
             }
 
@@ -589,7 +589,7 @@ namespace AuraBIM
                 if (!tagIndex.TryGetValue(tag, out items) || items.Count == 0) { res.missing++; continue; }
                 res.matched++;
 
-                // Solo reescribir los elementos cuyo tab "Aura BIM" difiere de la
+                // Solo reescribir los elementos cuyo tab "Aura GIP" difiere de la
                 // fila. Leer las propiedades actuales es barato; reescribirlas con
                 // SetUserDefined (COM) es lo caro. Así un re-sync tras un cambio
                 // chico toca apenas unos elementos en vez de TODO el modelo.
@@ -612,7 +612,7 @@ namespace AuraBIM
             return res;
         }
 
-        // ¿El elemento necesita reescritura? true si aún no tiene el tab "Aura BIM"
+        // ¿El elemento necesita reescritura? true si aún no tiene el tab "Aura GIP"
         // o si algún valor de la fila difiere del que ya está escrito. Comparar
         // contra el tab existente evita el costoso SetUserDefined cuando nada cambió.
         private bool NeedsUpdate(ModelItem item, Dictionary<string, string> row)
@@ -793,7 +793,7 @@ namespace AuraBIM
         {
             var form = new Form
             {
-                Text = "Aura BIM — elige las planillas a sincronizar",
+                Text = "Aura GIP — elige las planillas a sincronizar",
                 ClientSize = new Size(460, 410),
                 StartPosition = FormStartPosition.CenterScreen,
                 FormBorderStyle = FormBorderStyle.FixedDialog,
@@ -940,7 +940,7 @@ namespace AuraBIM
             // Camino rápido: si la categoría está configurada (caso normal, BIM),
             // buscamos dentro de esa pestaña SIN distinguir mayús/minús, tanto en el
             // nombre de la pestaña como en el de la propiedad. Esto es clave para que
-            // sea repetible: la web escribe "TAG/COMMODITY" y Aura BIM dejó
+            // sea repetible: la web escribe "TAG/COMMODITY" y Aura GIP dejó
             // "TAG/Commodity"; ambos deben matchear contra Cfg.LinkProperty.
             if (!string.IsNullOrEmpty(Cfg.LinkCategory))
             {
@@ -993,7 +993,7 @@ namespace AuraBIM
                 ComApi.InwGUIPropertyNode2 node =
                     (ComApi.InwGUIPropertyNode2)state.GetGUIPropertyNode(path, true);
 
-                // Quitar pestañas "Aura BIM" previas para no acumular duplicados al
+                // Quitar pestañas "Aura GIP" previas para no acumular duplicados al
                 // re-sincronizar. SetUserDefined(0,...) crea SIEMPRE una nueva; el índice
                 // de RemoveUserDefined es 1-based entre las pestañas "user-defined".
                 var toRemove = new List<int>();
@@ -1035,7 +1035,7 @@ namespace AuraBIM
         }
 
         // ---- Ventana de progreso (logo + barra + cancelar) --------------
-        // Logo Aura BIM arriba. Reemplaza a la barra nativa para mostrar el logo.
+        // Logo Aura GIP arriba. Reemplaza a la barra nativa para mostrar el logo.
         private sealed class ProgressForm : Form
         {
             private readonly ProgressBar _bar;
@@ -1049,7 +1049,7 @@ namespace AuraBIM
 
             public ProgressForm()
             {
-                Text = "Aura BIM";
+                Text = "Aura GIP";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
@@ -1158,7 +1158,7 @@ namespace AuraBIM
                 var amber = System.Drawing.Color.FromArgb(200, 140, 0);
                 var red = System.Drawing.Color.FromArgb(190, 40, 40);
 
-                Text = "Aura BIM";
+                Text = "Aura GIP";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
@@ -1304,7 +1304,7 @@ namespace AuraBIM
                 var green = System.Drawing.Color.FromArgb(30, 150, 70);
                 const int W = 420;
 
-                Text = "Acerca de Aura BIM";
+                Text = "Acerca de Aura GIP";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
@@ -1315,7 +1315,7 @@ namespace AuraBIM
                 pb.Left = (W - (logo?.Width ?? 86)) / 2;
                 Controls.Add(pb);
 
-                Controls.Add(new Label { Text = "Aura BIM", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 128, Width = W - 40, Height = 26, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 13, System.Drawing.FontStyle.Bold) });
+                Controls.Add(new Label { Text = "Aura GIP", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 128, Width = W - 40, Height = 26, ForeColor = gray, Font = new System.Drawing.Font(Font.FontFamily, 13, System.Drawing.FontStyle.Bold) });
                 Controls.Add(new Label { Text = "Plugin para Autodesk Navisworks", AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Left = 20, Top = 154, Width = W - 40, Height = 18, ForeColor = soft });
 
                 int y = 184;
@@ -1343,7 +1343,7 @@ namespace AuraBIM
                 Controls.Add(btnUpd);
                 y += 36;
 
-                var btnWeb = new Button { Text = "Abrir Aura BIM", Width = 140, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
+                var btnWeb = new Button { Text = "Abrir Aura GIP", Width = 140, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
                 btnWeb.FlatAppearance.BorderSize = 0;
                 btnWeb.Click += (s, e) => { try { System.Diagnostics.Process.Start(Cfg.BaseUrl); } catch { } };
                 Controls.Add(btnWeb);
@@ -1368,7 +1368,7 @@ namespace AuraBIM
                 var red = System.Drawing.Color.FromArgb(190, 40, 40);
                 const int W = 470;
 
-                Text = "Configuración de Aura BIM";
+                Text = "Configuración de Aura GIP";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
@@ -1433,7 +1433,7 @@ namespace AuraBIM
                 var green = System.Drawing.Color.FromArgb(30, 150, 70);
                 const int W = 420;
 
-                Text = "Actualización de Aura BIM";
+                Text = "Actualización de Aura GIP";
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 StartPosition = FormStartPosition.CenterScreen;
                 MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;

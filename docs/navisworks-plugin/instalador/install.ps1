@@ -1,4 +1,4 @@
-# Instalador GRÁFICO de Aura BIM (ventana con logos + tutorial + boton).
+# Instalador GRÁFICO de Aura GIP (ventana con logos + tutorial + boton).
 # Copia el plugin a la carpeta de plugins de la INSTALACIÓN de cada Navisworks
 # (Manage/Simulate) detectado. Requiere admin: se auto-eleva. A prueba de discos.
 $ErrorActionPreference = 'Stop'
@@ -29,14 +29,14 @@ $gray = [System.Drawing.Color]::FromArgb(80, 90, 100)
 $soft = [System.Drawing.Color]::FromArgb(150, 155, 160)
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'Instalar Aura BIM'
+$form.Text = 'Instalar Aura GIP'
 $form.ClientSize = New-Object System.Drawing.Size(460, 392)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false; $form.MinimizeBox = $false
 $form.BackColor = [System.Drawing.Color]::White
 
-# --- Logo Aura BIM (protagonista, arriba) -------------------------------------
+# --- Logo Aura GIP (protagonista, arriba) -------------------------------------
 if ($imgSqy) {
   $pb = New-Object System.Windows.Forms.PictureBox
   $pb.Image = $imgSqy; $pb.SizeMode = 'AutoSize'; $pb.Top = 16
@@ -58,7 +58,7 @@ $tut.Text = @"
 Como usar (despues de instalar):
 
   1.  Abre Navisworks y tu modelo.
-  2.  Pestana "Aura BIM" -> boton "Asignar Propiedades".
+  2.  Pestana "Aura GIP" -> boton "Asignar Propiedades".
   3.  Marca las planillas a sincronizar -> Sincronizar.
   4.  Guarda el modelo (.nwf / .nwd) para conservar los datos.
 "@
@@ -111,19 +111,19 @@ $btnInstall.Add_Click({
   try {
     # 0) Desbloquear el ORIGEN (Mark of the Web). Si el .zip se bajo de internet,
     #    Windows marca cada archivo y Navisworks NO carga un DLL gestionado marcado:
-    #    el plugin no inicializa y la pestana "Aura BIM" no aparece (aunque diga
+    #    el plugin no inicializa y la pestana "Aura GIP" no aparece (aunque diga
     #    "Instalado OK"). Lo limpiamos antes de copiar. SIN -ErrorAction
     #    SilentlyContinue a proposito: si el desbloqueo falla, queremos enterarnos.
     Get-ChildItem $bundleSrc -Recurse -File | Unblock-File
 
     # 1) Instalar el bundle en ApplicationPlugins (sirve para todas las versiones
-    #    de Navisworks; ahi vive tambien AuraBIM). Da la pestana propia "Aura BIM".
+    #    de Navisworks; ahi vive tambien AuraBIM). Da la pestana propia "Aura GIP".
     $appPlugins = Join-Path $env:ProgramData 'Autodesk\ApplicationPlugins'
     New-Item -ItemType Directory -Force -Path $appPlugins | Out-Null
     $dest = Join-Path $appPlugins 'AuraBIM.bundle'
     if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
     # Bundle viejo (cuando el plugin se llamaba "SonqollaySync"): quitarlo para no
-    # tener la pestana/boton duplicado tras el rebrand a "Aura BIM".
+    # tener la pestana/boton duplicado tras el rebrand a "Aura GIP".
     $oldBundle = Join-Path $appPlugins 'SonqollaySync.bundle'
     if (Test-Path $oldBundle) { Remove-Item $oldBundle -Recurse -Force -ErrorAction SilentlyContinue }
     Copy-Item $bundleSrc $dest -Recurse -Force
@@ -177,7 +177,7 @@ $btnInstall.Add_Click({
     }
 
     $status.ForeColor = [System.Drawing.Color]::FromArgb(30, 150, 70)
-    $status.Text = 'Instalado OK. Abre (o reinicia) Navisworks -> pestana "Aura BIM".'
+    $status.Text = 'Instalado OK. Abre (o reinicia) Navisworks -> pestana "Aura GIP".'
     $btnInstall.Enabled = $false
   } catch {
     $status.ForeColor = [System.Drawing.Color]::Red
