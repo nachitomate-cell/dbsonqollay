@@ -21,17 +21,25 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('sqy-api-url') || '')
   const [apiSaved, setApiSaved] = useState(false)
   const [clearing, setClearing] = useState(null)
-  // Historial de modificaciones (versiones publicadas de cada modelo).
+  // Historial de modificaciones: versiones publicadas de cada modelo + cambios
+  // en los datos de las planillas (quién editó qué).
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState([])
+  const [edits, setEdits] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
 
   function openHistory() {
     setShowHistory(true)
     setLoadingHistory(true)
-    fetchAllProjects()
-      .then((list) => setHistory(Array.isArray(list) ? list : []))
-      .catch(() => setHistory([]))
+    const api = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+    Promise.all([
+      fetchAllProjects().catch(() => []),
+      fetch(`${api}/api/audit`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([list, ev]) => {
+        setHistory(Array.isArray(list) ? list : [])
+        setEdits(Array.isArray(ev) ? ev : [])
+      })
       .finally(() => setLoadingHistory(false))
   }
 
@@ -219,12 +227,43 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
                   <Loader2 className="h-4 w-4 animate-spin" /> Cargando historial…
                 </div>
-              ) : history.length === 0 ? (
+              ) : history.length === 0 && edits.length === 0 ? (
                 <p className="py-10 text-center text-sm text-slate-400">
-                  Todavía no hay modelos publicados. Usa “Publicar a la nube” desde el plugin de Navisworks.
+                  Todavía no hay actividad. Publica un modelo desde el plugin o edita una planilla.
                 </p>
               ) : (
-                <div className="space-y-5">
+                <div className="space-y-6">
+                  {/* Cambios en los datos: quién editó qué planilla y cuándo */}
+                  {edits.length > 0 && (
+                    <div>
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Cambios en los datos</p>
+                      <ol className="space-y-2">
+                        {edits.map((e, i) => (
+                          <li key={i} className="rounded-lg border border-slate-100 px-3 py-2 dark:border-white/5">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-200" title={e.dataset}>{e.dataset}</span>
+                              <span className="shrink-0 text-[10px] text-slate-400">{fmtWhen(Date.parse(e.at))}</span>
+                            </div>
+                            <div className="mt-0.5 flex items-center justify-between gap-2 text-[11px]">
+                              <span className="truncate text-slate-500 dark:text-slate-400" title={e.user}>👤 {e.user}</span>
+                              <span className="shrink-0 space-x-1.5">
+                                {e.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{e.added}</span>}
+                                {e.removed > 0 && <span className="text-rose-600 dark:text-rose-400">−{e.removed}</span>}
+                                {e.modified > 0 && <span className="text-amber-600 dark:text-amber-400">~{e.modified}</span>}
+                                {!e.added && !e.removed && !e.modified && <span className="text-slate-400">{e.toCount} filas</span>}
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+
+                  {/* Versiones de modelos publicados */}
+                  {history.length > 0 && (
+                  <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Versiones de modelos</p>
+                  <div className="space-y-5">
                   {history.map((p) => (
                     <div key={p.id || p.urn}>
                       <div className="mb-1.5 flex items-baseline justify-between gap-2">
@@ -247,6 +286,9 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
                       </ol>
                     </div>
                   ))}
+                  </div>
+                  </div>
+                  )}
                 </div>
               )}
             </div>

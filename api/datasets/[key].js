@@ -1,6 +1,7 @@
 import { datasetObjectKey, putJsonObject, readJsonObject, upsertDatasetIndex, removeFromDatasetIndex, deleteObject, pluginAuthorized, send, fail } from '../_lib/aps.js'
 import { upsertDatasetToDb, deleteDatasetFromDb } from '../_lib/db.js'
 import { getUserFromRequest } from '../_lib/auth.js'
+import { recordDatasetEdit } from '../_lib/audit.js'
 
 // POST /api/datasets/:key  → publica el dataset editado (desde la web Sonqollay)
 // GET  /api/datasets/:key  → lo descarga (plugin de Navisworks; requiere token)
@@ -47,6 +48,24 @@ export default async function handler(req, res) {
         count: rows.length,
         updatedAt: new Date().toISOString(),
       }
+      // Audit (quién/cuándo/qué cambió). ANTES de sobrescribir, para poder
+      // comparar contra el dataset anterior. Best-effort: nunca rompe el guardado.
+      try {
+        const u = await getUserFromRequest(req)
+        const author = u?.email || b.author || (pluginAuthorized(req) ? 'Plugin Navisworks' : 'desconocido')
+        await recordDatasetEdit({
+          key,
+          name: payload.name,
+          user: author,
+          tagField: payload.tagField,
+          newRows: rows,
+          getOld: () => readJsonObject(objectKey),
+          at: payload.updatedAt,
+        })
+      } catch (e) {
+        console.error('[audit]', e?.message)
+      }
+
       await putJsonObject(objectKey, payload)
       await upsertDatasetIndex({ key, name: payload.name, count: rows.length, updatedAt: payload.updatedAt })
 

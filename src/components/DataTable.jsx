@@ -44,6 +44,7 @@ import {
 // El visor 3D (APS) se carga en un chunk aparte, solo al abrir la vista 3D.
 const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
+import { authFetch, currentUser } from '../lib/auth.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
@@ -242,7 +243,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     setPublishElapsed(0)
     setPublish({ status: 'publishing', count: rows.length, key: subcategory.dataKey })
     try {
-      const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}`, {
+      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -251,6 +252,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
           headers,
           columns, // set completo (con visibilidad) para no perder columnas ocultas
           rows: rows.map(({ _id, ...r }) => r),
+          author: currentUser()?.email, // para el historial de cambios
         }),
       })
       const ct = res.headers.get('content-type') || ''
@@ -279,10 +281,12 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {} }) {
     const version = editVersionRef.current // versión que estamos por persistir
     setAutosave({ status: 'saving' })
     try {
-      const res = await fetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}`, {
+      const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, tagField: headers[0], headers, columns, rows: rows.map(({ _id, ...r }) => r) }),
+        // `author` = quién edita (para el historial de cambios). Con login real
+        // el backend usa el JWT; mientras tanto, el email de la sesión.
+        body: JSON.stringify({ name, tagField: headers[0], headers, columns, rows: rows.map(({ _id, ...r }) => r), author: currentUser()?.email }),
       })
       const ct = res.headers.get('content-type') || ''
       const j = ct.includes('application/json') ? await res.json() : {}
