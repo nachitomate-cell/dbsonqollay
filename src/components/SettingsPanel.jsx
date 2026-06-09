@@ -1,7 +1,11 @@
 import { useState } from 'react'
-import { Check, Download, Info, Moon, Server, Sun, Trash2, X } from 'lucide-react'
+import { Check, Download, History, Info, Loader2, Moon, Server, Sun, Trash2, X } from 'lucide-react'
+import { fetchAllProjects } from '../utils/apsProjects.js'
 
 const DEFAULT_API = import.meta.env.VITE_APS_API || (import.meta.env.DEV ? 'http://localhost:3000' : '')
+
+const fmtMB = (b) => (b ? `${(b / (1024 * 1024)).toFixed(1)} MB` : '')
+const fmtWhen = (ts) => (ts ? new Date(ts).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 
 // El instalador se descarga DESDE el backend (no de un link público de GitHub),
 // así el repo puede ser privado y cada empresa baja su instalador con su token.
@@ -17,6 +21,19 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
   const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('sqy-api-url') || '')
   const [apiSaved, setApiSaved] = useState(false)
   const [clearing, setClearing] = useState(null)
+  // Historial de modificaciones (versiones publicadas de cada modelo).
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+
+  function openHistory() {
+    setShowHistory(true)
+    setLoadingHistory(true)
+    fetchAllProjects()
+      .then((list) => setHistory(Array.isArray(list) ? list : []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoadingHistory(false))
+  }
 
   function saveApi() {
     const v = apiUrl.trim()
@@ -126,6 +143,21 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
             </a>
           </div>
 
+          {/* Historial de modelos */}
+          <div className={divider}>
+            <p className={label}><History className="h-3.5 w-3.5" /> Historial de modelos</p>
+            <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">
+              Cada vez que publicas un modelo a la nube queda una versión. Mira aquí
+              el historial de modificaciones de cada modelo.
+            </p>
+            <button
+              onClick={openHistory}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-sm font-medium text-slate-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-white/10 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
+            >
+              <History className="h-4 w-4" /> Ver historial de modificaciones
+            </button>
+          </div>
+
           {/* Datos locales */}
           <div className={divider}>
             <p className={label}><Trash2 className="h-3.5 w-3.5" /> Datos locales</p>
@@ -167,6 +199,60 @@ export default function SettingsPanel({ open, onClose, theme, onToggleTheme, onC
           </div>
         </div>
       </aside>
+
+      {/* Modal: historial de modificaciones (versiones) de cada modelo */}
+      {showHistory && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowHistory(false)} />
+          <div className="relative z-10 flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-ink-800">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
+                <History className="h-4 w-4 text-brand-500 dark:text-accent" /> Historial de modificaciones
+              </h3>
+              <button onClick={() => setShowHistory(false)} className="grid h-7 w-7 place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Cargando historial…
+                </div>
+              ) : history.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-400">
+                  Todavía no hay modelos publicados. Usa “Publicar a la nube” desde el plugin de Navisworks.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {history.map((p) => (
+                    <div key={p.id || p.urn}>
+                      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100" title={p.name}>{p.name}</span>
+                        <span className="shrink-0 text-[10px] text-slate-400">{(p.versions?.length || 1)} versión(es)</span>
+                      </div>
+                      <ol className="space-y-1.5 border-l border-slate-200 pl-3 dark:border-white/10">
+                        {(p.versions || [{ n: 1, ts: p.savedAt ? Date.parse(p.savedAt) : 0 }]).map((v, i) => (
+                          <li key={v.urn || i} className="relative">
+                            <span className={`absolute -left-[15px] top-1.5 h-2 w-2 rounded-full ${i === 0 ? 'bg-brand-500 dark:bg-accent' : 'bg-slate-300 dark:bg-white/20'}`} />
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                                v{v.n}{i === 0 && <span className="ml-1.5 rounded bg-brand-100 px-1 text-[9px] font-semibold uppercase text-brand-700 dark:bg-accent/20 dark:text-accent">Actual</span>}
+                              </span>
+                              <span className="shrink-0 text-[10px] text-slate-400">{fmtMB(v.size)}</span>
+                            </div>
+                            <span className="block text-[11px] text-slate-400">{fmtWhen(v.ts)}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
