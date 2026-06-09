@@ -42,9 +42,10 @@ import {
 } from 'lucide-react'
 
 // El visor 3D (APS) se carga en un chunk aparte, solo al abrir la vista 3D.
-const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
+const ApsViewer = lazyWithReload(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import { activeProjectId, authFetch, currentUser } from '../lib/auth.js'
+import { lazyWithReload } from '../lib/lazyWithReload.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'

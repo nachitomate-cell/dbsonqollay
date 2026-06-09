@@ -1,13 +1,14 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { ArrowUpRight, Box, Filter, Gauge, Globe, LayoutGrid, Layers, List, Loader2, Search, ShieldCheck, Sigma, Table2, X } from 'lucide-react'
 import Icon from './Icon.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 import CombinedTable from './CombinedTable.jsx'
 import QualityPanel from './QualityPanel.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
+import { lazyWithReload } from '../lib/lazyWithReload.js'
 
 // El visor APS (SDK de Autodesk) se carga en un chunk aparte, solo al abrir el 3D.
-const ApsViewer = lazy(() => import('./ApsViewer.jsx'))
+const ApsViewer = lazyWithReload(() => import('./ApsViewer.jsx'))
 
 /**
  * Vista "Todas las disciplinas" — conjunto de TODAS las planillas existentes del
