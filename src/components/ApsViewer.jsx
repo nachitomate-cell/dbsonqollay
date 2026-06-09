@@ -149,6 +149,23 @@ function bboxSpan(b) {
   return Math.sqrt(dx * dx + dy * dy + dz * dz)
 }
 
+// Acerca la cámara hacia el objetivo manteniendo el centro (dolly). El fit
+// completo deja el modelo lejos/pequeño —sobre todo en plantas grandes donde
+// interesa una zona—, así que por defecto entramos un poco más. factor<1 = más
+// cerca. Bajalo para acercar más, subilo (hasta 1) para alejar.
+const FRAME_ZOOM = 0.68
+function zoomCloser(viewer, factor) {
+  try {
+    const nav = viewer.navigation, T = window.THREE
+    if (!nav || !T) return
+    const eye = nav.getPosition(), tgt = nav.getTarget()
+    nav.setView(
+      new T.Vector3(tgt.x + (eye.x - tgt.x) * factor, tgt.y + (eye.y - tgt.y) * factor, tgt.z + (eye.z - tgt.z) * factor),
+      tgt,
+    )
+  } catch { /* noop */ }
+}
+
 function frameModel(viewer) {
   let tries = 0, lastSpan = -1, stable = 0
   const fit = () => {
@@ -161,6 +178,8 @@ function frameModel(viewer) {
         const bbox = viewer.model.getBoundingBox?.()
         if (bbox && viewer.navigation?.fitBounds) viewer.navigation.fitBounds(true, bbox)
         else viewer.fitToView(null, viewer.model, true)
+        // Acerca un poco el encuadre por defecto (el fit completo queda muy lejos).
+        zoomCloser(viewer, FRAME_ZOOM)
         // ¿El bounding box dejó de crecer? La geometría llega por streaming, así
         // que reencuadramos mientras crece y paramos cuando se estabiliza (evita
         // dejarlo "muy lejos" por un encuadre prematuro a una caja parcial).
