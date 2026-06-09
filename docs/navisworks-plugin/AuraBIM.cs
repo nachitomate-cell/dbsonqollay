@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.20.0";
+        private const string Version = "1.21.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
@@ -423,7 +423,8 @@ namespace AuraBIM
             }
             catch { }
 
-            string name = PromptText("Publicar a la nube", "Nombre del modelo en la nube:", suggested);
+            string name = PromptText("Publicar a la nube",
+                "Nombre del proyecto (usar el MISMO nombre crea una nueva versión):", suggested);
             if (name == null) return; // cancelado
             name = name.Trim();
             if (name.Length == 0) name = suggested;
@@ -459,7 +460,12 @@ namespace AuraBIM
 
                 // 2) Pedir URL firmada de subida al backend.
                 progress.Report(0.40, "Preparando la subida…");
-                string upBody = ser.Serialize(new Dictionary<string, object> { { "name", name + ".nwd" } });
+                // "project" agrupa las versiones del mismo modelo en la nube
+                // (mismo nombre = nueva versión, no un duplicado).
+                string upBody = ser.Serialize(new Dictionary<string, object>
+                {
+                    { "name", name + ".nwd" }, { "project", name },
+                });
                 string upJson = HttpPostJson(Cfg.BaseUrl.TrimEnd('/') + "/api/aps/upload-url", upBody);
                 var up = ser.DeserializeObject(upJson) as Dictionary<string, object>;
                 if (up == null || !up.ContainsKey("urls")) throw new Exception("Respuesta de subida inválida del servidor.");

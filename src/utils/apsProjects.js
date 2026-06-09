@@ -63,43 +63,79 @@ function isModelObject(objectKey, name) {
   return true
 }
 
+// Envuelve los modelos locales como "proyectos" de una sola versión (fallback
+// cuando el backend no responde).
+function groupLocal() {
+  return listProjects().map((p) => ({
+    id: p.urn,
+    name: p.name,
+    urn: p.urn,
+    objectKey: p.objectKey,
+    savedAt: p.savedAt,
+    remote: !!p.remote,
+    latest: { urn: p.urn, objectKey: p.objectKey, ts: 0, name: p.name, n: 1 },
+    versions: [{ urn: p.urn, objectKey: p.objectKey, ts: 0, name: p.name, n: 1 }],
+  }))
+}
+
+/**
+ * Lista los modelos del bucket agrupados por PROYECTO, cada uno con sus
+ * VERSIONES (la más nueva primero). Publicar con el mismo nombre crea una nueva
+ * versión del mismo proyecto en vez de un duplicado. Si el backend no responde,
+ * cae a los modelos locales.
+ */
 export async function fetchAllProjects() {
-  const local = listProjects()
   try {
-    const remote = await fetch(`${apiBase()}/api/aps/models`).then((r) => {
+    // Futuro (Etapa 3 / login): filtrar por la empresa logueada.
+    const tenant = localStorage.getItem('sqy-tenant') || ''
+    const q = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''
+    const remote = await fetch(`${apiBase()}/api/aps/models${q}`).then((r) => {
       if (!r.ok || !r.headers.get('content-type')?.includes('application/json')) return []
       return r.json()
     })
-    const byUrn = new Map()
-    for (const p of local) byUrn.set(p.urn, { ...p })
-    for (const r of remote) {
-      if (!isModelObject(r.objectKey, r.name)) continue // ignora planillas publicadas, no son modelos
-      const existing = byUrn.get(r.urn)
-      if (existing) existing.objectKey = r.objectKey // enlaza el objeto del bucket para poder borrarlo
-      else byUrn.set(r.urn, { urn: r.urn, name: r.name, objectKey: r.objectKey, savedAt: null, remote: true })
+    const models = remote.filter((r) => isModelObject(r.objectKey, r.name))
+    if (!models.length) return groupLocal()
+
+    // Agrupa por proyecto (tenant/slug); cada objeto es una versión.
+    const byProject = new Map()
+    for (const r of models) {
+      const id = `${r.tenant || 'default'}/${r.project || (r.name || r.urn).toLowerCase()}`
+      const g = byProject.get(id) || { id, tenant: r.tenant || 'default', project: r.project, versions: [] }
+      g.versions.push({ urn: r.urn, objectKey: r.objectKey, ts: r.ts || 0, name: r.name, size: r.size })
+      byProject.set(id, g)
     }
-    // Agrupa duplicados por nombre: deja solo el más reciente de cada nombre
-    // (en el bucket quedan varias subidas del mismo archivo).
-    const list = Array.from(byUrn.values())
-    const seen = new Set()
-    const deduped = []
-    for (const p of list) {
-      const key = (p.name || p.urn).toLowerCase()
-      if (seen.has(key)) continue
-      seen.add(key)
-      deduped.push(p)
+
+    const projects = []
+    for (const g of byProject.values()) {
+      g.versions.sort((a, b) => b.ts - a.ts) // más nueva primero
+      g.versions.forEach((v, i) => { v.n = g.versions.length - i }) // v1 = la más vieja
+      const latest = g.versions[0]
+      projects.push({
+        id: g.id,
+        tenant: g.tenant,
+        project: g.project,
+        name: latest.name,
+        urn: latest.urn, // compat: openProject/delete usan .urn (= última versión)
+        objectKey: latest.objectKey,
+        savedAt: latest.ts ? new Date(latest.ts).toISOString() : null,
+        remote: true,
+        latest,
+        versions: g.versions,
+      })
     }
-    return deduped
+    projects.sort((a, b) => (b.latest.ts || 0) - (a.latest.ts || 0))
+    return projects
   } catch {
-    return local
+    return groupLocal()
   }
 }
 
-/** Borra el objeto del bucket (si tiene objectKey) y lo quita de la lista local. */
+/** Borra TODAS las versiones del proyecto en el bucket y lo quita de la lista local. */
 export async function deleteProjectRemote(project) {
-  if (project?.objectKey) {
+  const keys = (project?.versions?.length ? project.versions.map((v) => v.objectKey) : [project?.objectKey]).filter(Boolean)
+  for (const k of keys) {
     try {
-      await fetch(`${apiBase()}/api/aps/models?objectKey=${encodeURIComponent(project.objectKey)}`, { method: 'DELETE' })
+      await fetch(`${apiBase()}/api/aps/models?objectKey=${encodeURIComponent(k)}`, { method: 'DELETE' })
     } catch {
       /* ignora errores de red; igual se quita de la lista local */
     }

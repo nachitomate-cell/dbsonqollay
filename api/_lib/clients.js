@@ -43,3 +43,10 @@ export function activeClientTokens() {
     .filter((c) => c.active !== false && c.token)
     .map((c) => c.token)
 }
+
+/** Empresa activa por su token de plugin, o null. Para saber a qué empresa
+ *  (tenant) pertenece un modelo que sube el plugin. */
+export function clientByToken(token) {
+  if (!token) return null
+  return loadClients().find((c) => c.token === token && c.active !== false) || null
+}

@@ -86,6 +86,35 @@ export async function getManifest(urn) {
   return res.json()
 }
 
+// Slug estable de un nombre de proyecto (agrupa versiones del mismo modelo).
+export function projectSlug(s) {
+  return (
+    String(s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '') // sin tildes
+      .replace(/\.[a-z0-9]+$/, '') // sin extensión
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'modelo'
+  )
+}
+
+// Interpreta un objectKey y devuelve { tenant, project, ts, name }.
+// Esquema nuevo:  models/<tenant>/<slug>/<ts>-<archivo>
+// Esquema viejo:  <ts>-<archivo>  (raíz) → tenant 'default', slug del nombre
+export function parseModelKey(objectKey) {
+  const parts = String(objectKey || '').split('/')
+  if (parts[0] === 'models' && parts.length === 4) {
+    const [, tenant, slug, file] = parts
+    const m = /^(\d+)-(.+)$/.exec(file)
+    return { tenant, project: slug, ts: m ? Number(m[1]) : 0, name: m ? m[2] : file }
+  }
+  const base = parts[parts.length - 1]
+  const m = /^(\d+)-(.+)$/.exec(base)
+  const name = m ? m[2] : base
+  return { tenant: 'default', project: projectSlug(name), ts: m ? Number(m[1]) : 0, name }
+}
+
 export async function listObjects() {
   const { access_token } = await getToken('data:read bucket:read')
   const res = await fetch(`${BASE}/oss/v2/buckets/${BUCKET}/objects?limit=100`, {
@@ -94,12 +123,18 @@ export async function listObjects() {
   if (res.status === 404) return []
   if (!res.ok) throw new Error(`Listar objetos falló (${res.status}): ${await res.text()}`)
   const json = await res.json()
-  return (json.items || []).map((o) => ({
-    urn: toBase64Urn(o.objectId),
-    objectKey: o.objectKey,
-    name: String(o.objectKey).replace(/^\d+-/, ''),
-    size: o.size,
-  }))
+  return (json.items || []).map((o) => {
+    const meta = parseModelKey(o.objectKey)
+    return {
+      urn: toBase64Urn(o.objectId),
+      objectKey: o.objectKey,
+      name: meta.name,
+      size: o.size,
+      tenant: meta.tenant,
+      project: meta.project,
+      ts: meta.ts,
+    }
+  })
 }
 
 /** Borra un objeto del bucket por su objectKey. */

@@ -271,12 +271,21 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   function rememberModel(u, name) {
     try { localStorage.setItem(storeKey, JSON.stringify({ urn: u, name: name || null })) } catch { /* ignore */ }
   }
-  // Reabre un proyecto guardado (ya traducido) sin re-subir el archivo.
+  // Reabre un proyecto guardado (ya traducido) sin re-subir el archivo. Abre
+  // SIEMPRE la última versión.
   function openProject(p) {
     setShowProjects(false)
     if (p.urn === ctxRef.current.loadedUrn) return // ya está abierto
     setUrn(p.urn); setModelName(p.name); rememberModel(p.urn, p.name)
     if (viewerRef.current) loadDocument(p.urn, { force: true })
+  }
+  // Abre una VERSIÓN puntual del proyecto (desde el selector de versiones).
+  function openVersion(p, vUrn) {
+    if (!vUrn) return
+    setShowProjects(false)
+    if (vUrn === ctxRef.current.loadedUrn) return
+    setUrn(vUrn); setModelName(p.name); rememberModel(vUrn, p.name)
+    if (viewerRef.current) loadDocument(vUrn, { force: true })
   }
   function deleteProject(p) {
     deleteProjectRemote(p)
@@ -1018,15 +1027,34 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                       Modelos guardados {loadingProjects && <Loader2 className="h-3 w-3 animate-spin" />}
                     </p>
                     <div className="max-h-72 overflow-y-auto">
-                      {projects.map((p) => (
-                        <div key={p.urn} className="group flex items-center gap-1 rounded-md px-1 hover:bg-slate-100 dark:hover:bg-white/5">
+                      {projects.map((p) => {
+                        const nver = p.versions?.length || 1
+                        return (
+                        <div key={p.id || p.urn} className="group flex items-center gap-1 rounded-md px-1 hover:bg-slate-100 dark:hover:bg-white/5">
                           <button onClick={() => openProject(p)} className="min-w-0 flex-1 py-1.5 pl-1.5 text-left">
                             <span className="block truncate text-xs font-medium text-slate-700 dark:text-slate-200" title={p.name}>{p.name}</span>
-                            <span className="block text-[10px] text-slate-400">{p.savedAt ? new Date(p.savedAt).toLocaleDateString('es-CL') : (p.remote ? 'En la nube (APS)' : '')}</span>
+                            <span className="block text-[10px] text-slate-400">
+                              {nver > 1 && <span className="text-brand-600 dark:text-accent">v{nver} · </span>}
+                              {p.savedAt ? new Date(p.savedAt).toLocaleDateString('es-CL') : (p.remote ? 'En la nube (APS)' : '')}
+                            </span>
                           </button>
-                          <button onClick={() => deleteProject(p)} title="Eliminar modelo guardado" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                          {nver > 1 && (
+                            <select
+                              value=""
+                              onChange={(e) => openVersion(p, e.target.value)}
+                              title="Abrir una versión anterior"
+                              className="shrink-0 rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-500 dark:border-white/10 dark:bg-ink-900 dark:text-slate-300"
+                            >
+                              <option value="">Versiones</option>
+                              {p.versions.map((v) => (
+                                <option key={v.urn} value={v.urn}>v{v.n} · {v.ts ? new Date(v.ts).toLocaleDateString('es-CL') : '—'}</option>
+                              ))}
+                            </select>
+                          )}
+                          <button onClick={() => deleteProject(p)} title="Eliminar modelo (todas las versiones)" className="shrink-0 p-1.5 text-slate-300 opacity-0 transition hover:text-rose-500 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </>
