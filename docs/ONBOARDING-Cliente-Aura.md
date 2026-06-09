@@ -8,10 +8,10 @@
 
 ```
 1. Crear usuario        (Supabase)        ─┐
-2. Crear empresa        (web · Admin)      │  Lo hacés vos (Aura)
+2. Crear empresa        (web · Admin)      │  Lo haces tú (Aura)
 3. Invitar usuario      (web · Admin)      │
 4. Crear proyecto       (web · Admin)     ─┘
-5. Token del plugin     (Vercel)          ─── Lo hacés vos (Aura)
+5. Token del plugin     (Vercel)          ─── Lo haces tú (Aura)
         │
         ▼
 6. Descargar e instalar plugin   (Cliente, desde la web)
@@ -21,7 +21,7 @@
 
 ---
 
-## Parte A — Lo que hacés vos (Aura) para habilitar al cliente
+## Parte A — Lo que haces tú (Aura) para habilitar al cliente
 
 ### 1. Crear el usuario del cliente
 En **Supabase → Authentication → Users → Add user**:
@@ -33,7 +33,7 @@ En **Supabase → Authentication → Users → Add user**:
 
 ### 2. Crear la empresa
 En la web → **Configuración → Administración → "Empresas, proyectos y usuarios"**:
-- Escribí el nombre de la empresa → **crear**. Quedás como **admin**.
+- Escribe el nombre de la empresa → **crear**. Quedas como **admin**.
 
 ### 3. Invitar al usuario del cliente a la empresa
 En el mismo panel, con la empresa seleccionada → **Miembros**:
@@ -57,12 +57,12 @@ En tu PC, en la carpeta del proyecto:
 ```
 node scripts/new-client.mjs "Nombre de la Empresa"
 ```
-Copiá la entrada JSON que imprime y agregale el **projectId** del proyecto
-(lo sacás de **Supabase → Table Editor → sqy_projects**, columna `id`):
+Copia la entrada JSON que imprime y agrégale el **projectId** del proyecto
+(lo obtienes de **Supabase → Table Editor → sqy_projects**, columna `id`):
 ```json
 {"id":"acme","name":"ACME","key":"dl_...","token":"tok_...","projectId":"<uuid-del-proyecto>","active":true}
 ```
-Pegá esa entrada en la variable **`PLUGIN_CLIENTS`** de **Vercel → Settings →
+Pega esa entrada en la variable **`PLUGIN_CLIENTS`** de **Vercel → Settings →
 Environment Variables** (es un array JSON, en una línea) → **Redeploy**.
 
 > El `key` es la llave de descarga; el `token` es lo que el plugin usa para
