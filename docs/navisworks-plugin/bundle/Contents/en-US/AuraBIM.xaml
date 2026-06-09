@@ -20,6 +20,11 @@
                            Text="Crear&#xD;&#xA;conjuntos"
                            LargeImage="conjuntos32.png"
                            Orientation="Vertical" />
+        <nw:NWRibbonButton x:Uid="ID_Publicar" Id="ID_Publicar"
+                           Size="Large" ShowText="True"
+                           Text="Publicar&#xD;&#xA;a la nube"
+                           LargeImage="publicar32.png"
+                           Orientation="Vertical" />
         <nw:NWRibbonButton x:Uid="ID_Config" Id="ID_Config"
                            Size="Large" ShowText="True"
                            Text="Configu-&#xD;&#xA;racion"

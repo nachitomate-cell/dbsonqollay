@@ -40,13 +40,14 @@ namespace AuraBIM
     [Command("ID_AsignarProps", LoadForCanExecute = true)]
     [Command("ID_AsignarSeleccion", LoadForCanExecute = true)]
     [Command("ID_Conjuntos", LoadForCanExecute = true)]
+    [Command("ID_Publicar", LoadForCanExecute = true)]
     [Command("ID_Config", LoadForCanExecute = true)]
     [Command("ID_AcercaDe", LoadForCanExecute = true)]
     public class AuraBIM : CommandHandlerPlugin
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.19.0";
+        private const string Version = "1.20.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
@@ -62,6 +63,7 @@ namespace AuraBIM
                 {
                     case "ID_AsignarSeleccion": return RunSync(true);
                     case "ID_Conjuntos": CreateSets(); return 0;
+                    case "ID_Publicar": Publish(); return 0;
                     case "ID_Config": ShowConfig(); return 0;
                     case "ID_AcercaDe": ShowAbout(); return 0;
                     default: return RunSync(false);
@@ -391,6 +393,124 @@ namespace AuraBIM
             MessageBox.Show(msg);
         }
 
+        // ---- Publicar el modelo a la nube --------------------------------
+        // Exporta el modelo abierto a un NWD (con geometría, "aplanado") y lo sube
+        // al backend de Aura, que lo guarda y lo traduce para el visor web. Así el
+        // usuario publica en un clic, sin pasar por la web.
+        private void Publish()
+        {
+            // Vercel exige TLS 1.2+.
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+            Document doc = Autodesk.Navisworks.Api.Application.ActiveDocument;
+            if (doc == null || doc.Models.Count == 0)
+            {
+                MessageBox.Show("Abre primero un modelo en Navisworks.");
+                return;
+            }
+            if (string.IsNullOrEmpty(Cfg.BaseUrl))
+            {
+                MessageBox.Show("Falta la URL del servidor. Configúrala en \"Configuración\".");
+                return;
+            }
+
+            // Nombre sugerido: el del archivo abierto (NWF/NWD) o "modelo".
+            string suggested = "modelo";
+            try
+            {
+                string fn = doc.FileName;
+                if (!string.IsNullOrEmpty(fn)) suggested = Path.GetFileNameWithoutExtension(fn);
+            }
+            catch { }
+
+            string name = PromptText("Publicar a la nube", "Nombre del modelo en la nube:", suggested);
+            if (name == null) return; // cancelado
+            name = name.Trim();
+            if (name.Length == 0) name = suggested;
+
+            string tempNwd = Path.Combine(Path.GetTempPath(),
+                "AuraBIM_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".nwd");
+
+            var progress = new ProgressForm();
+            progress.Scope = "Publicar a la nube";
+            progress.Show(); progress.Refresh();
+            try
+            {
+                var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+
+                // 1) Exportar el modelo actual a NWD (self-contained, con geometría).
+                progress.Report(0.15, "Generando NWD (aplanando el modelo)…");
+                ComApi.InwOpState10 state = ComApiBridge.State;
+                state.SaveFileAs(tempNwd);
+                if (!File.Exists(tempNwd)) throw new Exception("No se pudo generar el NWD.");
+                byte[] bytes = File.ReadAllBytes(tempNwd);
+
+                // 2) Pedir URL firmada de subida al backend.
+                progress.Report(0.40, "Preparando la subida…");
+                string upBody = ser.Serialize(new Dictionary<string, object> { { "name", name + ".nwd" } });
+                string upJson = HttpPostJson(Cfg.BaseUrl.TrimEnd('/') + "/api/aps/upload-url", upBody);
+                var up = ser.DeserializeObject(upJson) as Dictionary<string, object>;
+                if (up == null || !up.ContainsKey("urls")) throw new Exception("Respuesta de subida inválida del servidor.");
+                string objectKey = Convert.ToString(up["objectKey"]);
+                string uploadKey = Convert.ToString(up["uploadKey"]);
+                string putUrl = Convert.ToString(((object[])up["urls"])[0]);
+
+                // 3) Subir el binario directo a S3 (PUT a la URL firmada).
+                int mb = (int)(bytes.Length / (1024L * 1024L));
+                progress.Report(0.60, "Subiendo el modelo (" + mb + " MB)…");
+                HttpPut(putUrl, bytes);
+
+                // 4) Confirmar la subida y lanzar la traducción a SVF2.
+                progress.Report(0.90, "Procesando el modelo en la nube…");
+                string compBody = ser.Serialize(new Dictionary<string, object>
+                {
+                    { "objectKey", objectKey }, { "uploadKey", uploadKey },
+                });
+                HttpPostJson(Cfg.BaseUrl.TrimEnd('/') + "/api/aps/complete", compBody);
+
+                WriteLog("publish v" + Version + " | name=" + name + " | bytes=" + bytes.Length);
+                progress.Close(); progress.Dispose();
+
+                var r = MessageBox.Show(
+                    "Modelo publicado a la nube.\n\n" +
+                    "El procesamiento puede tardar unos minutos. Cuando termine, lo verás en " +
+                    "la web de Aura, en la lista de modelos.\n\n¿Abrir la web ahora?",
+                    "Publicar a la nube", MessageBoxButtons.YesNo);
+                if (r == DialogResult.Yes)
+                    try { System.Diagnostics.Process.Start(Cfg.BaseUrl); } catch { }
+            }
+            catch (Exception ex)
+            {
+                try { progress.Close(); progress.Dispose(); } catch { }
+                MessageBox.Show("No se pudo publicar: " + ex.Message);
+            }
+            finally
+            {
+                try { if (File.Exists(tempNwd)) File.Delete(tempNwd); } catch { }
+            }
+        }
+
+        // Pide un texto al usuario (con Aceptar/Cancelar). Devuelve null si cancela.
+        private static string PromptText(string title, string label, string def)
+        {
+            using (var f = new Form())
+            {
+                f.Text = title;
+                f.FormBorderStyle = FormBorderStyle.FixedDialog;
+                f.StartPosition = FormStartPosition.CenterScreen;
+                f.MinimizeBox = false; f.MaximizeBox = false;
+                f.ClientSize = new Size(380, 110);
+                var lbl = new Label { Text = label, Left = 12, Top = 14, Width = 356, Height = 20 };
+                var tb = new TextBox { Left = 12, Top = 38, Width = 356, Text = def ?? "" };
+                var ok = new Button { Text = "Publicar", DialogResult = DialogResult.OK, Left = 200, Top = 74, Width = 80 };
+                var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Left = 288, Top = 74, Width = 80 };
+                f.Controls.Add(lbl); f.Controls.Add(tb); f.Controls.Add(ok); f.Controls.Add(cancel);
+                f.AcceptButton = ok; f.CancelButton = cancel;
+                tb.SelectAll();
+                return f.ShowDialog() == DialogResult.OK ? tb.Text : null;
+            }
+        }
+
         // Lee una propiedad de la pestaña indicada (sin distinguir mayúsculas).
         private string GetProp(ModelItem item, string category, string propName)
         {
@@ -524,15 +644,47 @@ namespace AuraBIM
                 {
                     return wc.DownloadString(url);
                 }
-                catch (WebException wex)
-                {
-                    string body = "";
-                    if (wex.Response != null)
-                        using (var sr = new System.IO.StreamReader(wex.Response.GetResponseStream()))
-                            body = sr.ReadToEnd();
-                    throw new Exception(wex.Message + (body.Length > 0 ? "\n" + body : ""));
-                }
+                catch (WebException wex) { throw WebError(wex); }
             }
+        }
+
+        // POST con cuerpo JSON (manda el token del plugin). Devuelve la respuesta.
+        private string HttpPostJson(string url, string jsonBody)
+        {
+            using (var wc = new WebClient())
+            {
+                wc.Encoding = System.Text.Encoding.UTF8;
+                wc.Headers[HttpRequestHeader.ContentType] = "application/json";
+                if (!string.IsNullOrEmpty(Cfg.ApiToken))
+                    wc.Headers[HttpRequestHeader.Authorization] = "Bearer " + Cfg.ApiToken;
+                try { return wc.UploadString(url, "POST", jsonBody); }
+                catch (WebException wex) { throw WebError(wex); }
+            }
+        }
+
+        // PUT de bytes crudos a una URL firmada de S3 (sin auth: la firma va en la URL).
+        private void HttpPut(string url, byte[] data)
+        {
+            using (var wc = new WebClient())
+            {
+                try { wc.UploadData(url, "PUT", data); }
+                catch (WebException wex) { throw WebError(wex); }
+            }
+        }
+
+        // Convierte un WebException en un Exception con el cuerpo del error del
+        // servidor (que suele traer el motivo real), no solo "(500) ...".
+        private static Exception WebError(WebException wex)
+        {
+            string body = "";
+            try
+            {
+                if (wex.Response != null)
+                    using (var sr = new System.IO.StreamReader(wex.Response.GetResponseStream()))
+                        body = sr.ReadToEnd();
+            }
+            catch { }
+            return new Exception(wex.Message + (body.Length > 0 ? "\n" + body : ""));
         }
 
         // Lista de planillas publicadas: GET /api/datasets -> { datasets: [...] }
