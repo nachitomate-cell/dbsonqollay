@@ -438,11 +438,23 @@ namespace AuraBIM
             {
                 var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
-                // 1) Exportar el modelo actual a NWD (self-contained, con geometría).
+                // 1) Exportar el modelo actual a NWD self-contained (API nativa de
+                //    Navisworks 2026). EmbedXrefs=true embebe la geometría de los
+                //    archivos referenciados (clave si el usuario trabaja con un NWF).
+                //    Es un EXPORT: NO toca el archivo/sesión abierta (a diferencia de
+                //    "Guardar como"). PreventObjectPropertyExport=false conserva las
+                //    propiedades BIM ya escritas en el modelo.
                 progress.Report(0.15, "Generando NWD (aplanando el modelo)…");
-                ComApi.InwOpState10 state = ComApiBridge.State;
-                state.SaveFileAs(tempNwd);
-                if (!File.Exists(tempNwd)) throw new Exception("No se pudo generar el NWD.");
+                var nwdOpts = new NwdExportOptions
+                {
+                    ExcludeHiddenItems = false,
+                    PreventObjectPropertyExport = false,
+                    FileVersion = (int)DocumentFileVersion.Navisworks2026,
+                    EmbedXrefs = true,
+                };
+                bool exported = doc.TryExportToNwd(tempNwd, nwdOpts);
+                if (!exported || !File.Exists(tempNwd))
+                    throw new Exception("No se pudo generar el NWD del modelo.");
                 byte[] bytes = File.ReadAllBytes(tempNwd);
 
                 // 2) Pedir URL firmada de subida al backend.
