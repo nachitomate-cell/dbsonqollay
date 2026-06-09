@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, LayoutDashboard, LogOut, Moon, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Moon, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
+import HelpModal from './HelpModal.jsx'
 
 // Iniciales para el avatar a partir del nombre o el email.
 function initials(user) {
@@ -27,7 +28,20 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
+
+  // Atajo "?" (Shift+/) abre la ayuda, salvo que estés escribiendo en un campo.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '?' ) return
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      e.preventDefault(); setHelpOpen(true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   useEffect(() => {
     const on = () => setOnline(true)
     const off = () => setOnline(false)
@@ -122,6 +136,11 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           )}
         </div>
 
+        {/* Ayuda y atajos */}
+        <button onClick={() => setHelpOpen(true)} className={`${iconBtn} hidden sm:grid`} aria-label="Ayuda" title="Ayuda y atajos (?)">
+          <HelpCircle className="h-4 w-4" />
+        </button>
+
         {/* Configuración — abre el panel lateral */}
         <button
           onClick={onOpenSettings}
@@ -131,6 +150,8 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
         >
           <Settings className="h-4 w-4" />
         </button>
+
+        <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
 
         {/* Menú de usuario */}
         <div className="relative">
