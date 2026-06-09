@@ -1,4 +1,4 @@
-import { ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, FolderKanban, Globe, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, FolderKanban, Globe, Home, Plus, Trash2 } from 'lucide-react'
 import Icon from './Icon.jsx'
 import { disciplines as staticDisciplines } from '../data/disciplines.js'
 
@@ -12,7 +12,7 @@ import { disciplines as staticDisciplines } from '../data/disciplines.js'
  *  - disciplines: lista de disciplinas a mostrar. La provee App (viene de la base
  *    de datos vía useDisciplines). Si no se pasa, usa el menú estático de respaldo.
  */
-export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActive, onSelect, onSelectAll, onAddDiscipline, onRemoveDiscipline, projectName, onChangeProject, disciplines = staticDisciplines }) {
+export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActive, homeActive, onSelectHome, onSelect, onSelectAll, onAddDiscipline, onRemoveDiscipline, projectName, onChangeProject, disciplines = staticDisciplines }) {
   return (
     <aside
       className={[
@@ -35,6 +35,25 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
           </div>
         )}
       </div>
+
+      {/* "Inicio" (dashboard del proyecto) */}
+      {onSelectHome && (
+        <div className="mb-1 px-3">
+          <button
+            onClick={onSelectHome}
+            title={collapsed ? 'Inicio' : undefined}
+            className={[
+              'group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+              homeActive
+                ? 'bg-brand-500 text-white shadow-sm dark:bg-accent/15 dark:text-white dark:ring-1 dark:ring-accent/40'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white',
+            ].join(' ')}
+          >
+            <Home className={['h-[18px] w-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110', homeActive ? 'text-white dark:text-accent' : 'text-slate-500 dark:text-slate-400'].join(' ')} />
+            {!collapsed && <span className="flex-1 truncate">Inicio</span>}
+          </button>
+        </div>
+      )}
 
       {/* "Todas las disciplinas" */}
       <div className="px-3">

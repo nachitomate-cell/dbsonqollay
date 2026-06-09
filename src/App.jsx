@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar.jsx'
 import Header from './components/Header.jsx'
 import DisciplineView from './components/DisciplineView.jsx'
 import AllDisciplinesView from './components/AllDisciplinesView.jsx'
+import ProjectHome from './components/ProjectHome.jsx'
 import GridWorkspace from './components/GridWorkspace.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import AddDisciplineModal from './components/AddDisciplineModal.jsx'
@@ -43,12 +44,14 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const initNav = () => { try { return JSON.parse(sessionStorage.getItem(NAVK) || 'null') || {} } catch { return {} } }
   const [activeDiscipline, setActiveDiscipline] = useState(() => initNav().activeDiscipline ?? 'electrico')
   const [showAll, setShowAll] = useState(() => initNav().showAll ?? false) // vista "Todas las disciplinas"
+  // Home del proyecto (dashboard de entrada). Por defecto al abrir un proyecto nuevo.
+  const [showHome, setShowHome] = useState(() => { const n = initNav(); return n.showHome ?? (n.activeSub == null && n.showAll !== true && n.activeDiscipline == null) })
   const [openSubs, setOpenSubs] = useState(() => initNav().openSubs ?? [])
   const [activeSub, setActiveSub] = useState(() => initNav().activeSub ?? null)
 
   useEffect(() => {
-    try { sessionStorage.setItem(NAVK, JSON.stringify({ activeDiscipline, showAll, openSubs, activeSub })) } catch { /* cuota */ }
-  }, [NAVK, activeDiscipline, showAll, openSubs, activeSub])
+    try { sessionStorage.setItem(NAVK, JSON.stringify({ activeDiscipline, showAll, showHome, openSubs, activeSub })) } catch { /* cuota */ }
+  }, [NAVK, activeDiscipline, showAll, showHome, openSubs, activeSub])
   const [theme, setTheme] = useState(() => {
     // Si el usuario ya eligió tema, se respeta; si no, se usa el del sistema.
     const saved = localStorage.getItem('sqy-theme')
@@ -186,6 +189,8 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
       const d = info?.discipline || discipline
       if (d) list.push({ label: d.name, onClick: () => setActiveSub(null) })
       if (info) list.push({ label: info.subcategory.name })
+    } else if (showHome) {
+      list.push({ label: 'Inicio' })
     } else if (showAll) {
       list.push({ label: 'Todas las disciplinas' })
     } else if (discipline) {
@@ -193,12 +198,14 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     }
     return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discipline, activeSub, disciplines, showAll])
+  }, [discipline, activeSub, disciplines, showAll, showHome])
 
+  function selectHome() { setShowHome(true); setActiveSub(null); setShowAll(false) }
   function selectDiscipline(id) {
     setActiveDiscipline(id)
     setActiveSub(null)
     setShowAll(false)
+    setShowHome(false)
   }
   // Crea una disciplina nueva y la deja seleccionada.
   function createDiscipline({ name, icon }) {
@@ -216,10 +223,12 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   function selectAllDisciplines() {
     setShowAll(true)
     setActiveSub(null)
+    setShowHome(false)
   }
   function openSubcategory(subId) {
     setOpenSubs((prev) => (prev.includes(subId) ? prev : [...prev, subId]))
     setActiveSub(subId)
+    setShowHome(false)
   }
   // Crear una planilla nueva en una subcategoría sin datos (con las columnas
   // elegidas) y abrirla.
@@ -287,8 +296,10 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
         collapsed={collapsed}
         onToggle={() => setCollapsed((v) => !v)}
         disciplines={disciplines}
-        activeDiscipline={showAll ? null : discipline?.id}
+        activeDiscipline={showAll || showHome ? null : discipline?.id}
         allActive={showAll}
+        homeActive={showHome}
+        onSelectHome={selectHome}
         onSelect={selectDiscipline}
         onSelectAll={selectAllDisciplines}
         onAddDiscipline={() => setShowAddDiscipline(true)}
@@ -325,6 +336,18 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
               awp={{ cwps: awpCwps, importCwps, clearCwps }}
               focus={gridFocus}
             />
+          ) : showHome ? (
+            <div className="h-full overflow-y-auto">
+              <ProjectHome
+                project={project}
+                disciplines={disciplines}
+                datasets={allDatasets}
+                cwps={awpCwps}
+                createdSheets={createdSheets}
+                onOpenDiscipline={selectDiscipline}
+                onOpenAll={selectAllDisciplines}
+              />
+            </div>
           ) : showAll ? (
             <div className="h-full overflow-y-auto">
               <AllDisciplinesView
