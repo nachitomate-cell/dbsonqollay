@@ -153,7 +153,7 @@ function bboxSpan(b) {
 // completo deja el modelo lejos/pequeño —sobre todo en plantas grandes donde
 // interesa una zona—, así que por defecto entramos un poco más. factor<1 = más
 // cerca. Bajalo para acercar más, subilo (hasta 1) para alejar.
-const FRAME_ZOOM = 0.68
+const FRAME_ZOOM = 0.85
 function zoomCloser(viewer, factor) {
   try {
     const nav = viewer.navigation, T = window.THREE
@@ -166,6 +166,37 @@ function zoomCloser(viewer, factor) {
   } catch { /* noop */ }
 }
 
+// Bounding box ROBUSTO: encuadra al grueso del modelo ignorando elementos
+// atípicos (un punto/equipo "perdido" lejísimos infla la caja y deja el modelo
+// como un puntito). Usa los percentiles 2–98 de los centros de los fragmentos,
+// así descarta los outliers. Devuelve null si no puede (→ se usa el bbox normal).
+function robustBounds(viewer) {
+  try {
+    const T = window.THREE, model = viewer.model
+    const fl = model?.getFragmentList?.()
+    if (!T || !fl) return null
+    const n = typeof fl.getCount === 'function' ? fl.getCount() : (fl.fragments?.length || 0)
+    if (n < 8) return null // modelos chicos: no hace falta filtrar outliers
+    const cx = [], cy = [], cz = [], tmp = new T.Box3()
+    for (let i = 0; i < n; i++) {
+      try {
+        fl.getWorldBounds(i, tmp)
+        if (!tmp.isEmpty()) { cx.push((tmp.min.x + tmp.max.x) / 2); cy.push((tmp.min.y + tmp.max.y) / 2); cz.push((tmp.min.z + tmp.max.z) / 2) }
+      } catch { /* fragmento sin bounds: lo salta */ }
+    }
+    if (cx.length < 8) return null
+    const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.max(0, Math.min(s.length - 1, Math.floor((s.length - 1) * p)))] }
+    const box = new T.Box3(
+      new T.Vector3(pct(cx, 0.02), pct(cy, 0.02), pct(cz, 0.02)),
+      new T.Vector3(pct(cx, 0.98), pct(cy, 0.98), pct(cz, 0.98)),
+    )
+    if (box.isEmpty()) return null
+    const size = box.getSize(new T.Vector3())
+    box.expandByVector(size.multiplyScalar(0.12)) // margen para no cortar bordes
+    return box
+  } catch { return null }
+}
+
 function frameModel(viewer) {
   let tries = 0, lastSpan = -1, stable = 0
   const fit = () => {
@@ -173,9 +204,9 @@ function frameModel(viewer) {
     if (viewer.model && hasSize(viewer.container)) {
       try {
         viewer.resize()
-        // Encuadra al bounding box REAL del modelo (más fiable que fitToView para
-        // modelos grandes); fallback a fitToView si no hay navigation.fitBounds.
-        const bbox = viewer.model.getBoundingBox?.()
+        // Encuadra al grueso del modelo (bbox robusto que ignora outliers); si no
+        // se puede, al bounding box completo; último recurso, fitToView.
+        const bbox = robustBounds(viewer) || viewer.model.getBoundingBox?.()
         if (bbox && viewer.navigation?.fitBounds) viewer.navigation.fitBounds(true, bbox)
         else viewer.fitToView(null, viewer.model, true)
         // Acerca un poco el encuadre por defecto (el fit completo queda muy lejos).
