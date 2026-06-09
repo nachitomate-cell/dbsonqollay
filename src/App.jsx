@@ -261,6 +261,29 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     if (item.type === 'elemento') setGridFocus({ sub: item.subId, query: item.tag, nonce: Date.now() })
   }
 
+  // Localizador de TAG entre TODAS las planillas (para el panel 3D: cuando el TAG
+  // del elemento no está en la planilla activa, sugerir en cuál sí está).
+  const tagLocator = useMemo(() => {
+    const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+    const idx = new Map()
+    for (const d of disciplines) {
+      for (const s of d.subcategories || []) {
+        const ds = s.dataKey && allDatasets[s.dataKey]
+        if (!ds?.rows?.length) continue
+        const tagKey = ds.headers?.[0]
+        for (const row of ds.rows) {
+          const t = norm(row[tagKey])
+          if (t && !idx.has(t)) idx.set(t, { subId: s.id, planilla: s.name })
+        }
+      }
+    }
+    return idx
+  }, [disciplines, allDatasets])
+  const findTagAcross = useCallback(
+    (tag) => tagLocator.get(String(tag ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '')) || null,
+    [tagLocator],
+  )
+
   function clearCreatedSheets() {
     setOpenSubs((prev) => prev.filter((id) => !createdSheets[id]))
     setActiveSub((cur) => (createdSheets[cur] ? null : cur))
@@ -335,6 +358,8 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
               onReturn={() => setActiveSub(null)}
               awp={{ cwps: awpCwps, importCwps, clearCwps }}
               focus={gridFocus}
+              findTagAcross={findTagAcross}
+              onOpenSubcategory={openSubcategory}
             />
           ) : showHome ? (
             <div className="h-full overflow-y-auto">

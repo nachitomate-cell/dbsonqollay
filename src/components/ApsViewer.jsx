@@ -261,7 +261,7 @@ function heatVec(w) {
   )
 }
 
-function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, awpCwps = [], onImportCwps, onConnectAwp, dataKey = 'default', isFiltered = false }) {
+function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecord, onEditRecords, awpCwps = [], onImportCwps, onConnectAwp, dataKey = 'default', isFiltered = false, findTagAcross, onOpenSubcategory }) {
   const mountRef = useRef(null)
   const viewerRef = useRef(null)
   const fileRef = useRef(null)
@@ -1335,7 +1335,20 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
                 )}
               </div>
             ) : (
-              <p className="mb-3 rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-400 dark:bg-white/5">Sin registro en la planilla para este objeto (el TAG no coincide).</p>
+              (() => {
+                // Sin match en la planilla activa: buscar el TAG en TODAS las
+                // planillas y sugerir en cuál está (evita el "no coincide" a secas).
+                const elsewhere = objProps.tag && findTagAcross ? findTagAcross(objProps.tag) : null
+                if (elsewhere) return (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] dark:border-amber-500/30 dark:bg-amber-500/10">
+                    <p className="text-amber-800 dark:text-amber-300">El TAG <span className="font-mono font-semibold">{objProps.tag}</span> está en la planilla <b>{elsewhere.planilla}</b>, no en esta.</p>
+                    {onOpenSubcategory && (
+                      <button onClick={() => onOpenSubcategory(elsewhere.subId)} className="mt-1 font-semibold text-amber-700 hover:underline dark:text-amber-300">Abrir “{elsewhere.planilla}” →</button>
+                    )}
+                  </div>
+                )
+                return <p className="mb-3 rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-400 dark:bg-white/5">{objProps.tag ? `El TAG “${objProps.tag}” no está en ninguna planilla cargada.` : 'Este objeto no tiene un TAG vinculable a las planillas.'}</p>
+              })()
             )}
             {objProps.groups.length > 0 && <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Propiedades del modelo (solo lectura)</p>}
             {objProps.groups.length === 0 && <p className="py-3 text-center text-xs text-slate-400">Este objeto no tiene propiedades.</p>}

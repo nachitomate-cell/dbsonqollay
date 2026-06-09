@@ -86,7 +86,7 @@ const defaultWidth = (h) => {
 
 /* --------------------------- component ----------------------------- */
 
-export default function DataTable({ dataset, subcategory, onBack, awp = {}, focusQuery, focusNonce }) {
+export default function DataTable({ dataset, subcategory, onBack, awp = {}, focusQuery, focusNonce, findTagAcross, onOpenSubcategory }) {
   const { cwps: awpCwps = [], importCwps, clearCwps } = awp
   const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo, loading } =
     useEditableDataset(subcategory.dataKey, dataset)
@@ -1425,6 +1425,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                   onConnectAwp={connectIdsToAwp}
                   dataKey={subcategory.dataKey}
                   isFiltered={activeFilters.length > 0 || query.trim() !== ''}
+                  findTagAcross={findTagAcross}
+                  onOpenSubcategory={onOpenSubcategory}
                 />
                 </Suspense>
               </ViewerErrorBoundary>
