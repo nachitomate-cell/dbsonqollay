@@ -178,12 +178,17 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   const searchRef = useRef(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Pantalla completa del contenedor del visor 3D (sirve para ambos motores).
+  // Pantalla completa del visor. Usa la Fullscreen API si el navegador la soporta
+  // (Android/escritorio); en iOS (no la soporta en divs) cae a pantalla completa
+  // por CSS (estado `fullscreen`, que pone la card en fixed inset-0).
   function toggleFullscreen() {
     const el = viewerWrapRef.current
-    if (!el) return
-    if (document.fullscreenElement) document.exitFullscreen?.()
-    else el.requestFullscreen?.()
+    if (el && document.fullscreenEnabled && el.requestFullscreen) {
+      if (document.fullscreenElement) document.exitFullscreen?.()
+      else el.requestFullscreen().catch(() => setFullscreen((v) => !v))
+      return
+    }
+    setFullscreen((v) => !v)
   }
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement)
@@ -1410,10 +1415,10 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             <div ref={viewerWrapRef} className="relative min-h-[280px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-900">
               <button
                 onClick={toggleFullscreen}
-                title={isFullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
+                title={(isFullscreen || fullscreen) ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
                 className="absolute bottom-3 right-3 z-20 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white/90 text-slate-600 shadow backdrop-blur transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800/90 dark:text-slate-300 dark:hover:text-accent"
               >
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                {(isFullscreen || fullscreen) ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
               <ViewerErrorBoundary>
                 <Suspense fallback={<ViewerLoading />}>
