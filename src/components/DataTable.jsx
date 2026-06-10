@@ -1265,7 +1265,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
           </div>
 
           {/* Content: planilla / 3D / split */}
-          <div className="mx-4 mb-4 flex min-h-0 flex-1 gap-3">
+          <div className="mx-4 mb-4 flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
             {(viewMode === 'grid' || viewMode === 'split') && (
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-white/10">
               <table className={`w-max table-fixed border-separate border-spacing-0 ${bodyText}`}>
