@@ -1,4 +1,4 @@
-import { ArrowRight, Box, Boxes, Building2, CheckCircle2, CloudUpload, Database, Gauge, History, Instagram, Layers, Linkedin, Link2, LogIn, Mail, Phone, Search, ShieldCheck, Youtube } from 'lucide-react'
+import { ArrowRight, Box, Boxes, Building2, CheckCircle2, CloudUpload, Database, Gauge, History, Instagram, Layers, Linkedin, Link2, LogIn, Mail, Phone, ShieldCheck, Youtube } from 'lucide-react'
 
 /**
  * Landing pública (antes del login), estilo sitio corporativo Sonqollay:
@@ -96,35 +96,10 @@ export default function Landing({ onLogin }) {
             </ul>
           </div>
 
-          {/* Visual: mockup de la app */}
+          {/* Visual: captura real de la app (dashboard del proyecto) */}
           <div className="relative">
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
-              <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-white/5 dark:bg-ink-900/60">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-400" />
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                <span className="ml-3 inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-0.5 text-[10px] text-slate-400 dark:bg-ink-800"><Search className="h-3 w-3" /> Aura GIP</span>
-              </div>
-              <div className="p-5">
-                <div className="mb-4 grid grid-cols-3 gap-3">
-                  {[['Elementos', '1.240'], ['Disciplinas', '8/9'], ['Cobertura', '86%']].map(([k, v]) => (
-                    <div key={k} className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-white/5 dark:bg-ink-900/40">
-                      <p className="text-lg font-extrabold tabular-nums text-slate-800 dark:text-white">{v}</p>
-                      <p className="text-[10px] text-slate-400">{k}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2.5">
-                  {[['Eléctrico', 92], ['Cañerías', 74], ['Estructura', 100], ['Mecánica', 48]].map(([d, p]) => (
-                    <div key={d}>
-                      <div className="mb-1 flex justify-between text-[11px] text-slate-500 dark:text-slate-400"><span>{d}</span><span className="tabular-nums">{p}%</span></div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
-                        <div className={`h-full rounded-full ${p === 100 ? 'bg-emerald-500' : 'bg-[#F77000]'}`} style={{ width: `${p}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-2xl ring-1 ring-black/5 dark:border-white/10">
+              <img src="/hero.png" alt="Aura GIP — dashboard del proyecto con KPIs y avance por disciplina" className="block w-full" width="1440" height="880" />
             </div>
             <div className="pointer-events-none absolute -bottom-5 -left-5 hidden h-20 w-20 rounded-2xl bg-brand-400/80 sm:block" />
           </div>
