@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.22.0";
+        private const string Version = "1.23.0";
 
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";

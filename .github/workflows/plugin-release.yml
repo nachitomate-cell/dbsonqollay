@@ -44,8 +44,10 @@ jobs:
           if (-not $env:SQY_API_TOKEN) {
             throw "Falta el secret SQY_API_TOKEN (Settings -> Secrets -> Actions). El zip quedaria sin token."
           }
+          # Estructura clara: raiz = "Instalar Aura GIP.bat" + LEEME; lo tecnico en recursos/
           $stage = "package"
-          $bundle = Join-Path $stage 'AuraBIM.bundle'
+          $recursos = Join-Path $stage 'recursos'
+          $bundle = Join-Path $recursos 'AuraBIM.bundle'
           New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents/en-US') | Out-Null
           # Estructura del bundle: PackageContents + ribbon (pestana "Aura GIP")
           Copy-Item bundle/PackageContents.xml $bundle
@@ -60,9 +62,12 @@ jobs:
           $cfg = Get-Content instalador/AuraBIM.config.example.json -Raw
           $cfg = $cfg -replace 'PEGAR_AQUI_EL_TOKEN_COMPARTIDO', $env:SQY_API_TOKEN
           Set-Content -Path (Join-Path $bundle 'Contents/AuraBIM.config.json') -Value $cfg -NoNewline
-          # Instalador grafico (en la raiz del zip; copia el bundle a ApplicationPlugins)
-          Copy-Item instalador/Instalar.bat,instalador/install.ps1,instalador/LEEME.txt $stage
-          Copy-Item assets/aurabim.png $stage
+          # Raiz: solo el lanzador y el LEEME (lo unico que el usuario toca).
+          Copy-Item instalador/Instalar.bat (Join-Path $stage 'Instalar Aura GIP.bat')
+          Copy-Item instalador/LEEME.txt    (Join-Path $stage 'LEEME.txt')
+          # recursos/: el script y el logo (el bundle ya se armo dentro de recursos).
+          Copy-Item instalador/install.ps1 $recursos
+          Copy-Item assets/aurabim.png     $recursos
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath AuraBIM-instalador.zip -Force
 
       - name: Publicar Release

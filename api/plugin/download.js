@@ -8,16 +8,30 @@ import { send, fail } from '../_lib/aps.js'
  * Sirve el instalador del plugin DESDE el backend (el repo puede ser privado).
  *   - Con `key` válida  → instalador con el token de ESA empresa inyectado.
  *   - Con `key` inválida → 403 (cliente desconocido o desactivado).
- *   - Sin `key`         → instalador con el token por defecto
- *                         (PLUGIN_DEFAULT_TOKEN o SQY_API_TOKEN); si no hay
- *                         ninguno, se sirve el ZIP tal cual lo armó el CI.
- *                         Esto mantiene andando el despliegue de un solo cliente.
+ *   - Sin `key`         → REDIRIGE a la Release pública de GitHub (dominio con
+ *                         reputación → Chrome no marca "descarga sospechosa").
+ *                         El ZIP de la Release ya trae el token compartido.
+ *                         Si el repo es PRIVADO, setear PLUGIN_NO_REDIRECT=1 para
+ *                         servir desde el backend (con el costo del aviso).
  */
 export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') return send(res, 405, { error: 'Método no permitido' })
 
     const key = String(req.query.key || '').trim()
+
+    // Descarga genérica (sin empresa): redirige a GitHub. Evita el bloqueo de
+    // "descarga sospechosa" de Chrome (ZIP con scripts desde dominio sin reputación).
+    if (!key && process.env.PLUGIN_NO_REDIRECT !== '1') {
+      const repo = process.env.PLUGIN_REPO || 'nachitomate-cell/dbsonqollay'
+      const asset = process.env.PLUGIN_ASSET || 'AuraBIM-instalador.zip'
+      res.statusCode = 302
+      res.setHeader('Location', `https://github.com/${repo}/releases/latest/download/${asset}`)
+      res.setHeader('Cache-Control', 'no-store')
+      res.end()
+      return
+    }
+
     let client = null
     if (key) {
       client = clientByDownloadKey(key)
@@ -31,7 +45,7 @@ export default async function handler(req, res) {
     const template = await fetchTemplate()
     const zip = token ? personalizeZip(template, { apiToken: token, baseUrl: client?.baseUrl }) : template
 
-    const filename = client ? `AuraBIM-${client.id}.zip` : 'AuraBIM-instalador.zip'
+    const filename = client ? `Aura-GIP-${client.id}.zip` : 'Aura-GIP-Instalador.zip'
     res.status(200)
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)

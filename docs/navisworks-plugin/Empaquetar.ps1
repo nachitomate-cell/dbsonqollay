@@ -29,9 +29,13 @@ if ((Get-Content $cfg -Raw) -match 'PEGAR_AQUI_EL_TOKEN') {
   Write-Host "Edita ese archivo con el token real antes de entregar el ZIP." -ForegroundColor Yellow
 }
 
+# Estructura del ZIP, clara para el usuario:
+#   raiz/  "Instalar Aura GIP.bat" + "LEEME.txt"  (lo unico visible)
+#   raiz/recursos/  install.ps1 + aurabim.png + AuraBIM.bundle  (lo tecnico)
 $stage = Join-Path $env:TEMP 'AuraBIM-pkg'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-$bundle = Join-Path $stage 'AuraBIM.bundle'
+$recursos = Join-Path $stage 'recursos'
+$bundle = Join-Path $recursos 'AuraBIM.bundle'
 New-Item -ItemType Directory -Force (Join-Path $bundle 'Contents\en-US') | Out-Null
 
 # Valida el ribbon ANTES de empaquetar: debe ser XML bien formado y NO traer
@@ -56,11 +60,12 @@ Copy-Item (Join-Path $root 'bundle\Contents\en-US\*') (Join-Path $bundle 'Conten
 # DLL compilado + config (junto al DLL, en Contents).
 Copy-Item $dll.FullName (Join-Path $bundle 'Contents')
 Copy-Item $cfg (Join-Path $bundle 'Contents\AuraBIM.config.json')
-# Instalador grafico en la raiz del zip (copia el bundle a ApplicationPlugins).
-foreach ($f in 'Instalar.bat','install.ps1','LEEME.txt') {
-  Copy-Item (Join-Path $dist $f) $stage
-}
-Copy-Item (Join-Path $root 'assets\aurabim.png') $stage
+# Raiz del ZIP: solo el lanzador y el LEEME (el resto va en recursos\).
+Copy-Item (Join-Path $dist 'Instalar.bat') (Join-Path $stage 'Instalar Aura GIP.bat')
+Copy-Item (Join-Path $dist 'LEEME.txt')    (Join-Path $stage 'LEEME.txt')
+# recursos\: el script y el logo (el bundle ya se armo dentro de recursos).
+Copy-Item (Join-Path $dist 'install.ps1')        $recursos
+Copy-Item (Join-Path $root 'assets\aurabim.png') $recursos
 
 $out = Join-Path $root 'AuraBIM-instalador.zip'
 Remove-Item $out -Force -ErrorAction SilentlyContinue
@@ -69,4 +74,4 @@ Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $out -Force
 Write-Host ""
 Write-Host "ZIP listo para entregar:" -ForegroundColor Green
 Write-Host "   $out" -ForegroundColor Green
-Write-Host "Contenido: AuraBIM.dll + config + Instalar.bat + install.ps1 + LEEME.txt"
+Write-Host "Contenido: 'Instalar Aura GIP.bat' + LEEME.txt + recursos\(install.ps1, bundle, png)"
