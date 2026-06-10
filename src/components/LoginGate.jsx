@@ -1,9 +1,10 @@
 import { createContext, useContext, useState } from 'react'
-import { Box, Boxes, Database, Eye, EyeOff, FlaskConical, Loader2, Mail, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Box, Boxes, Database, Eye, EyeOff, FlaskConical, Loader2, Mail, ShieldCheck } from 'lucide-react'
 import {
   authEnabled, getSession, signIn, signUp, signOut, signInDemo,
   sendMagicLink, sendPasswordReset, lastEmail, rememberEmail,
 } from '../lib/auth.js'
+import Landing from './Landing.jsx'
 
 /**
  * Puerta de autenticación. Envuelve a <ProjectGate/> en main.jsx.
@@ -20,8 +21,15 @@ export function useAuth() {
 
 export default function LoginGate({ children }) {
   const [session, setSession] = useState(() => getSession())
+  // Antes del login se muestra la landing pública; "Iniciar sesión" abre el form.
+  const [showLogin, setShowLogin] = useState(false)
 
-  if (!session) return <LoginScreen onSuccess={(s) => setSession(s)} />
+  if (!session) {
+    if (!showLogin) {
+      return <Landing onLogin={() => setShowLogin(true)} onDemo={() => setSession(signInDemo(true))} />
+    }
+    return <LoginScreen onSuccess={(s) => setSession(s)} onBack={() => setShowLogin(false)} />
+  }
 
   return (
     <AuthContext.Provider value={{ user: session.user, isDemo: !!session.demo, signOut: () => { signOut(); setSession(null) } }}>
@@ -30,7 +38,7 @@ export default function LoginGate({ children }) {
   )
 }
 
-function LoginScreen({ onSuccess }) {
+function LoginScreen({ onSuccess, onBack }) {
   const realAuth = authEnabled()
   const [mode, setMode] = useState('signin') // 'signin' | 'signup'
   const [email, setEmail] = useState(() => lastEmail())
@@ -134,6 +142,11 @@ function LoginScreen({ onSuccess }) {
       {/* Panel del formulario (tarjeta) */}
       <main className="flex w-full items-center justify-center px-4 py-10 lg:w-1/2">
         <div className="w-full max-w-md">
+          {onBack && (
+            <button onClick={onBack} className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-brand-600 dark:text-slate-400 dark:hover:text-accent">
+              <ArrowLeft className="h-4 w-4" /> Volver
+            </button>
+          )}
           <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-white/10 dark:bg-ink-800">
             {/* Marca en móvil (en desktop la muestra el panel izquierdo) */}
             <img src="/aura1.png" alt="Aura" className="mb-4 h-12 w-12 object-contain lg:hidden" />
