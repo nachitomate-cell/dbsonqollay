@@ -34,4 +34,4 @@ AURA GIP  —  Plugin para Autodesk Navisworks (Manage / Simulate 2024-2026)
 
   No hay nada que configurar: la URL y el token ya vienen incluidos.
 
-  Soporte: synaptechspa.cl
+  Soporte: contacto@sonqollay.cl

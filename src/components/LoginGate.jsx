@@ -26,7 +26,7 @@ export default function LoginGate({ children }) {
 
   if (!session) {
     if (!showLogin) {
-      return <Landing onLogin={() => setShowLogin(true)} onDemo={() => setSession(signInDemo(true))} />
+      return <Landing onLogin={() => setShowLogin(true)} />
     }
     return <LoginScreen onSuccess={(s) => setSession(s)} onBack={() => setShowLogin(false)} />
   }
