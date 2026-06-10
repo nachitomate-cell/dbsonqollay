@@ -53,6 +53,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
   const panel = 'absolute right-0 top-11 z-40 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-ink-800'
 
   return (
+    <>
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-slate-200 bg-white/80 px-4 py-3.5 backdrop-blur-xl sm:gap-4 sm:px-6 dark:border-white/5 dark:bg-ink-900/70">
       {/* Hamburguesa (cajón lateral) — solo en pantallas chicas */}
       {onOpenMobileNav && (
@@ -158,8 +159,6 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           <Settings className="h-4 w-4" />
         </button>
 
-        <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
-
         {/* Menú de usuario */}
         <div className="relative">
           {userOpen && <div className="fixed inset-0 z-30" onClick={() => setUserOpen(false)} />}
@@ -221,5 +220,10 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
         </div>
       </div>
     </header>
+
+    {/* Fuera del <header> (que tiene backdrop-blur y crea contexto de
+        posicionamiento para los fixed): así el modal cubre toda la pantalla. */}
+    <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+    </>
   )
 }
