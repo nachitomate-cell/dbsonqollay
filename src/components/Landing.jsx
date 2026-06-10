@@ -37,6 +37,27 @@ const AUDIENCES = [
   { title: 'Consultoras de ingeniería', desc: 'Centralizan planillas y modelos de varios clientes, aislados.' },
 ]
 
+const SHOWCASE = [
+  {
+    img: '/shot-grid.png', tag: 'Planillas de ingeniería',
+    title: 'Tus datos, ordenados y editables',
+    desc: 'Importa desde Excel/CSV y edita en grilla. Cada elemento con su TAG, cantidad y propiedades — organizado por disciplina.',
+    points: ['Importación Excel / CSV', 'Autoguardado en la nube', 'Detección de TAGs duplicados'],
+  },
+  {
+    img: '/shot-3d.png', tag: 'Visor BIM 3D',
+    title: 'El modelo, ligado a cada dato',
+    desc: 'Selecciona un elemento en el modelo y ve su registro de planilla. Colorea por paquete de trabajo o por avance.',
+    points: ['Autodesk APS — sin licencias extra', 'Vínculo por TAG', 'Colorear por avance o CWP'],
+  },
+  {
+    img: '/shot-split.png', tag: 'Vista dividida',
+    title: 'Datos y modelo, lado a lado',
+    desc: 'Trabaja la planilla y el modelo 3D al mismo tiempo. Lo que editas queda reflejado y publicado para todo el equipo.',
+    points: ['Tabla + 3D simultáneos', 'Edición en contexto', 'Publicación a la nube desde Navisworks'],
+  },
+]
+
 export default function Landing({ onLogin }) {
   return (
     <div className="min-h-screen scroll-smooth bg-white text-slate-800 dark:bg-ink-900 dark:text-slate-100">
@@ -136,6 +157,31 @@ export default function Landing({ onLogin }) {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Showcase: capturas reales (zigzag) */}
+      <section className="mx-auto max-w-6xl space-y-20 px-6 py-16 sm:py-20">
+        {SHOWCASE.map((s, i) => (
+          <div key={s.title} className="grid items-center gap-8 lg:grid-cols-2 lg:gap-12">
+            <div className={i % 2 === 1 ? 'lg:order-2' : ''}>
+              <span className="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-accent">{s.tag}</span>
+              <h3 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">{s.title}</h3>
+              <p className="mt-3 text-base leading-relaxed text-slate-500 dark:text-slate-400">{s.desc}</p>
+              <ul className="mt-5 space-y-2.5">
+                {s.points.map((p) => (
+                  <li key={p} className="flex items-center gap-2.5 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-500 dark:text-accent" /> {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className={i % 2 === 1 ? 'lg:order-1' : ''}>
+              <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-xl ring-1 ring-black/5 dark:border-white/10">
+                <img src={s.img} alt={s.title} loading="lazy" className="block w-full" width="1440" height="880" />
+              </div>
+            </div>
+          </div>
+        ))}
       </section>
 
       {/* Cómo funciona */}
