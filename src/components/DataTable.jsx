@@ -1032,7 +1032,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
-            <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40">
+            {/* Herramientas de tabla: en móvil se ocultan cuando estás en 3D (no aplican). */}
+            <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40`}>
               <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
               <ToolIcon icon={Undo2} title="Deshacer (Ctrl+Z)" onClick={undo} disabled={!canUndo} />
               <ToolIcon icon={Redo2} title="Rehacer (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo} />
@@ -1069,36 +1070,39 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               </button>
             )}
 
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
-              <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar… (Ctrl+F)"
-                className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
-              />
-              {query && (
-                <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+            {/* Buscar + ordenar: en móvil se ocultan en vista 3D (son de la tabla). */}
+            <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-2`}>
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
+                <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                <input
+                  ref={searchRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar… (Ctrl+F)"
+                  className="w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none dark:text-slate-200 dark:placeholder:text-slate-600"
+                />
+                {query && (
+                  <button onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
 
-            <Labeled label="Ordenar por">
-              <Select value={sort.key ?? ''} onChange={(v) => setSort((s) => ({ key: v || null, dir: s.dir }))}>
-                <option value="">—</option>
-                {headers.map((h) => (
-                  <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
-                ))}
-              </Select>
-            </Labeled>
-            <Labeled label="Orden">
-              <Select value={sort.dir} onChange={(v) => setSort((s) => ({ ...s, dir: v }))}>
-                <option value="asc">Ascendente</option>
-                <option value="desc">Descendente</option>
-              </Select>
-            </Labeled>
+              <Labeled label="Ordenar por">
+                <Select value={sort.key ?? ''} onChange={(v) => setSort((s) => ({ key: v || null, dir: s.dir }))}>
+                  <option value="">—</option>
+                  {headers.map((h) => (
+                    <option key={h} value={h}>{h.replace(/_/g, ' ')}</option>
+                  ))}
+                </Select>
+              </Labeled>
+              <Labeled label="Orden">
+                <Select value={sort.dir} onChange={(v) => setSort((s) => ({ ...s, dir: v }))}>
+                  <option value="asc">Ascendente</option>
+                  <option value="desc">Descendente</option>
+                </Select>
+              </Labeled>
+            </div>
           </div>
 
           {/* Panel de estadísticas */}
@@ -1166,8 +1170,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             />
           )}
 
-          {/* Filter row */}
-          <div className="flex flex-wrap items-end gap-3 px-4 pb-2">
+          {/* Filter row — en móvil se oculta en vista 3D (filtros de la tabla). */}
+          <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-3 px-4 pb-2`}>
             <Labeled label="Filtrar por">
               <Select value={filterByCol} onChange={setFilterByCol}>
                 <option value="">— Elegir columna —</option>
