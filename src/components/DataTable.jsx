@@ -38,6 +38,7 @@ import {
   TriangleAlert,
   Undo2,
   Upload,
+  WifiOff,
   X,
 } from 'lucide-react'
 
@@ -45,6 +46,7 @@ import {
 const ApsViewer = lazyWithReload(() => import('./ApsViewer.jsx'))
 import { useEditableDataset } from '../hooks/useEditableDataset.js'
 import { activeProjectId, authFetch, currentUser } from '../lib/auth.js'
+import { dequeue as offlineDequeue, enqueue as offlineEnqueue, isOnline as offlineIsOnline } from '../lib/offline.js'
 import { lazyWithReload } from '../lib/lazyWithReload.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
@@ -292,9 +294,16 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const { rows, headers, columns, name, dataKey } = saveDataRef.current
     const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
     const version = editVersionRef.current // versión que estamos por persistir
+    const pid = activeProjectId()
+    // Sin conexión: el cambio ya quedó en localStorage; lo encolamos para subirlo
+    // al reconectar. No intentamos el POST (fallaría).
+    if (!offlineIsOnline()) {
+      offlineEnqueue(dataKey, { projectId: pid, name, author: currentUser()?.email })
+      setAutosave({ status: 'offline', at: Date.now() })
+      return
+    }
     setAutosave({ status: 'saving' })
     try {
-      const pid = activeProjectId()
       const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(dataKey)}${pid ? `?project=${pid}` : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -312,11 +321,17 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         return // queda pendiente (no tocamos pendingRef)
       }
       savedVersionRef.current = version
+      offlineDequeue(dataKey) // por si había quedado encolada de una edición offline
       setAutosave({ status: 'saved', at: Date.now() })
       // Solo "al día" si no llegó otra edición mientras se guardaba.
       if (editVersionRef.current === version) setPending(false)
     } catch (e) {
-      setAutosave({ status: 'error', at: Date.now(), error: e.message }) // queda pendiente
+      // Falló el POST (típicamente se cayó la red en medio): el cambio ya está en
+      // localStorage; lo encolamos para reintentar al reconectar.
+      offlineEnqueue(dataKey, { projectId: pid, name, author: currentUser()?.email })
+      setAutosave(offlineIsOnline()
+        ? { status: 'error', at: Date.now(), error: e.message }
+        : { status: 'offline', at: Date.now() })
     }
   }
   // Fuerza el guardado inmediato (botón "Guardar ahora"), sin esperar el debounce.
@@ -1903,6 +1918,13 @@ function AutosaveBadge({ state, onRetry }) {
     return (
       <span title={`Tus cambios se guardaron en la base de datos a las ${fmt(state.at)}`} className={`${base} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-400`}>
         <Database className="h-3.5 w-3.5" /> Guardado en la base de datos <Check className="h-3.5 w-3.5" />
+      </span>
+    )
+  }
+  if (state.status === 'offline') {
+    return (
+      <span title="Sin conexión. Tus cambios quedaron guardados en este equipo y se subirán solos al reconectar." className={`${base} border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400`}>
+        <WifiOff className="h-3.5 w-3.5" /> Guardado en este equipo (sin conexión)
       </span>
     )
   }

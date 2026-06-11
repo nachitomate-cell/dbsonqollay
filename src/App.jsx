@@ -22,6 +22,7 @@ import { useCustomDisciplines } from './hooks/useCustomDisciplines.js'
 import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 import { globalSearch } from './utils/globalSearch.js'
+import { initSync } from './lib/offline.js'
 
 /**
  * Navegación simulada (sin router). El estado vive en App:
@@ -35,6 +36,8 @@ import { globalSearch } from './utils/globalSearch.js'
  */
 export default function App({ project, onChangeProject, org, onChangeOrg }) {
   const { user, isDemo, signOut } = useAuth()
+  // Motor de sincronización offline: vacía la cola de cambios al reconectar.
+  useEffect(() => { initSync() }, [])
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNav, setMobileNav] = useState(false) // cajón lateral en pantallas chicas
   const [settingsOpen, setSettingsOpen] = useState(false)

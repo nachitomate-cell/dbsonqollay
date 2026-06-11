@@ -3,6 +3,7 @@ import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, 
 import InstallButton from './InstallButton.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
+import OfflineIndicator from './OfflineIndicator.jsx'
 
 // Iniciales para el avatar a partir del nombre o el email.
 function initials(user) {
@@ -88,6 +89,8 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
 
       <div className="ml-auto flex items-center gap-3">
         {search && <GlobalSearch search={search} onResult={onSearchResult} />}
+
+        <OfflineIndicator />
 
         <InstallButton />
 
