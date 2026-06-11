@@ -1,21 +1,32 @@
 /**
- * Soporte offline (Fase 1) para las planillas.
+ * Soporte offline para las planillas — Fase 1 + Fase 2.
  *
  * Idea: el dispositivo es la fuente de verdad mientras no hay red. Las ediciones
- * ya se guardan en localStorage (utils/datastore: saveWorking). Acá agregamos:
+ * ya se guardan en localStorage (utils/datastore: saveWorking). Acá:
  *   - Un "outbox" (cola de cambios pendientes de subir), uno por planilla (dataKey),
  *     coalescado: solo importa el último estado de cada planilla.
- *   - Un motor que vacía la cola contra /api/datasets cuando vuelve la conexión.
- *   - Estado observable (online + pendientes) para el indicador del header.
+ *   - Un motor que vacía la cola contra /api/datasets al volver la conexión.
+ *   - Estado observable (online + pendientes + atascados + última sync).
  *
- * Política de conflictos (Fase 1): última-escritura-gana a nivel de planilla
- * (el POST reemplaza el dataset de esa key, igual que el autoguardado normal).
- * El merge fino por TAG queda para la Fase 2.
+ * Fase 2:
+ *   - La cola es la ÚNICA fuente de verdad de "falta subir": se encola SIEMPRE
+ *     al guardar (no solo cuando falla) y se quita al subir bien. Así, si se
+ *     corta a mitad o se cierra la pestaña, el cambio se sincroniza al reabrir.
+ *   - Límite de reintentos: tras varios fallos, la planilla queda "atascada"
+ *     (stuck) y se muestra para reintento manual, en vez de reintentar para
+ *     siempre en silencio.
+ *   - Marca de "última sincronización".
+ *
+ * Política de conflictos (Fase 1/2): última-escritura-gana por planilla (el POST
+ * reemplaza el dataset de esa key). El merge fino por TAG queda para Fase 3 (sin
+ * tracking por fila, un merge ingenuo re-agregaría filas borradas localmente).
  */
 import { authFetch } from './auth.js'
 import { loadWorking } from '../utils/datastore.js'
 
 const OUTBOX = 'sqy-outbox'
+const LASTSYNC = 'sqy-last-sync'
+const MAX_ATTEMPTS = 6 // tras estos fallos seguidos, la planilla queda "atascada"
 const listeners = new Set()
 let flushing = false
 let started = false
@@ -35,20 +46,34 @@ function notify() { for (const cb of listeners) { try { cb() } catch { /* ignore
 export function isOnline() { return typeof navigator === 'undefined' ? true : navigator.onLine !== false }
 /** ¿Se está sincronizando ahora? */
 export function isFlushing() { return flushing }
-/** Cantidad de planillas con cambios pendientes de subir. */
-export function pendingCount() { return Object.keys(readOutbox()).length }
-/** Suscribe a cambios de estado (online/pendientes). Devuelve función para desuscribir. */
+/** Total de planillas con cambios sin subir (pendientes + atascadas). */
+export function unsyncedCount() { return Object.keys(readOutbox()).length }
+/** Planillas que fallaron repetidas veces y esperan reintento manual. */
+export function stuckCount() { return Object.values(readOutbox()).filter((e) => e.stuck).length }
+/** Marca de tiempo de la última sincronización exitosa (ms) o null. */
+export function lastSyncAt() { const v = localStorage.getItem(LASTSYNC); return v ? Number(v) : null }
+/** Suscribe a cambios de estado. Devuelve función para desuscribir. */
 export function subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb) }
 
+function markSynced() { try { localStorage.setItem(LASTSYNC, String(Date.now())) } catch { /* ignore */ } }
+
 /**
- * Encola una planilla para subir cuando haya red. Solo guarda metadatos; el
- * contenido (filas/columnas) se lee de localStorage al momento de sincronizar,
- * así siempre sube el último estado y la cola se mantiene chica.
+ * Encola/refresca una planilla para subir. Resetea los reintentos (es un cambio
+ * nuevo). Solo guarda metadatos; el contenido se lee de localStorage al subir.
  */
 export function enqueue(dataKey, { projectId = null, name = null, author = null } = {}) {
   if (!dataKey) return
   const o = readOutbox()
-  o[dataKey] = { dataKey, projectId, name: name || dataKey, author, at: Date.now() }
+  const prev = o[dataKey]
+  o[dataKey] = {
+    dataKey,
+    projectId: projectId ?? prev?.projectId ?? null,
+    name: name || prev?.name || dataKey,
+    author: author ?? prev?.author ?? null,
+    at: Date.now(),
+    attempts: 0,
+    stuck: false,
+  }
   writeOutbox(o)
 }
 
@@ -58,15 +83,26 @@ export function dequeue(dataKey) {
   if (o[dataKey] != null) { delete o[dataKey]; writeOutbox(o) }
 }
 
+function bumpAttempt(dataKey) {
+  const o = readOutbox()
+  const e = o[dataKey]
+  if (!e) return
+  e.attempts = (e.attempts || 0) + 1
+  if (e.attempts >= MAX_ATTEMPTS) e.stuck = true
+  writeOutbox(o)
+}
+
 /**
- * Vacía la cola: sube cada planilla pendiente al backend. Las que fallan quedan
- * en la cola para el próximo intento. Devuelve { ok, fail }.
+ * Vacía la cola: sube cada planilla pendiente. Las que fallan suman un intento;
+ * tras MAX_ATTEMPTS quedan "atascadas" (se omiten hasta un reintento manual con
+ * { retryStuck: true }). Devuelve { ok, fail }.
  */
-export async function flush() {
+export async function flush({ retryStuck = false } = {}) {
   if (flushing || !isOnline()) return { ok: 0, fail: 0 }
   const o = readOutbox()
-  const keys = Object.keys(o)
+  const keys = Object.keys(o).filter((k) => retryStuck || !o[k].stuck)
   if (!keys.length) return { ok: 0, fail: 0 }
+  if (retryStuck) { for (const k of keys) { o[k].stuck = false; o[k].attempts = 0 } writeOutbox(o) }
   flushing = true; notify()
   let ok = 0, fail = 0
   try {
@@ -93,8 +129,8 @@ export async function flush() {
         const j = ct.includes('application/json') ? await res.json() : {}
         if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
         if (j.db && (j.db.error || j.db.skipped)) throw new Error('db-no-config')
-        dequeue(k); ok++
-      } catch { fail++ } // queda en la cola para reintentar
+        dequeue(k); ok++; markSynced()
+      } catch { bumpAttempt(k); fail++ } // queda en la cola para reintentar
     }
   } finally { flushing = false; notify() }
   return { ok, fail }
@@ -108,9 +144,9 @@ export async function flush() {
 export function initSync() {
   if (started || typeof window === 'undefined') return
   started = true
-  const tryFlush = () => { notify(); if (isOnline() && pendingCount()) flush() }
+  const tryFlush = () => { notify(); if (isOnline() && unsyncedCount()) flush() }
   window.addEventListener('online', tryFlush)
   window.addEventListener('offline', notify)
-  setInterval(() => { if (isOnline() && pendingCount()) flush() }, 30000)
+  setInterval(() => { if (isOnline() && unsyncedCount() > stuckCount()) flush() }, 30000)
   setTimeout(tryFlush, 1500)
 }

@@ -295,10 +295,12 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const apiBase = localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
     const version = editVersionRef.current // versión que estamos por persistir
     const pid = activeProjectId()
-    // Sin conexión: el cambio ya quedó en localStorage; lo encolamos para subirlo
-    // al reconectar. No intentamos el POST (fallaría).
+    // Encola SIEMPRE (única fuente de verdad de "falta subir"); se quita al subir
+    // bien. Así, si se corta la red o se cierra la pestaña a mitad, el cambio se
+    // sincroniza al reconectar/reabrir. El contenido ya está en localStorage.
+    offlineEnqueue(dataKey, { projectId: pid, name, author: currentUser()?.email })
+    // Sin conexión: no intentamos el POST (fallaría); queda en la cola.
     if (!offlineIsOnline()) {
-      offlineEnqueue(dataKey, { projectId: pid, name, author: currentUser()?.email })
       setAutosave({ status: 'offline', at: Date.now() })
       return
     }
@@ -326,9 +328,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       // Solo "al día" si no llegó otra edición mientras se guardaba.
       if (editVersionRef.current === version) setPending(false)
     } catch (e) {
-      // Falló el POST (típicamente se cayó la red en medio): el cambio ya está en
-      // localStorage; lo encolamos para reintentar al reconectar.
-      offlineEnqueue(dataKey, { projectId: pid, name, author: currentUser()?.email })
+      // Falló el POST (típicamente se cayó la red en medio): el cambio ya quedó
+      // encolado arriba, así que el motor de sync lo reintentará al reconectar.
       setAutosave(offlineIsOnline()
         ? { status: 'error', at: Date.now(), error: e.message }
         : { status: 'offline', at: Date.now() })

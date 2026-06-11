@@ -50,12 +50,16 @@ export function loadWorking(dataKey) {
   return null
 }
 
-/** Guarda el estado editable de una planilla. */
+/** Guarda el estado editable de una planilla. Devuelve true si se guardó. */
 export function saveWorking(dataKey, state) {
   try {
     localStorage.setItem(KEY(dataKey), JSON.stringify(state))
+    return true
   } catch {
-    /* cuota excedida */
+    // Cuota excedida: NO perder el cambio en silencio. Avisamos para que la UI
+    // lo muestre (el fix definitivo es IndexedDB — Fase 3 del offline).
+    try { window.dispatchEvent(new CustomEvent('sqy-storage-full', { detail: { dataKey } })) } catch { /* ignore */ }
+    return false
   }
 }
 
