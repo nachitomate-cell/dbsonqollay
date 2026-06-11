@@ -23,6 +23,7 @@ import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 import { globalSearch } from './utils/globalSearch.js'
 import { initSync } from './lib/offline.js'
+import OfflineBanner from './components/OfflineBanner.jsx'
 
 /**
  * Navegación simulada (sin router). El estado vive en App:
@@ -356,6 +357,8 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           search={runGlobalSearch}
           onSearchResult={handleSearchResult}
         />
+
+        <OfflineBanner />
 
         <main className="min-h-0 flex-1 overflow-hidden">
           {showGrid ? (

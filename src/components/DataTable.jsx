@@ -151,6 +151,15 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   const [newField, setNewField] = useState('')
   const [hdrDragKey, setHdrDragKey] = useState(null) // columna que se arrastra desde el encabezado
   const [editingId, setEditingId] = useState(null)
+  // Pantalla chica (teléfono): un tap en una fila/celda abre la ficha (editar
+  // campos en un panel) en vez de la edición inline, incómoda en la tabla ancha.
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const on = () => setIsMobile(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
   const [ctxMenu, setCtxMenu] = useState(null) // menú contextual de fila: { x, y, rowId }
   const [clipboardRow, setClipboardRow] = useState(null) // fila copiada (datos sin _id)
@@ -1379,7 +1388,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                           return (
                           <td
                             key={h}
-                            onClick={() => { if (!editing) startInlineEdit(r._id, h, r[h]) }}
+                            onClick={() => { if (isMobile) { openFicha(r._id); return } if (!editing) startInlineEdit(r._id, h, r[h]) }}
                             style={{ left: idx === 0 ? CHECK_W : undefined }}
                             className={[
                               `overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 ${cellPad} dark:border-white/5`,
