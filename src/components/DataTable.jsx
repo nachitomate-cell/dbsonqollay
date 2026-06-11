@@ -160,6 +160,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
   }, [])
+  // En móvil, los controles de buscar/ordenar/filtrar/AWP se colapsan detrás de un
+  // botón para que la GRILLA quede visible arriba (si no, ocupan toda la pantalla).
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
   const [ctxMenu, setCtxMenu] = useState(null) // menú contextual de fila: { x, y, rowId }
   const [clipboardRow, setClipboardRow] = useState(null) // fila copiada (datos sin _id)
@@ -1063,7 +1066,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
           {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-2 px-4 py-2">
             {/* Herramientas de tabla: en móvil se ocultan cuando estás en 3D (no aplican). */}
-            <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40`}>
+            <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-white/10 dark:bg-ink-900/40`}>
               <ToolIcon icon={RotateCw} title="Refrescar / Reset vista" onClick={resetView} />
               <ToolIcon icon={Undo2} title="Deshacer (Ctrl+Z)" onClick={undo} disabled={!canUndo} />
               <ToolIcon icon={Redo2} title="Rehacer (Ctrl+Shift+Z)" onClick={redo} disabled={!canRedo} />
@@ -1100,8 +1103,18 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               </button>
             )}
 
-            {/* Buscar + ordenar: en móvil se ocultan en vista 3D (son de la tabla). */}
-            <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-2`}>
+            {/* Móvil: botón para mostrar/ocultar los controles de la tabla. */}
+            {viewMode !== 'bim' && (
+              <button
+                onClick={() => setMobileToolsOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 md:hidden dark:border-white/10 dark:bg-ink-800 dark:text-slate-300"
+              >
+                <Filter className="h-3.5 w-3.5" /> Filtros y orden {mobileToolsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
+            )}
+
+            {/* Buscar + ordenar: en móvil se ocultan en vista 3D y se colapsan en Planilla. */}
+            <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-2`}>
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 dark:border-white/10 dark:bg-ink-800">
                 <Search className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                 <input
@@ -1200,8 +1213,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             />
           )}
 
-          {/* Filter row — en móvil se oculta en vista 3D (filtros de la tabla). */}
-          <div className={`${viewMode === 'bim' ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-3 px-4 pb-2`}>
+          {/* Filter row — en móvil se oculta en vista 3D y se colapsa en Planilla. */}
+          <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-3 px-4 pb-2`}>
             <Labeled label="Filtrar por">
               <Select value={filterByCol} onChange={setFilterByCol}>
                 <option value="">— Elegir columna —</option>
@@ -1269,7 +1282,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
           </div>
 
           {/* Update buttons */}
-          <div className="flex flex-wrap gap-2 px-4 pb-2">
+          <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap gap-2 px-4 pb-2`}>
             <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => setShowConnectAwp(true)}>Conectar a AWP</UpdateButton>
           </div>
 
