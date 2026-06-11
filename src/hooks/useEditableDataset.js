@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { cloudEnabled, fetchDbDataset, loadWorking, removeWorking, saveWorking } from '../utils/datastore'
+import { cloudEnabled, fetchDbDataset, loadWorking, loadWorkingAsync, removeWorking, saveWorking } from '../utils/datastore'
 
 /**
  * Capa editable sobre un dataset (headers + rows). Permite editar valores,
@@ -83,6 +83,27 @@ export function useEditableDataset(dataKey, dataset) {
   useEffect(() => {
     if (state.dirty) saveWorking(dataKey, state)
   }, [dataKey, state])
+
+  // Recuperación offline desde IndexedDB: si al montar NO había trabajo en
+  // localStorage (planilla grande guardada solo en IndexedDB, o desalojada por
+  // cuota), recupéralo para no mostrar el dataset base en su lugar. Son ediciones
+  // locales sin subir → marcamos userEdited para que la nube no las pise.
+  useEffect(() => {
+    if (loadWorking(dataKey) != null) return // el hot cache ya lo tiene
+    let cancelled = false
+    loadWorkingAsync(dataKey).then((p) => {
+      if (cancelled || !p?.rows) return
+      setHist((h) => {
+        if (userEditedRef.current) return h
+        const present = { columns: dedupeCols(p.columns), rows: upperRows(p.rows), dirty: true }
+        if (sameData(h.present, present)) return h
+        userEditedRef.current = true
+        return { past: [], present, future: [] }
+      })
+    }).catch(() => { /* sin IDB: queda el dataset base */ })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataKey])
 
   // Al abrir la planilla, recupera de la BASE DE DATOS lo último guardado (la
   // fuente de verdad), para que los cambios persistan entre equipos/sesiones y no

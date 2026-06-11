@@ -22,7 +22,7 @@
  * tracking por fila, un merge ingenuo re-agregaría filas borradas localmente).
  */
 import { authFetch } from './auth.js'
-import { loadWorking } from '../utils/datastore.js'
+import { loadWorkingAsync } from '../utils/datastore.js'
 
 const OUTBOX = 'sqy-outbox'
 const LASTSYNC = 'sqy-last-sync'
@@ -108,7 +108,7 @@ export async function flush({ retryStuck = false } = {}) {
   try {
     for (const k of keys) {
       const e = o[k]
-      const ws = loadWorking(k)
+      const ws = await loadWorkingAsync(k)
       if (!ws || !Array.isArray(ws.rows)) { dequeue(k); continue } // nada que enviar
       const headers = (ws.columns || []).map((c) => c.key)
       const body = {

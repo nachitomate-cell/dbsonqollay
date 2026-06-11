@@ -10,8 +10,13 @@
  */
 
 import { accessToken, activeProjectId, authFetch } from '../lib/auth.js'
+import { idbDel, idbGet, idbSet } from '../lib/idbStore.js'
 
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
+// Tope para el "hot cache" en localStorage. Las planillas más grandes que esto se
+// guardan SOLO en IndexedDB (durable, sin tope), para no llenar localStorage y
+// desalojar otras planillas. ~600k chars ≈ 1.2 MB.
+const LS_MAX = 600_000
 const getAPI = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
 
 /** ¿Hay sesión (real o de prueba) para leer/escribir en la nube? */
@@ -37,7 +42,11 @@ export async function fetchDbDataset(dataKey) {
   }
 }
 
-/** Lee el estado editable persistido. Devuelve { columns, rows } o null. */
+/**
+ * Lee el estado editable persistido del "hot cache" SÍNCRONO (localStorage).
+ * Devuelve { columns, rows } o null. Las planillas grandes viven solo en
+ * IndexedDB → para esas, esto devuelve null y se usa loadWorkingAsync.
+ */
 export function loadWorking(dataKey) {
   try {
     const raw = localStorage.getItem(KEY(dataKey))
@@ -50,24 +59,51 @@ export function loadWorking(dataKey) {
   return null
 }
 
-/** Guarda el estado editable de una planilla. Devuelve true si se guardó. */
-export function saveWorking(dataKey, state) {
+/**
+ * Lee el estado editable desde donde esté: primero localStorage (instantáneo),
+ * y si no está, IndexedDB (planillas grandes o desalojadas por cuota). Lo usan
+ * la sincronización y la recuperación al abrir una planilla.
+ */
+export async function loadWorkingAsync(dataKey) {
+  const local = loadWorking(dataKey)
+  if (local) return local
   try {
-    localStorage.setItem(KEY(dataKey), JSON.stringify(state))
-    return true
-  } catch {
-    // Cuota excedida: NO perder el cambio en silencio. Avisamos para que la UI
-    // lo muestre (el fix definitivo es IndexedDB — Fase 3 del offline).
-    try { window.dispatchEvent(new CustomEvent('sqy-storage-full', { detail: { dataKey } })) } catch { /* ignore */ }
-    return false
-  }
-}
-
-/** Borra el estado editable (vuelve al dataset base). */
-export function removeWorking(dataKey) {
-  try {
-    localStorage.removeItem(KEY(dataKey))
+    const v = await idbGet(KEY(dataKey))
+    if (v?.columns && v?.rows) return v
   } catch {
     /* ignore */
   }
+  return null
+}
+
+/**
+ * Guarda el estado editable de una planilla. SIEMPRE lo persiste en IndexedDB
+ * (copia durable, sin tope). Además lo deja en localStorage como caché rápido,
+ * salvo que sea muy grande o la cuota esté llena (entonces queda solo en IDB,
+ * sin perder nada). Devuelve true (los datos quedan a salvo en IndexedDB).
+ */
+export function saveWorking(dataKey, state) {
+  idbSet(KEY(dataKey), state) // durable (async, no bloquea)
+  let json
+  try { json = JSON.stringify(state) } catch { return true }
+  try {
+    if (json.length <= LS_MAX) {
+      localStorage.setItem(KEY(dataKey), json)
+    } else {
+      localStorage.removeItem(KEY(dataKey)) // muy grande: solo IndexedDB
+    }
+    return true
+  } catch {
+    // Cuota llena: el dato igual está en IndexedDB. Quitamos la versión vieja del
+    // hot cache y avisamos a la UI (no perdemos cambios, pero conviene saberlo).
+    try { localStorage.removeItem(KEY(dataKey)) } catch { /* ignore */ }
+    try { window.dispatchEvent(new CustomEvent('sqy-storage-full', { detail: { dataKey } })) } catch { /* ignore */ }
+    return true
+  }
+}
+
+/** Borra el estado editable (vuelve al dataset base) de ambos almacenes. */
+export function removeWorking(dataKey) {
+  try { localStorage.removeItem(KEY(dataKey)) } catch { /* ignore */ }
+  idbDel(KEY(dataKey))
 }

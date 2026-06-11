@@ -5,10 +5,10 @@
  * guardadas vía datastore cuando existen; si no, usa el dataset base. `xlsx` se
  * importa de forma dinámica para no inflar el bundle.
  */
-import { loadWorking } from './datastore'
+import { loadWorkingAsync } from './datastore'
 
-function resolveWorking(dataKey, base) {
-  const p = loadWorking(dataKey)
+async function resolveWorking(dataKey, base) {
+  const p = await loadWorkingAsync(dataKey)
   if (p) {
     const headers = p.columns.filter((c) => c.visible).map((c) => c.key)
     return { headers, rows: p.rows }
@@ -51,7 +51,7 @@ export async function exportProjectToExcel(datasets, disciplines) {
       // Planillas nuevas creadas por el usuario (sin datos base): dataKey sintético.
       if (!dataKey && createdSheetIds().includes(sc.id)) dataKey = `new-${sc.id}`
       if (!dataKey) continue
-      const working = resolveWorking(dataKey, datasets[sc.dataKey])
+      const working = await resolveWorking(dataKey, datasets[sc.dataKey])
       if (!working || !working.rows.length) continue
       const aoa = [working.headers, ...working.rows.map((r) => working.headers.map((h) => r[h] ?? ''))]
       const ws = XLSX.utils.aoa_to_sheet(aoa)
