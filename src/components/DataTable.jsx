@@ -21,6 +21,7 @@ import {
   History,
   Link2,
   List,
+  Lock,
   Maximize2,
   Minimize2,
   Loader2,
@@ -82,9 +83,17 @@ const CHECK_W = 48
 const defaultWidth = (h) => {
   if (/DESCRIP/i.test(h)) return 230
   if (isCostHeader(h) || isWeightHeader(h)) return 120
-  if (/^TAG/i.test(h)) return 150
+  if (/^(ID|TAG)/i.test(h)) return 150
   return 170
 }
+
+// Columna identidad inmutable (modelo "camino B"): es la llave por la que el
+// plugin de Navisworks y el visor 3D vinculan cada fila con el elemento del
+// modelo (= TAG original "congelado"). Se escribe UNA vez (cuando está vacía) y
+// luego queda bloqueada, para no romper el vínculo dato↔modelo. La modularización
+// va en la columna TAG, que sí es editable.
+const isIdColumn = (h) => /^id$/i.test(String(h || '').trim())
+const isLockedCell = (h, value) => isIdColumn(h) && String(value ?? '').trim() !== ''
 
 /* --------------------------- component ----------------------------- */
 
@@ -163,6 +172,15 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   // En móvil, los controles de buscar/ordenar/filtrar/AWP se colapsan detrás de un
   // botón para que la GRILLA quede visible arriba (si no, ocupan toda la pantalla).
   const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  // Estado de conexión: para avisar qué no funciona sin internet (visor 3D,
+  // publicar a Navisworks). Editar/guardar planillas SÍ funciona offline.
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
   const [activeId, setActiveId] = useState(null) // selección cruzada con el 3D
   const [ctxMenu, setCtxMenu] = useState(null) // menú contextual de fila: { x, y, rowId }
   const [clipboardRow, setClipboardRow] = useState(null) // fila copiada (datos sin _id)
@@ -577,6 +595,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   const cancelEditRef = useRef(false)
   const suppressBlurRef = useRef(false) // Tab/Enter ya guarda: el blur no debe re-guardar
   function startInlineEdit(id, key, value) {
+    if (isLockedCell(key, value)) return // ID inmutable ya asignado (camino B)
     cancelEditRef.current = false
     setCellDraft(value == null ? '' : String(value))
     setEditingCell({ id, key })
@@ -1076,7 +1095,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               <ExportMenu onExport={handleExport} />
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={importFile} />
               <ToolIcon icon={Upload} title="Importar (CSV / Excel)" onClick={() => fileRef.current?.click()} />
-              <ToolIcon icon={Share2} title="Publicar para Navisworks (API en vivo)" onClick={publishForNavisworks} />
+              <ToolIcon icon={Share2} title={online ? 'Publicar para Navisworks (API en vivo)' : 'Sin conexión — publicar a Navisworks necesita internet'} onClick={publishForNavisworks} disabled={!online} />
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
@@ -1348,6 +1367,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                           ].join(' ')}
                         >
                           <div className="flex items-center gap-1.5 pr-2">
+                            {isIdColumn(h) && <Lock className="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-500" title="Columna llave, no editable" />}
                             <button onClick={() => setSortKey(h)} className="inline-flex min-w-0 items-center gap-1 truncate transition hover:text-brand-600 dark:hover:text-accent" title={h.replace(/_/g, ' ')}>
                               <span className="truncate">{h.replace(/_/g, ' ')}</span>
                               {sort.key === h ? (
@@ -1398,13 +1418,16 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                         </td>
                         {headers.map((h, idx) => {
                           const editing = editingCell && editingCell.id === r._id && editingCell.key === h
+                          const locked = isLockedCell(h, r[h])
                           return (
                           <td
                             key={h}
-                            onClick={() => { if (isMobile) { openFicha(r._id); return } if (!editing) startInlineEdit(r._id, h, r[h]) }}
+                            onClick={() => { if (isMobile) { openFicha(r._id); return } if (!editing && !locked) startInlineEdit(r._id, h, r[h]) }}
+                            title={locked ? 'ID inmutable: es la llave de vínculo con el modelo 3D / plugin. Edita el TAG para la modularización.' : undefined}
                             style={{ left: idx === 0 ? CHECK_W : undefined }}
                             className={[
                               `overflow-hidden text-ellipsis whitespace-nowrap border-b border-slate-100 ${cellPad} dark:border-white/5`,
+                              locked ? 'cursor-not-allowed' : '',
                               idx === 0
                                 ? `sticky z-10 font-mono text-xs font-semibold text-slate-900 dark:text-white ${cellStickyBg(isSel)}`
                                 : 'text-slate-600 dark:text-slate-300',
@@ -1451,6 +1474,13 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             )}
             {(viewMode === 'bim' || viewMode === 'split') && (
             <div ref={viewerWrapRef} className="relative min-h-[280px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-ink-900">
+              {/* Aviso: el visor 3D necesita internet (se transmite desde Autodesk). */}
+              {!online && (
+                <div className="absolute inset-x-0 top-0 z-20 flex items-start gap-2 bg-amber-50/95 px-3 py-2 text-xs font-medium text-amber-800 backdrop-blur dark:bg-amber-500/15 dark:text-amber-200">
+                  <WifiOff className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Sin conexión — el visor 3D necesita internet para cargar el modelo. Las planillas sí funcionan sin conexión.</span>
+                </div>
+              )}
               <button
                 onClick={toggleFullscreen}
                 title={(isFullscreen || fullscreen) ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}

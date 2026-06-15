@@ -19,16 +19,25 @@ export function useAuth() {
   return useContext(AuthContext) || { user: null, isDemo: false, signOut: () => {} }
 }
 
+// ¿La app corre como PWA instalada (no en una pestaña del navegador)? Entonces
+// saltamos la landing de marketing y vamos directo al login: en una app instalada
+// la página de presentación da impresión de "sitio web".
+const isStandalone = () =>
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
+
 export default function LoginGate({ children }) {
   const [session, setSession] = useState(() => getSession())
-  // Antes del login se muestra la landing pública; "Iniciar sesión" abre el form.
-  const [showLogin, setShowLogin] = useState(false)
+  // En web se muestra primero la landing pública; instalada como app, directo al
+  // login. "Iniciar sesión" abre el form; "Volver" solo existe si hubo landing.
+  const standalone = isStandalone()
+  const [showLogin, setShowLogin] = useState(standalone)
 
   if (!session) {
     if (!showLogin) {
       return <Landing onLogin={() => setShowLogin(true)} />
     }
-    return <LoginScreen onSuccess={(s) => setSession(s)} onBack={() => setShowLogin(false)} />
+    return <LoginScreen onSuccess={(s) => setSession(s)} onBack={standalone ? undefined : () => setShowLogin(false)} />
   }
 
   return (
