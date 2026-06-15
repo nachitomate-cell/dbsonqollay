@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
+import ReleaseNotesModal from './ReleaseNotesModal.jsx'
 import OfflineIndicator from './OfflineIndicator.jsx'
 
 // Iniciales para el avatar a partir del nombre o el email.
@@ -30,6 +31,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
   const [notifOpen, setNotifOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [newsOpen, setNewsOpen] = useState(false)
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
 
   // Atajo "?" (Shift+/) abre la ayuda, salvo que estés escribiendo en un campo.
@@ -147,6 +149,11 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           )}
         </div>
 
+        {/* Novedades / notas de versión (plataforma + plugin) */}
+        <button onClick={() => setNewsOpen(true)} className={`${iconBtn} hidden sm:grid`} aria-label="Novedades" title="Novedades — notas de versión">
+          <Sparkles className="h-4 w-4" />
+        </button>
+
         {/* Ayuda y atajos */}
         <button onClick={() => setHelpOpen(true)} className={`${iconBtn} hidden sm:grid`} aria-label="Ayuda" title="Ayuda y atajos (?)">
           <HelpCircle className="h-4 w-4" />
@@ -227,6 +234,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
     {/* Fuera del <header> (que tiene backdrop-blur y crea contexto de
         posicionamiento para los fixed): así el modal cubre toda la pantalla. */}
     <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+    <ReleaseNotesModal open={newsOpen} onClose={() => setNewsOpen(false)} />
     </>
   )
 }

@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Save, Trash2, X } from 'lucide-react'
+import { Lock, Save, Trash2, X } from 'lucide-react'
+
+// Columna identidad inmutable (camino B): llave de vínculo con el modelo 3D /
+// plugin. Se escribe una vez y queda bloqueada (igual que en la grilla).
+const isIdColumn = (h) => /^id$/i.test(String(h || '').trim())
 
 /**
  * Ficha de edición de un registro. Panel lateral (drawer) con un campo por cada
@@ -43,11 +47,27 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Antes de recargar por una actualización de la app, si hay un borrador sin
+  // guardar en la ficha, lo persiste para no perderlo. Ref para leer lo último.
+  const saveDraftRef = useRef(() => {})
+  saveDraftRef.current = () => {
+    if (record && isDirty()) { const { _id, ...patch } = draft; onSave(patch) }
+  }
+  useEffect(() => {
+    const h = () => saveDraftRef.current()
+    window.addEventListener('sqy:commit-drafts', h)
+    return () => window.removeEventListener('sqy:commit-drafts', h)
+  }, [])
+
   if (!record) return null
   const visible = columns.filter((c) => c.visible)
 
   // Todo lo ingresado en las planillas se guarda y se muestra en MAYÚSCULAS.
-  const set = (key, value) => setDraft((d) => ({ ...d, [key]: value.toUpperCase() }))
+  // El ID inmutable nunca se modifica (blindaje extra además del readOnly).
+  const set = (key, value) => {
+    if (isIdColumn(key) && String(record[key] ?? '').trim() !== '') return
+    setDraft((d) => ({ ...d, [key]: value.toUpperCase() }))
+  }
   const isLong = (key) => /DESCRIP|OBSERV|NOTA|COMENT/i.test(key)
 
   return (
@@ -68,12 +88,26 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
 
         {/* Fields */}
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {visible.map((c) => (
+          {visible.map((c) => {
+            // Set-once: el ID se bloquea si el registro original ya trae valor.
+            const locked = isIdColumn(c.key) && String(record[c.key] ?? '').trim() !== ''
+            return (
             <label key={c.key} className="block">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {c.key.replace(/_/g, ' ')}
+                {locked && <Lock className="h-3 w-3 text-slate-400" />}
               </span>
-              {isLong(c.key) ? (
+              {locked ? (
+                <>
+                  <input
+                    value={draft[c.key] ?? ''}
+                    readOnly
+                    title="ID inmutable: es la llave de vínculo con el modelo 3D / plugin. Edita el TAG para la modularización."
+                    className="w-full cursor-not-allowed select-none rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400"
+                  />
+                  <span className="mt-1 block text-[10px] text-slate-400">No editable — llave del modelo. Edita el TAG para la modularización.</span>
+                </>
+              ) : isLong(c.key) ? (
                 <textarea
                   rows={2}
                   value={draft[c.key] ?? ''}
@@ -88,7 +122,8 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
                 />
               )}
             </label>
-          ))}
+            )
+          })}
         </div>
 
         {/* Footer */}

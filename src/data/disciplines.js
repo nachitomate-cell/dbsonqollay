@@ -44,8 +44,15 @@ export const getDiscipline = (id) => disciplines.find((d) => d.id === id) || nul
 /**
  * Columnas por defecto para una planilla nueva (subcategoría sin datos).
  * Siguen el modelo de ingeniería AWP/BIM usado en el resto de la plataforma.
+ *
+ * `ID` es la columna identidad inmutable (primera = `tagField`): la llave por la
+ * que el plugin de Navisworks y el visor 3D vinculan cada fila con el modelo.
+ * Se escribe una vez y queda bloqueada (ver DataTable). El `TAG` queda libre para
+ * la modularización. Planillas viejas sin `ID` siguen funcionando con TAG como
+ * llave (retrocompatible); para migrarlas, copia TAG→ID una vez.
  */
 export const defaultColumns = [
+  'ID',
   'TAG',
   'DESCRIPCIÓN_GENERAL',
   'DESCRIPCIÓN_COMPLEMENTARIA',

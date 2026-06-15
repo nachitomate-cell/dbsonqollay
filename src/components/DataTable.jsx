@@ -50,6 +50,7 @@ import { activeProjectId, authFetch, currentUser } from '../lib/auth.js'
 import { dequeue as offlineDequeue, enqueue as offlineEnqueue, isOnline as offlineIsOnline } from '../lib/offline.js'
 import { lazyWithReload } from '../lib/lazyWithReload.js'
 import RecordDrawer from './RecordDrawer.jsx'
+import { onBeforeAppReload } from '../lib/appUpdate.js'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
@@ -366,10 +367,18 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     }
   }
   // Fuerza el guardado inmediato (botón "Guardar ahora"), sin esperar el debounce.
+  // Devuelve la promesa para poder esperarla (p. ej. antes de una actualización).
   function flushAutosave() {
     if (autosaveTimer.current) { clearTimeout(autosaveTimer.current); autosaveTimer.current = null }
-    autosaveToDb()
+    return autosaveToDb()
   }
+
+  // Antes de recargar por una actualización de la app, fuerza el guardado de esta
+  // planilla a la nube (además del autoguardado en localStorage). Ref para usar
+  // siempre la versión fresca sin re-registrar.
+  const flushAutosaveRef = useRef(() => {})
+  flushAutosaveRef.current = flushAutosave
+  useEffect(() => onBeforeAppReload(() => flushAutosaveRef.current?.()), [])
 
   // Debounce: tras cada edición agenda el guardado ~1.5 s después de la última
   // tecla (así no sube en cada pulsación). No corre en el primer render (mount o

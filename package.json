@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "smoke": "node scripts/smoke.mjs",
-    "db:uppercase": "node scripts/uppercase-rows.mjs"
+    "db:uppercase": "node scripts/uppercase-rows.mjs",
+    "db:migrate-id": "node scripts/migrate-id-from-tag.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.26",

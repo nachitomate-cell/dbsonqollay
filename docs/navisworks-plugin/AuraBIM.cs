@@ -49,6 +49,39 @@ namespace AuraBIM
         // en sync con AppVersion de bundle/PackageContents.xml.
         private const string Version = "1.23.0";
 
+        // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
+        // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
+        // nueva, agregá la entrada aquí y también en la web (src/data/releaseNotes.js,
+        // scope 'plugin') para que el usuario las vea en el software.
+        private static readonly ReleaseNote[] ReleaseNotes = new[]
+        {
+            new ReleaseNote("1.23.0", "2026-06-11", new[]
+            {
+                "Creación de conjuntos de selección por TAG desde el modelo.",
+                "Aviso automático cuando hay una versión nueva del plugin.",
+                "Acerca de: estado del servidor, token y pestaña BIM de un vistazo.",
+            }),
+            new ReleaseNote("1.8.0", "2026-06-04", new[]
+            {
+                "Pestaña propia \"Aura GIP\" en la cinta (Asignar propiedades, Solo selección, Publicar).",
+                "Distribución como bundle + instalador, con desinstalación de la versión anterior.",
+                "Publicar el modelo a la nube desde Navisworks (mismo nombre = nueva versión).",
+            }),
+            new ReleaseNote("1.7.0", "2026-05-20", new[]
+            {
+                "Baja los datos publicados en Aura GIP y los escribe en el modelo.",
+                "Match por la propiedad BIM \"TAG/Commodity\" (independiente del idioma).",
+                "Sin Excel: la fuente de datos pasa a ser la nube.",
+            }),
+        };
+
+        private sealed class ReleaseNote
+        {
+            public readonly string Version, Date;
+            public readonly string[] Items;
+            public ReleaseNote(string v, string d, string[] items) { Version = v; Date = d; Items = items; }
+        }
+
         // Repos/URLs para la auto-actualización y la descarga del instalador.
         private const string ReleasesApi = "https://api.github.com/repos/nachitomate-cell/dbsonqollay/releases/latest";
         private const string InstallerUrl = "https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip";
@@ -1343,6 +1376,12 @@ namespace AuraBIM
                 Controls.Add(btnUpd);
                 y += 36;
 
+                var btnNotes = new Button { Text = "Notas de versión", Width = W - 88, Height = 28, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, ForeColor = gray };
+                btnNotes.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+                btnNotes.Click += (s, e) => { using (var f = new ReleaseNotesForm()) f.ShowDialog(); };
+                Controls.Add(btnNotes);
+                y += 36;
+
                 var btnWeb = new Button { Text = "Abrir Aura GIP", Width = 140, Height = 30, Top = y, Left = 44, FlatStyle = FlatStyle.Flat, BackColor = orange, ForeColor = System.Drawing.Color.White };
                 btnWeb.FlatAppearance.BorderSize = 0;
                 btnWeb.Click += (s, e) => { try { System.Diagnostics.Process.Start(Cfg.BaseUrl); } catch { } };
@@ -1354,6 +1393,67 @@ namespace AuraBIM
                 AcceptButton = btnClose;
 
                 ClientSize = new Size(W, y + 48);
+            }
+        }
+
+        // ---- Ventana "Notas de versión" --------------------------------------
+        // Muestra el changelog del plugin (lista ReleaseNotes) en un panel
+        // desplazable. Se abre desde "Acerca de" → "Notas de versión".
+        private sealed class ReleaseNotesForm : Form
+        {
+            public ReleaseNotesForm()
+            {
+                var gray = System.Drawing.Color.FromArgb(70, 80, 90);
+                var soft = System.Drawing.Color.FromArgb(150, 155, 160);
+                var orange = System.Drawing.Color.FromArgb(235, 110, 40);
+                const int W = 460;
+
+                Text = "Notas de versión — Aura GIP";
+                FormBorderStyle = FormBorderStyle.Sizable;
+                StartPosition = FormStartPosition.CenterScreen;
+                MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+                BackColor = System.Drawing.Color.White;
+                ClientSize = new Size(W, 480);
+                MinimumSize = new Size(W + 16, 320);
+
+                var panel = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+                    WrapContents = false, AutoScroll = true, Padding = new Padding(20, 16, 20, 16),
+                    BackColor = System.Drawing.Color.White,
+                };
+
+                Action<string, System.Drawing.Color, float, FontStyle, int> add = (text, col, size, style, gap) =>
+                {
+                    var l = new Label
+                    {
+                        Text = text, AutoSize = false, Width = W - 56, ForeColor = col,
+                        Font = new System.Drawing.Font(Font.FontFamily, size, style),
+                        Margin = new Padding(0, gap, 0, 0),
+                    };
+                    using (var g = l.CreateGraphics())
+                    {
+                        var sz = g.MeasureString(text, l.Font, l.Width);
+                        l.Height = (int)Math.Ceiling(sz.Height) + 2;
+                    }
+                    panel.Controls.Add(l);
+                };
+
+                add("Novedades del plugin", gray, 13f, FontStyle.Bold, 0);
+                foreach (var r in ReleaseNotes)
+                {
+                    add("v" + r.Version + "   ·   " + r.Date, orange, 10f, FontStyle.Bold, 14);
+                    foreach (var it in r.Items)
+                        add("•  " + it, gray, 9f, FontStyle.Regular, 2);
+                }
+                add("Para ver también las novedades de la plataforma web, entra a Aura GIP → Novedades.", soft, 8.5f, FontStyle.Italic, 16);
+
+                var btnClose = new Button { Text = "Cerrar", Width = 110, Height = 30, FlatStyle = FlatStyle.Flat, ForeColor = gray, DialogResult = DialogResult.OK, Dock = DockStyle.Bottom };
+                btnClose.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(220, 220, 220);
+
+                Controls.Add(panel);
+                Controls.Add(btnClose);
+                AcceptButton = btnClose;
             }
         }
 
