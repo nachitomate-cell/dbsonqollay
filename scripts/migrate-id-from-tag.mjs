@@ -76,19 +76,25 @@ function plan(data) {
 
   let filled = 0
   const rows = (Array.isArray(data.rows) ? data.rows : []).map((r) => {
-    const out = {}
     // valor de ID existente (cualquier variante de mayúsculas), si lo hay
     let idVal = ''
     for (const k in r) if (isId(k)) idVal = r[k]
-    for (const k in r) if (!isId(k)) out[k] = r[k] // copia todo menos columnas ID
     const cur = String(idVal ?? '').trim()
-    if (cur) out.ID = idVal
-    else { out.ID = r[oldKey] ?? ''; if (String(out.ID).trim()) filled++ }
+    const finalId = cur ? idVal : (r[oldKey] ?? '')
+    if (!cur && String(finalId).trim()) filled++
+    // ID PRIMERO en la fila: así el plugin lo escribe como 1ª propiedad de la
+    // pestaña BIM (el orden de propiedades = orden de claves de la fila).
+    const out = { ID: finalId }
+    for (const k in r) if (!isId(k)) out[k] = r[k]
     return out
   })
 
+  // Ya migrada solo si: ID es 1ª columna, tagField=ID, nada por rellenar y la
+  // 1ª clave de las filas ya es ID (si no, hay que reordenar → re-publicar).
+  const firstRow = (Array.isArray(data.rows) ? data.rows : [])[0]
+  const idFirstInRows = firstRow ? isId(Object.keys(firstRow)[0]) : true
   const headersOk = hs.length && isId(hs[0]) && hs.slice(1).every((h) => !isId(h))
-  const alreadyOk = headersOk && data.tagField === 'ID' && filled === 0
+  const alreadyOk = headersOk && data.tagField === 'ID' && filled === 0 && idFirstInRows
   const payload = {
     name: data.name || data.key,
     tagField: 'ID',
