@@ -52,6 +52,16 @@ export default {
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
+      keyframes: {
+        // Caída tipo "gravedad": el panel se desploma y rota un poco al cerrar.
+        fall: {
+          '0%': { transform: 'translateY(0) rotate(0deg)', opacity: '1' },
+          '100%': { transform: 'translateY(115vh) rotate(6deg)', opacity: '0' },
+        },
+      },
+      animation: {
+        fall: 'fall 0.45s cubic-bezier(0.55, 0, 1, 0.45) forwards',
+      },
     },
   },
   plugins: [],

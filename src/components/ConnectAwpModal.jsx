@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Boxes, Check, Layers, Link2, Loader2, RefreshCw, Search, Upload, X } from 'lucide-react'
 
 /**
@@ -16,7 +16,24 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
   const [query, setQuery] = useState('')
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
+  const [closing, setClosing] = useState(false)
   const fileRef = useRef(null)
+
+  // Cierra con animación de "caída": reproduce la animación y, al terminar,
+  // ejecuta la acción real (cerrar, o conectar y cerrar). 450 ms = la animación.
+  function requestClose(action) {
+    if (closing) return
+    setClosing(true)
+    setTimeout(() => (action || onClose)(), 450)
+  }
+
+  // Cerrar con Escape (también con la animación).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') requestClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing])
 
   async function pick(file) {
     if (!file) return
@@ -43,15 +60,15 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60" onClick={onClose} />
-      <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+      <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/60 ${closing ? 'opacity-0' : 'opacity-100'}`} onClick={() => requestClose()} />
+      <div className={`relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800 ${closing ? 'animate-fall' : ''}`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
           <div className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-brand-500 dark:text-accent" />
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Conectar a AWP</h3>
             {count > 0 && <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-semibold text-brand-700 dark:bg-accent/15 dark:text-accent">{count} componente{count === 1 ? '' : 's'}</span>}
           </div>
-          <button onClick={onClose} className="text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
+          <button onClick={() => requestClose()} className="text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>
         </div>
 
         {!hasData ? (
@@ -98,7 +115,7 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
                     {items.map((c) => (
                       <button
                         key={c.codigo}
-                        onClick={() => count > 0 && onConnect(c)}
+                        onClick={() => count > 0 && requestClose(() => onConnect(c))}
                         disabled={count === 0}
                         title={count === 0 ? 'Selecciona componentes primero' : `Conectar ${count} componente(s) a ${c.codigo}`}
                         className="group flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:hover:border-accent/40 dark:hover:bg-accent/5"
