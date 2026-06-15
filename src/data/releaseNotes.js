@@ -12,6 +12,14 @@
  * Cada entrada: { version, date: 'YYYY-MM-DD', scope: 'app'|'plugin', title, items: [] }
  * Orden: el más reciente primero (el componente igual ordena por fecha).
  */
+// Identificador de la novedad más reciente (fecha + scope + versión). Sirve para
+// el "globo" del header: si difiere de lo último visto por el usuario, hay novedad.
+export function latestReleaseKey() {
+  let best = null
+  for (const r of releaseNotes) if (!best || r.date > best.date) best = r
+  return best ? `${best.date}|${best.scope}|${best.version}` : ''
+}
+
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {

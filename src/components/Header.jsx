@@ -5,6 +5,9 @@ import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
 import ReleaseNotesModal from './ReleaseNotesModal.jsx'
 import OfflineIndicator from './OfflineIndicator.jsx'
+import { latestReleaseKey } from '../data/releaseNotes.js'
+
+const NEWS_SEEN_KEY = 'sqy-news-seen'
 
 // Iniciales para el avatar a partir del nombre o el email.
 function initials(user) {
@@ -32,6 +35,15 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
   const [userOpen, setUserOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [newsOpen, setNewsOpen] = useState(false)
+  // Globo de "novedades sin leer": hay novedad si la última difiere de la vista.
+  const [hasNews, setHasNews] = useState(() => {
+    try { return latestReleaseKey() !== localStorage.getItem(NEWS_SEEN_KEY) } catch { return false }
+  })
+  const openNews = () => {
+    setNewsOpen(true)
+    try { localStorage.setItem(NEWS_SEEN_KEY, latestReleaseKey()) } catch { /* sin storage */ }
+    setHasNews(false)
+  }
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
 
   // Atajo "?" (Shift+/) abre la ayuda, salvo que estés escribiendo en un campo.
@@ -150,8 +162,14 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
         </div>
 
         {/* Novedades / notas de versión (plataforma + plugin) */}
-        <button onClick={() => setNewsOpen(true)} className={`${iconBtn} hidden sm:grid`} aria-label="Novedades" title="Novedades — notas de versión">
+        <button onClick={openNews} className={`${iconBtn} relative hidden sm:grid ${hasNews ? iconBtnActive : ''}`} aria-label="Novedades" title={hasNews ? 'Novedades — hay novedades nuevas' : 'Novedades — notas de versión'}>
           <Sparkles className="h-4 w-4" />
+          {hasNews && (
+            <span className="absolute right-1 top-1 flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75 dark:bg-accent" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500 ring-2 ring-white dark:bg-accent dark:ring-ink-900" />
+            </span>
+          )}
         </button>
 
         {/* Ayuda y atajos */}
