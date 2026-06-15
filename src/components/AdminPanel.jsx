@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, Check, FolderPlus, Loader2, Plus, ShieldCheck, UserPlus, X } from 'lucide-react'
+import { Building2, Check, FolderPlus, Loader2, Plus, ShieldCheck, UserPlus, WifiOff, X } from 'lucide-react'
 import { authFetch, currentUser, isDemoSession } from '../lib/auth.js'
 
 const api = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
@@ -24,6 +24,14 @@ export default function AdminPanel({ open, onClose }) {
   const [newOrg, setNewOrg] = useState('')
   const [newProj, setNewProj] = useState('')
   const [invite, setInvite] = useState({ email: '', role: 'editor' })
+  // Administrar (empresas/proyectos/miembros) escribe al servidor: necesita internet.
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   const demo = isDemoSession() || !currentUser()
 
@@ -85,6 +93,11 @@ export default function AdminPanel({ open, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {!online && (
+            <p className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+              <WifiOff className="h-4 w-4 shrink-0" /> Sin conexión — la administración (empresas, proyectos y miembros) necesita internet.
+            </p>
+          )}
           {demo ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
               Inicia sesión con tu cuenta real (no la sesión de prueba) para administrar empresas, proyectos y miembros.

@@ -1280,8 +1280,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               ) : (
                 <button
                   onClick={() => setShowConnectAwp(true)}
-                  title="Conectar los componentes seleccionados a un CWA/CWP de Aura AWP"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-brand-300 bg-white px-3 py-1.5 text-sm font-medium text-brand-600 transition hover:border-brand-400 hover:bg-brand-50 dark:border-accent/40 dark:bg-ink-900 dark:text-accent dark:hover:bg-accent/10"
+                  disabled={!online}
+                  title={online ? 'Conectar los componentes seleccionados a un CWA/CWP de Aura AWP' : 'Sin conexión — conectar a AWP necesita internet'}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-brand-300 bg-white px-3 py-1.5 text-sm font-medium text-brand-600 transition hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-brand-300 disabled:hover:bg-white dark:border-accent/40 dark:bg-ink-900 dark:text-accent dark:hover:bg-accent/10"
                 >
                   <Link2 className="h-4 w-4" /> Conectar a AWP
                 </button>
@@ -1302,7 +1303,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
 
           {/* Update buttons */}
           <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap gap-2 px-4 pb-2`}>
-            <UpdateButton icon={Link2} disabled={selected.size === 0} onClick={() => setShowConnectAwp(true)}>Conectar a AWP</UpdateButton>
+            <UpdateButton icon={Link2} disabled={selected.size === 0 || !online} title={!online ? 'Sin conexión — conectar a AWP necesita internet' : undefined} onClick={() => setShowConnectAwp(true)}>Conectar a AWP</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -2088,11 +2089,12 @@ function Select({ value, onChange, children, disabled }) {
   )
 }
 
-function UpdateButton({ icon: IconCmp, children, disabled, onClick }) {
+function UpdateButton({ icon: IconCmp, children, disabled, onClick, title }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={[
         'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold transition',
         disabled
