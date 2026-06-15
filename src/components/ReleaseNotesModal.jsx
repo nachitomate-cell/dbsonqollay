@@ -38,8 +38,8 @@ export default function ReleaseNotesModal({ open, onClose }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-ink-800">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fadeIn" onClick={onClose} />
+      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl animate-modalIn dark:bg-ink-800">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
             <Sparkles className="h-4 w-4 text-brand-500 dark:text-accent" /> Novedades

@@ -58,9 +58,27 @@ export default {
           '0%': { transform: 'translateY(0) rotate(0deg)', opacity: '1' },
           '100%': { transform: 'translateY(115vh) rotate(6deg)', opacity: '0' },
         },
+        // Entrada de modal: aparece con un suave fade + escala + leve subida.
+        modalIn: {
+          '0%': { transform: 'translateY(8px) scale(0.97)', opacity: '0' },
+          '100%': { transform: 'translateY(0) scale(1)', opacity: '1' },
+        },
+        // Entrada de fondo / overlay.
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        // Entrada de cajón lateral (RecordDrawer): desliza desde la derecha.
+        slideInRight: {
+          '0%': { transform: 'translateX(16px)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
       },
       animation: {
         fall: 'fall 0.45s cubic-bezier(0.55, 0, 1, 0.45) forwards',
+        modalIn: 'modalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+        fadeIn: 'fadeIn 0.2s ease-out',
+        slideInRight: 'slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
       },
     },
   },

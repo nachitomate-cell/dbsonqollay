@@ -25,8 +25,8 @@ export default function NewProjectModal({ onCreate, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-fadeIn dark:bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-modalIn dark:border-white/10 dark:bg-ink-800">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
           <h3 className="text-base font-bold text-slate-900 dark:text-white">Nuevo proyecto</h3>
           <button onClick={onClose} className="text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"><X className="h-4 w-4" /></button>

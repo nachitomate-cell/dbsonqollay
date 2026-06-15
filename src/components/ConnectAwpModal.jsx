@@ -60,8 +60,8 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/60 ${closing ? 'opacity-0' : 'opacity-100'}`} onClick={() => requestClose()} />
-      <div className={`relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800 ${closing ? 'animate-fall' : ''}`}>
+      <div className={`absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300 dark:bg-black/60 ${closing ? 'opacity-0' : 'opacity-100 animate-fadeIn'}`} onClick={() => requestClose()} />
+      <div className={`relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800 ${closing ? 'animate-fall' : 'animate-modalIn'}`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-white/10">
           <div className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-brand-500 dark:text-accent" />

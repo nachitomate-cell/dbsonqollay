@@ -1612,10 +1612,10 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/60"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm animate-fadeIn dark:bg-black/60"
         onClick={() => { if (!publishing) onClose() }}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-modalIn dark:border-white/10 dark:bg-ink-800">
         {/* Cabecera con icono de estado */}
         <div className="flex flex-col items-center gap-3 px-6 pt-7 text-center">
           <div

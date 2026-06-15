@@ -72,9 +72,9 @@ export default function RecordDrawer({ record, columns, title, onSave, onDelete,
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60" onClick={requestClose} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fadeIn dark:bg-black/60" onClick={requestClose} />
 
-      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800">
+      <aside className="relative flex h-full w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl animate-slideInRight dark:border-white/10 dark:bg-ink-800">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-white/10">
           <div className="min-w-0">
