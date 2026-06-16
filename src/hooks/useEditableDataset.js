@@ -35,6 +35,12 @@ const dedupeCols = (cols) => {
 }
 const colsFromHeaders = (headers) => dedupeCols((headers ?? []).map((h) => ({ key: h, visible: true })))
 
+// Nota (camino B): la columna identidad `ID` NO se inventa al abrir una planilla.
+// Solo existe donde ya viene materializada: planillas nuevas (defaultColumns) o
+// datasets ya migrados/conectados al modelo (scripts/migrate-id-from-tag.mjs).
+// Para los datasets sin `ID` la llave de vínculo con el 3D sigue siendo la 1ª
+// columna (el TAG), igual que antes. Así, los datos de un cliente nuevo se cargan
+// tal cual, sin congelar/bloquear una columna arbitraria como ID.
 function build(dataset) {
   const columns = colsFromHeaders(dataset?.headers)
   // Migra a MAYÚSCULAS lo ya ingresado al construir el estado editable.

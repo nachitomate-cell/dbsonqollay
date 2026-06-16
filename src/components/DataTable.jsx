@@ -117,8 +117,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   const cellPad = compact ? 'px-2 py-0.5' : 'px-3 py-1.5'
   const bodyText = compact ? 'text-[12px]' : 'text-[13px]'
 
-  // Estado de la vista persistido por planilla (orden, filtros, modo de vista):
-  // se restaura al reabrir. El ancho de columnas se guarda aparte (colWidths) y el
+  // Estado de la vista persistido por planilla (orden y filtros): se restaura al
+  // reabrir. El ancho de columnas se guarda aparte (colWidths) y el
   // orden/visibilidad de columnas viven en el dataset editable.
   const viewKey = `sqy-view-${subcategory.dataKey}`
   const persistedView = (() => {
@@ -126,9 +126,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   })()
 
   const [activeTab, setActiveTab] = useState('elements')
-  // 'grid' (planilla) | 'bim' (3D) | 'split' (dividido). Una vista 'cards' antigua
-  // persistida se normaliza a 'grid'.
-  const [viewMode, setViewMode] = useState(() => (persistedView.viewMode === 'cards' ? 'grid' : persistedView.viewMode) || 'grid')
+  // 'grid' (planilla) | 'bim' (3D) | 'split' (dividido). Al abrir un elemento
+  // SIEMPRE se arranca en la planilla, no en el visor 3D, aunque la última vez se
+  // hubiera dejado en 3D/Dividido. El modo se persiste solo para coherencia de la
+  // sesión, pero la apertura siempre prioriza el dato (planilla).
+  const [viewMode, setViewMode] = useState('grid')
   const [fullscreen, setFullscreen] = useState(false) // ver la planilla a pantalla completa
   // Salir de pantalla completa con Escape.
   useEffect(() => {
@@ -259,14 +261,15 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     return () => clearInterval(id)
   }, [publish?.status])
 
-  // Persiste el estado de la vista (modo, orden y filtros) por planilla.
+  // Persiste el estado de la vista (orden y filtros) por planilla. El modo de
+  // vista NO se persiste: al reabrir un elemento siempre se arranca en la planilla.
   useEffect(() => {
     try {
-      localStorage.setItem(viewKey, JSON.stringify({ viewMode, sort, colFilters }))
+      localStorage.setItem(viewKey, JSON.stringify({ sort, colFilters }))
     } catch {
       /* ignore */
     }
-  }, [viewKey, viewMode, sort, colFilters])
+  }, [viewKey, sort, colFilters])
 
   // Aviso al cerrar/recargar si hay ediciones sin publicar (dirty). Las ediciones
   // se guardan localmente, pero esto evita perderlas si se limpia el navegador o
