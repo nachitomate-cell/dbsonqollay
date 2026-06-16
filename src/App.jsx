@@ -23,6 +23,7 @@ import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
 import { globalSearch } from './utils/globalSearch.js'
 import { initSync } from './lib/offline.js'
+import { syncAllToNavisworks } from './utils/datastore.js'
 import OfflineBanner from './components/OfflineBanner.jsx'
 
 /**
@@ -318,6 +319,42 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     setTimeout(() => setNotice(null), 4000)
   }
 
+  // Todas las planillas con datos (clave única + nombre) para "Sincronizar todo".
+  const syncEntries = useMemo(() => {
+    const seen = new Set()
+    const out = []
+    for (const d of disciplines) {
+      for (const s of d.subcategories) {
+        const key = s.dataKey
+        const ds = key && allDatasets[key]
+        if (!ds || !(ds.rows?.length) || seen.has(key)) continue
+        seen.add(key)
+        out.push({ key, name: s.name, headers: ds.headers, rows: ds.rows })
+      }
+    }
+    return out
+  }, [disciplines, allDatasets])
+  const [syncingAll, setSyncingAll] = useState(false)
+  // Publica TODAS las planillas al bucket que lee el plugin, de un solo clic.
+  async function syncAllNavisworks() {
+    if (syncingAll) return
+    if (!syncEntries.length) { setNotice('No hay planillas con datos para sincronizar.'); setTimeout(() => setNotice(null), 4000); return }
+    setSyncingAll(true)
+    setNotice(`Sincronizando 0/${syncEntries.length} planillas a Navisworks…`)
+    try {
+      const r = await syncAllToNavisworks(syncEntries, {
+        author: user?.email,
+        onProgress: ({ done, total }) => setNotice(`Sincronizando ${done}/${total} planillas a Navisworks…`),
+      })
+      setNotice(r.fail ? `Sincronizadas ${r.ok}/${r.total} · ${r.fail} con error.` : `✓ ${r.ok} planilla(s) sincronizadas a Navisworks.`)
+    } catch (e) {
+      setNotice(e.message || 'No se pudo sincronizar a Navisworks.')
+    } finally {
+      setSyncingAll(false)
+      setTimeout(() => setNotice(null), 5000)
+    }
+  }
+
   const showGrid = activeSub && tabs.some((t) => t.subcategory.id === activeSub)
 
   return (
@@ -347,6 +384,8 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
+          onSyncAll={syncAllNavisworks}
+          syncingAll={syncingAll}
           onOpenSettings={() => setSettingsOpen(true)}
           user={user}
           isDemo={isDemo}

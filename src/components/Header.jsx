@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, Loader2, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, UploadCloud, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
@@ -26,7 +26,7 @@ function initials(user) {
  *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
  *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, onOpenMobileNav, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onSyncAll, syncingAll, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, onOpenMobileNav, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
@@ -116,6 +116,18 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           >
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden lg:inline">Workspace AWP</span>
+          </button>
+        )}
+
+        {onSyncAll && (
+          <button
+            onClick={onSyncAll}
+            disabled={syncingAll}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 disabled:opacity-60 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
+            title="Publicar TODAS las planillas a Navisworks (el plugin las leerá todas)"
+          >
+            {syncingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            <span className="hidden lg:inline">{syncingAll ? 'Sincronizando…' : 'Sincronizar todo'}</span>
           </button>
         )}
 

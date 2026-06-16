@@ -107,3 +107,52 @@ export function removeWorking(dataKey) {
   try { localStorage.removeItem(KEY(dataKey)) } catch { /* ignore */ }
   idbDel(KEY(dataKey))
 }
+
+// Columna de vínculo (TAG/Commodity) entre las columnas visibles.
+const pickTagField = (headers) => headers.find((h) => /tag|commodity/i.test(h)) || headers[0] || null
+
+/**
+ * Publica TODAS las planillas dadas al bucket que lee el plugin de Navisworks
+ * (mismo endpoint POST /api/datasets/:key que el botón "Publicar para Navisworks"
+ * por hoja). Para cada una usa la copia editable LOCAL (con las ediciones) si
+ * existe; si no, los datos provistos. Es idempotente.
+ *
+ * entries: [{ key, name, headers, rows }] · opts: { author, onProgress({done,total,ok,fail}) }
+ * Devuelve { ok, fail, total }.
+ */
+export async function syncAllToNavisworks(entries, { author, onProgress } = {}) {
+  if (!cloudEnabled()) throw new Error('Inicia sesión para sincronizar a Navisworks.')
+  const projectId = activeProjectId()
+  const list = Array.isArray(entries) ? entries : []
+  let ok = 0, fail = 0
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i]
+    try {
+      const working = await loadWorkingAsync(e.key)
+      const columns = working?.columns?.length
+        ? working.columns
+        : (e.headers || []).map((h) => ({ key: h, visible: true }))
+      const rows = working?.rows?.length ? working.rows : (e.rows || [])
+      const headers = columns.filter((c) => c.visible !== false).map((c) => c.key)
+      const res = await authFetch(
+        `${getAPI()}/api/datasets/${encodeURIComponent(e.key)}${projectId ? `?project=${projectId}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: e.name || e.key,
+            tagField: pickTagField(headers),
+            headers,
+            columns,
+            rows: rows.map(({ _id, ...r }) => r),
+            author,
+          }),
+        },
+      )
+      if (!res.ok) throw new Error(`${e.key}: HTTP ${res.status}`)
+      ok++
+    } catch { fail++ }
+    onProgress?.({ done: i + 1, total: list.length, ok, fail })
+  }
+  return { ok, fail, total: list.length }
+}
