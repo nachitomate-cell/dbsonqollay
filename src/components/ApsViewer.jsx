@@ -760,19 +760,55 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     if (seg.length > 1) out.add(seg.slice(1).join('-')) // sin el primer bloque (área)
     return [...out].filter(Boolean)
   }
+  // Filtra los candidatos de `viewer.search` dejando SOLO los que de verdad tienen
+  // una propiedad cuyo valor coincide EXACTO (normalizado) con alguno de los TAGs
+  // buscados. Hace falta porque Forge tokeniza la consulta: buscar "06940-AIR-001"
+  // matchea TODO lo que contenga "06940" (el prefijo de área), no el único elemento.
+  // `wanted` = Set de variantes normalizadas (incluye el TAG sin prefijo/sin
+  // separadores), así que un modelo que nombra distinto sigue matcheando.
+  function verifyTagMatches(viewer, ids, wanted) {
+    return new Promise((resolve) => {
+      if (!ids.length) { resolve([]); return }
+      const hit = (name, props) => {
+        if (wanted.has(normTagStr(name))) return true
+        for (const p of props || []) if (wanted.has(normTagStr(p.displayValue))) return true
+        return false
+      }
+      const keep = []
+      const viaOneByOne = () => Promise.all(ids.map((id) => new Promise((res) => {
+        try { viewer.getProperties(id, (p) => res(hit(p?.name, p?.properties) ? id : null), () => res(null)) } catch { res(null) }
+      }))).then((arr) => resolve(arr.filter((x) => x != null)))
+      const model = viewer?.model
+      try {
+        if (model?.getBulkProperties) {
+          model.getBulkProperties(ids, { ignoreHidden: false },
+            (res) => { (res || []).forEach((o) => { if (hit(o.name, o.properties)) keep.push(o.dbId) }); resolve(keep) },
+            () => viaOneByOne())
+          return
+        }
+      } catch { /* fallback abajo */ }
+      viaOneByOne()
+    })
+  }
   async function findDbIds(values) {
     const viewer = viewerRef.current
     if (!viewer || !values.length) return []
-    const all = new Set()
-    // Para cada valor, intenta sus variantes y se queda con la PRIMERA que matchea
-    // (evita falsos positivos de variantes demasiado cortas si la exacta ya sirvió).
+    // 1) Junta candidatos de TODAS las variantes (la búsqueda de Forge sobre-matchea
+    //    por tokenización) y arma el set de variantes normalizadas a verificar.
+    const wanted = new Set()
+    const candidates = new Set()
     await Promise.all(values.map(async (v) => {
       for (const variant of tagVariants(v)) {
+        wanted.add(normTagStr(variant))
         const ids = await searchOne(viewer, variant)
-        if (ids.length) { ids.forEach((id) => all.add(id)); break }
+        ids.forEach((id) => candidates.add(id))
       }
     }))
-    return [...all]
+    wanted.delete('')
+    // 2) Verifica contra el valor real de las propiedades: descarta los falsos
+    //    positivos (p. ej. todo el área "06940") y deja solo los TAGs exactos.
+    if (!candidates.size || !wanted.size) return []
+    return verifyTagMatches(viewer, [...candidates], wanted)
   }
 
   // Comportamiento de la lámina: aislar el paquete, resto en blanco + 75% transp.
