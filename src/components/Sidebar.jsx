@@ -1,6 +1,12 @@
 import { ArrowLeftRight, ArrowRight, ChevronLeft, ChevronRight, FolderKanban, Globe, Home, Plus, Trash2 } from 'lucide-react'
 import Icon from './Icon.jsx'
 import { disciplines as staticDisciplines } from '../data/disciplines.js'
+import { latestAppVersion } from '../data/releaseNotes.js'
+
+/* global __BUILD_ID__ */
+// Versión real (de las notas de versión) + marcador de build (inyectado por Vite).
+const APP_VERSION = latestAppVersion()
+const BUILD_ID = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev'
 
 /**
  * Menú lateral colapsable con las disciplinas de Sonqollay.
@@ -195,7 +201,9 @@ export default function Sidebar({ collapsed, onToggle, activeDiscipline, allActi
           <p className="px-1 text-[10px] leading-relaxed text-slate-400 dark:text-slate-500">
             AWP · BIM · Control Documental
             <br />
-            <span className="text-slate-300 dark:text-slate-600">v0.3 · Gestor de Información de Proyectos</span>
+            <span className="text-slate-300 dark:text-slate-600">v{APP_VERSION} · Gestor de Información de Proyectos</span>
+            <br />
+            <span className="font-mono text-[9px] text-slate-300 dark:text-slate-600" title="Marcador de build — cambia en cada deploy">build {BUILD_ID}</span>
           </p>
         )}
       </div>

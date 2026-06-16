@@ -2,8 +2,16 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Marcador de build (fecha-hora UTC del momento del build). Se inyecta como
+// constante global __BUILD_ID__ y se muestra en el footer, para saber de un
+// vistazo si el deploy nuevo ya cargó (cambia en cada build).
+const BUILD_ID = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   plugins: [
     react(),
     VitePWA({

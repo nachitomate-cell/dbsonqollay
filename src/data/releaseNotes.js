@@ -20,6 +20,13 @@ export function latestReleaseKey() {
   return best ? `${best.date}|${best.scope}|${best.version}` : ''
 }
 
+// Versión actual de la plataforma web (la nota 'app' más reciente). Para el footer.
+export function latestAppVersion() {
+  let best = null
+  for (const r of releaseNotes) if (r.scope === 'app' && (!best || r.date > best.date)) best = r
+  return best?.version || '0'
+}
+
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {
