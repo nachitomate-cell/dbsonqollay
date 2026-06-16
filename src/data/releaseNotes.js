@@ -30,6 +30,20 @@ export function latestAppVersion() {
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {
+    version: '0.7', date: '2026-06-16', scope: 'app', title: 'Sincronización al plugin, AWP y mejoras de la planilla',
+    items: [
+      '“Sincronizar todo”: publica todas las planillas al plugin de Navisworks con un clic.',
+      'Conectar a AWP completa toda la fila: CWA, CWP, EWP, PWP e IWP (el IWP no pisa los ya asignados).',
+      'Vínculo 3D ↔ planilla por TAG: aislar, filtrar y colorear por CWP más confiables.',
+      'Tecla F para ver la planilla en pantalla completa (Esc para salir).',
+      'Barra de controles más compacta: la planilla es la protagonista.',
+      'Botones de desplazamiento de la planilla más grandes y de color.',
+      'Modal de publicación rediseñado, con los próximos pasos en Navisworks.',
+      'Los botones que publican al plugin usan el logo de Aura GIP.',
+      'El pie de página muestra la versión y un marcador de build.',
+    ],
+  },
+  {
     version: '0.6', date: '2026-06-15', scope: 'app', title: 'Nueva landing pública',
     items: [
       'Rediseño completo de la landing con imágenes propias (hero, showcase, “Cómo funciona”).',
