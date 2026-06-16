@@ -1265,8 +1265,17 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             />
           )}
 
-          {/* Filter row — en móvil se oculta en vista 3D y se colapsa en Planilla. */}
-          <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-3 px-4 pb-2`}>
+          {/* Filtros + acción AWP en UNA sola fila compacta (la planilla manda). */}
+          <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap items-end gap-x-3 gap-y-2 px-4 pb-2`}>
+            <UpdateButton
+              icon={Link2}
+              disabled={selected.size === 0 || !online}
+              title={!online ? 'Sin conexión — conectar a AWP necesita internet' : (selected.size === 0 ? 'Selecciona componentes para conectarlos a un CWP' : 'Conectar los seleccionados a un CWA/CWP de Aura AWP')}
+              onClick={() => setShowConnectAwp(true)}
+            >
+              Conectar a AWP
+            </UpdateButton>
+
             <Labeled label="Filtrar por">
               <Select value={filterByCol} onChange={setFilterByCol}>
                 <option value="">— Elegir columna —</option>
@@ -1287,9 +1296,9 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               />
             )}
 
-            {/* Filtro de paquetes: si no hay ninguno, invita a crear el primero */}
-            <Labeled label="Paquete">
-              {existingPackages.length > 0 ? (
+            {/* Filtro de paquetes: solo si ya hay paquetes (conectar vive en el botón). */}
+            {existingPackages.length > 0 && (
+              <Labeled label="Paquete">
                 <div className="flex items-center gap-1.5">
                   <Select
                     value={colFilters[packageCol]?.values?.length === 1 ? colFilters[packageCol].values[0] : ''}
@@ -1310,17 +1319,8 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                     </button>
                   )}
                 </div>
-              ) : (
-                <button
-                  onClick={() => setShowConnectAwp(true)}
-                  disabled={!online}
-                  title={online ? 'Conectar los componentes seleccionados a un CWA/CWP de Aura AWP' : 'Sin conexión — conectar a AWP necesita internet'}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-brand-300 bg-white px-3 py-1.5 text-sm font-medium text-brand-600 transition hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-brand-300 disabled:hover:bg-white dark:border-accent/40 dark:bg-ink-900 dark:text-accent dark:hover:bg-accent/10"
-                >
-                  <Link2 className="h-4 w-4" /> Conectar a AWP
-                </button>
-              )}
-            </Labeled>
+              </Labeled>
+            )}
 
             <div className="ml-auto">
               <Labeled label="Cambio de propiedad">
@@ -1332,11 +1332,6 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
                 </Select>
               </Labeled>
             </div>
-          </div>
-
-          {/* Update buttons */}
-          <div className={`${(viewMode === 'bim' || !mobileToolsOpen) ? 'hidden md:flex' : 'flex'} flex-wrap gap-2 px-4 pb-2`}>
-            <UpdateButton icon={Link2} disabled={selected.size === 0 || !online} title={!online ? 'Sin conexión — conectar a AWP necesita internet' : undefined} onClick={() => setShowConnectAwp(true)}>Conectar a AWP</UpdateButton>
           </div>
 
           {/* Active filter chips */}
@@ -1354,11 +1349,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
             </div>
           )}
 
-          {/* Stats bar */}
-          <div className="mx-4 mb-2 flex flex-wrap gap-x-8 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-1.5 text-[13px] font-medium text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
-            <span>Total de elementos : <b className="tabular-nums text-brand-600 dark:text-accent">{rows.length}</b></span>
-            <span>Total de elementos seleccionados : <b className="tabular-nums text-brand-600 dark:text-accent">{selected.size}</b></span>
-            <span>Total de elementos eliminados : <b className="tabular-nums">0</b></span>
+          {/* Stats bar (compacta) */}
+          <div className="mx-4 mb-1.5 flex flex-wrap gap-x-5 gap-y-0.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+            <span>Elementos : <b className="tabular-nums text-brand-600 dark:text-accent">{rows.length}</b></span>
+            <span>Seleccionados : <b className="tabular-nums text-brand-600 dark:text-accent">{selected.size}</b></span>
+            <span>Eliminados : <b className="tabular-nums">0</b></span>
             {filtered.length !== rows.length && (
               <span className="text-slate-500 dark:text-slate-400">Mostrando : <b className="tabular-nums">{filtered.length}</b></span>
             )}
