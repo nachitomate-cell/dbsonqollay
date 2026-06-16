@@ -271,16 +271,6 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     }
   }, [viewKey, sort, colFilters])
 
-  // Aviso al cerrar/recargar si hay ediciones sin publicar (dirty). Las ediciones
-  // se guardan localmente, pero esto evita perderlas si se limpia el navegador o
-  // se cierra en un PC compartido antes de publicarlas a Navisworks.
-  useEffect(() => {
-    if (!dirty) return
-    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = '' }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [dirty])
-
   // Publica la planilla editada en el backend para que el plugin de Navisworks
   // la lea por HTTP (GET /api/datasets/:key). La key es el dataKey de la
   // subcategoría. Ver docs/navisworks-plugin/.
@@ -397,13 +387,18 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, columns, dirty])
 
-  // Aviso del navegador si se cierra/recarga la pestaña con un guardado pendiente
-  // (cambios aún no confirmados en la DB). Usa el ref para leer el último valor.
+  // Al cerrar/recargar: NO mostramos el diálogo genérico del navegador
+  // ("¿Salir del sitio?") — no se puede estilar y molesta. En su lugar, si hay un
+  // guardado pendiente, lo dejamos ENCOLADO en silencio para que se sincronice al
+  // reabrir. Los datos ya están durables en IndexedDB, así que el cierre es limpio
+  // y no se pierde nada.
   useEffect(() => {
-    const onBeforeUnload = (e) => {
+    const onBeforeUnload = () => {
       if (!pendingRef.current) return
-      e.preventDefault()
-      e.returnValue = '' // dispara el diálogo estándar "¿Salir del sitio?"
+      try {
+        const d = saveDataRef.current
+        if (d?.dataKey) offlineEnqueue(d.dataKey, { projectId: activeProjectId(), name: d.name, author: currentUser()?.email })
+      } catch { /* best effort: el contenido ya está en IndexedDB */ }
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
