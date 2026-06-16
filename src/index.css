@@ -66,3 +66,55 @@
   background-color: #2a3a5e;
   background-clip: content-box;
 }
+
+/* Scrollbar de la PLANILLA: más ancho, con thumb y botones de flecha grandes y
+   de color (naranja de marca) para desplazarse fácil. Solo afecta a la grilla
+   (.sqy-grid-scroll), no al resto de los scrollbars de la app. */
+.sqy-grid-scroll::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+.sqy-grid-scroll::-webkit-scrollbar-thumb {
+  background-color: #f77000;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  min-height: 40px;
+}
+.sqy-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #d96400;
+  background-clip: content-box;
+}
+/* Botones (flechas) de los extremos: un solo botón por extremo, naranja con
+   flecha blanca. Al pasar el mouse o presionar, oscurece. */
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button {
+  display: block;
+  height: 16px;
+  width: 16px;
+  background-color: #f77000;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 9px 9px;
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:hover {
+  background-color: #d96400;
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:active {
+  background-color: #b85400;
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:vertical:decrement {
+  border-radius: 8px 8px 0 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M5%203L8%207L2%207Z'%20fill='white'/%3E%3C/svg%3E");
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:vertical:increment {
+  border-radius: 0 0 8px 8px;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M2%203L8%203L5%207Z'%20fill='white'/%3E%3C/svg%3E");
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  border-radius: 8px 0 0 8px;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M3%205L7%202L7%208Z'%20fill='white'/%3E%3C/svg%3E");
+}
+.sqy-grid-scroll::-webkit-scrollbar-button:single-button:horizontal:increment {
+  border-radius: 0 8px 8px 0;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M7%205L3%202L3%208Z'%20fill='white'/%3E%3C/svg%3E");
+}
