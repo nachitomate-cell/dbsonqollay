@@ -979,11 +979,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     // (y IWP/SWP si el export los incluye). Solo se escribe lo que tiene valor: no
     // se pisan columnas para las que el CWP no aporta dato (p. ej. IWP, que hoy no
     // viene en el export de Aura AWP).
-    // IWP: si el CSV lo trae, se usa; si no, se deriva del PWP (o EWP) cambiando el
-    // prefijo a "IWP" y agregando "-01" (primer paquete de instalación). El IWP NO
-    // sigue el código del CWP sino el del EWP/PWP. Ej: PWP-07-E-01 → IWP-07-E-01-01.
-    const iwpVal = cwp.iwp || ((cwp.pwp || cwp.ewp)
-      ? String(cwp.pwp || cwp.ewp).replace(/^(PWP|EWP)/i, 'IWP') + '-01'
+    // IWP: si el CSV lo trae, se usa; si no, se deriva del CWP. Los IWP son
+    // subconjuntos del CWP (regla AWP): se cambia el prefijo "CWP" por "IWP" y se
+    // agrega "-01" (primer subconjunto). Ej: CWP-01-M-01 → IWP-01-M-01-01.
+    const iwpVal = cwp.iwp || (cwp.codigo
+      ? String(cwp.codigo).replace(/^CWP/i, 'IWP') + '-01'
       : '')
     const mapping = [
       [findCol('cwa', 'CWA'), cwp.cwa],
