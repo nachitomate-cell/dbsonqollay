@@ -36,7 +36,8 @@ function colIdx(headers, kw, exact) {
   return headers.findIndex((h) => norm(h).includes(k))
 }
 
-/** Devuelve [{ codigo, nombre, cwa, disciplina, estado, hh, fechaInicio, fechaFin, ewp, pwp }]. */
+/** Devuelve [{ codigo, nombre, cwa, disciplina, estado, hh, fechaInicio, fechaFin, ewp, pwp, iwp, swp }].
+ *  `iwp`/`swp` vienen vacíos si el export no incluye esas columnas (hoy no las trae). */
 export function parseAwpCwps(text) {
   const rows = parseCsvRows(text)
   if (rows.length < 2) return []
@@ -45,6 +46,7 @@ export function parseAwpCwps(text) {
     cod: colIdx(h, 'codigo'), nom: colIdx(h, 'nombre'), cwa: colIdx(h, 'cwa', true),
     dis: colIdx(h, 'disciplina'), est: colIdx(h, 'estado', true), hh: colIdx(h, 'hh'),
     fi: colIdx(h, 'inicio'), ff: colIdx(h, 'fin'), ewp: colIdx(h, 'ewp', true), pwp: colIdx(h, 'pwp', true),
+    iwp: colIdx(h, 'iwp', true), swp: colIdx(h, 'swp', true),
   }
   const get = (c, i) => (i >= 0 ? String(c[i] ?? '').trim() : '')
   const out = []
@@ -55,7 +57,7 @@ export function parseAwpCwps(text) {
     out.push({
       codigo, nombre: get(c, ix.nom), cwa: get(c, ix.cwa), disciplina: get(c, ix.dis),
       estado: get(c, ix.est), hh: get(c, ix.hh), fechaInicio: get(c, ix.fi), fechaFin: get(c, ix.ff),
-      ewp: get(c, ix.ewp), pwp: get(c, ix.pwp),
+      ewp: get(c, ix.ewp), pwp: get(c, ix.pwp), iwp: get(c, ix.iwp), swp: get(c, ix.swp),
     })
   }
   return out

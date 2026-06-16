@@ -975,13 +975,28 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const findCol = (kw, fallback) =>
       columns.find((c) => norm(c.key) === norm(kw))?.key ||
       columns.find((c) => norm(c.key).includes(norm(kw)))?.key || fallback
-    const cwaCol = findCol('cwa', 'CWA')
-    const cwpCol = findCol('cwp', 'CWP')
-    if (!columns.some((c) => c.key === cwaCol)) addColumn(cwaCol)
-    if (!columns.some((c) => c.key === cwpCol)) addColumn(cwpCol)
-    updateRecords(ids, { [cwaCol]: cwp.cwa, [cwpCol]: cwp.codigo })
+    // Completa TODA la fila AWP con lo que trae el CWP del CSV: CWA, CWP, EWP, PWP
+    // (y IWP/SWP si el export los incluye). Solo se escribe lo que tiene valor: no
+    // se pisan columnas para las que el CWP no aporta dato (p. ej. IWP, que hoy no
+    // viene en el export de Aura AWP).
+    const mapping = [
+      [findCol('cwa', 'CWA'), cwp.cwa],
+      [findCol('cwp', 'CWP'), cwp.codigo],
+      [findCol('ewp', 'EWP'), cwp.ewp],
+      [findCol('pwp', 'PWP'), cwp.pwp],
+      [findCol('iwp', 'IWP'), cwp.iwp],
+      [findCol('swp', 'SWP'), cwp.swp],
+    ]
+    const patch = {}
+    for (const [col, val] of mapping) {
+      if (val == null || String(val).trim() === '') continue
+      if (!columns.some((c) => c.key === col)) addColumn(col)
+      patch[col] = val
+    }
+    if (!Object.keys(patch).length) { flash('El CWP elegido no trae datos para conectar.'); return }
+    updateRecords(ids, patch)
     flash(`${ids.length} componente(s) conectados a ${cwp.codigo} (${cwp.cwa}).`)
-    logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo}`)
+    logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo} · campos: ${Object.keys(patch).join(', ')}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns])
   function connectToAwp(cwp) {
