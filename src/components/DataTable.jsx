@@ -32,7 +32,6 @@ import {
   RotateCw,
   Rows3,
   Search,
-  Share2,
   Redo2,
   Tag,
   Trash2,
@@ -52,6 +51,7 @@ import { lazyWithReload } from '../lib/lazyWithReload.js'
 import RecordDrawer from './RecordDrawer.jsx'
 import { onBeforeAppReload } from '../lib/appUpdate.js'
 import ConnectAwpModal from './ConnectAwpModal.jsx'
+import AuraMark from './AuraMark.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 
@@ -1128,7 +1128,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               <ExportMenu onExport={handleExport} />
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={importFile} />
               <ToolIcon icon={Upload} title="Importar (CSV / Excel)" onClick={() => fileRef.current?.click()} />
-              <ToolIcon icon={Share2} title={online ? 'Publicar para Navisworks (API en vivo)' : 'Sin conexión — publicar a Navisworks necesita internet'} onClick={publishForNavisworks} disabled={!online} />
+              <ToolIcon icon={AuraMark} title={online ? 'Publicar para Navisworks (API en vivo)' : 'Sin conexión — publicar a Navisworks necesita internet'} onClick={publishForNavisworks} disabled={!online} />
               <ToolIcon icon={Columns3} title="Campos / columnas" active={showColumns} onClick={() => setShowColumns((v) => !v)} />
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />

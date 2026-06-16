@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, Loader2, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, UploadCloud, Wifi, WifiOff, X } from 'lucide-react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, Loader2, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
+import AuraMark from './AuraMark.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
 import HelpModal from './HelpModal.jsx'
 import ReleaseNotesModal from './ReleaseNotesModal.jsx'
@@ -126,7 +127,7 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 disabled:opacity-60 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
             title="Publicar TODAS las planillas a Navisworks (el plugin las leerá todas)"
           >
-            {syncingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {syncingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <AuraMark className="h-4 w-4" />}
             <span className="hidden lg:inline">{syncingAll ? 'Sincronizando…' : 'Sincronizar todo'}</span>
           </button>
         )}
