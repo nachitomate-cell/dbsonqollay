@@ -804,6 +804,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   // ---- Atajos de teclado de la planilla ----
   // No actúan mientras se tipea en un input/select ni con la ficha abierta.
   //   Ctrl/Cmd+F  → enfocar el buscador
+  //   F           → alternar pantalla completa de la planilla (Esc sale)
   //   Ctrl/Cmd+A  → seleccionar todo lo filtrado
   //   Supr        → eliminar las filas seleccionadas
   //   Enter       → abrir la ficha de la fila activa
@@ -821,6 +822,14 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       }
       const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) || e.target.isContentEditable
       if (typing) return
+
+      // F (sin modificadores) → alterna pantalla completa de la planilla. Esc sale
+      // (lo maneja el otro efecto). Ctrl/Cmd+F ya se atendió arriba (buscador).
+      if (!mod && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setFullscreen((v) => !v)
+        return
+      }
 
       // Deshacer / rehacer (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z o Ctrl/Cmd+Y). Solo
       // sobre la planilla: si se está editando una celda/campo (input), el guard
@@ -1139,7 +1148,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
               <ToolIcon icon={PieChart} title="Estadísticas" active={showStats} onClick={() => setShowStats((v) => !v)} />
               <ToolIcon icon={History} title="Historial de la sesión" active={showHistory} onClick={() => setShowHistory((v) => !v)} />
               <ToolIcon icon={Rows3} title={compact ? 'Vista cómoda (filas más altas)' : 'Vista compacta (más filas en pantalla)'} active={compact} onClick={() => setDensity((d) => (d === 'compact' ? 'normal' : 'compact'))} />
-              <ToolIcon icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'} active={fullscreen} onClick={() => setFullscreen((v) => !v)} />
+              <ToolIcon icon={fullscreen ? Minimize2 : Maximize2} title={fullscreen ? 'Salir de pantalla completa (Esc / F)' : 'Pantalla completa (F)'} active={fullscreen} onClick={() => setFullscreen((v) => !v)} />
             </div>
 
             {/* View mode toggle */}
