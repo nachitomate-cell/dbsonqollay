@@ -335,8 +335,14 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     setStatus('ready')
   }
 
-  // Filtro AWP
-  const tagKey = headers[0]
+  // Columna de VÍNCULO con el modelo 3D. El modelo se etiqueta por TAG/Commodity,
+  // así que NO se puede usar ciegamente headers[0]: tras el "camino B", la 1ª
+  // columna es ID (identidad interna que el modelo no conoce), no el TAG. Se
+  // prefiere la columna TAG/Commodity; si no existe, se cae a la 1ª columna.
+  const tagKey = useMemo(() => headers.find((h) => /tag|commodity/i.test(h)) || headers[0], [headers.join('|')])
+  // Ref fresca del linkKey para el handler de selección (vive en un efecto que se
+  // monta una sola vez y no debe capturar un valor viejo).
+  const tagKeyRef = useRef(tagKey); tagKeyRef.current = tagKey
   const awpFields = useMemo(() => headers.filter((h) => /CWA|CWP|EWP|PWP|IWP|SWP|WBS|AWP/i.test(h)), [headers])
   const [awpField, setAwpField] = useState('')
   const [awpSel, setAwpSel] = useState([]) // valores AWP seleccionados (multi)
@@ -358,7 +364,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
     // objProps.tag = TAG de la planilla resuelto al pinchar (buscado en TODAS
     // las propiedades del objeto, no solo el nombre).
     if (!objProps || !objProps.tag) { setLinkRow(null); setDraft(null); return }
-    const tagk = headers[0]
+    const tagk = tagKey
     const target = normTag(objProps.tag)
     const row = rows.find((r) => normTag(r[tagk]) === target)
     if (row) { setLinkRow({ id: row._id }); setDraft({ ...row }) }
@@ -392,7 +398,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   const [areaMode, setAreaMode] = useState(false)
   const multiRows = useMemo(() => {
     if (!multiNames || multiNames.length < 2) return null
-    const tagk = headers[0]
+    const tagk = tagKey
     const map = new Map() // _id → TAG (deduplica si dos objetos mapean al mismo registro)
     multiNames.forEach((nm) => {
       const t = normTag(nm)
@@ -449,7 +455,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
   // Edita TODO el conjunto activo sin seleccionar a mano: el paquete AWP elegido,
   // o si no, las filas actualmente filtradas en la planilla (lo que se ve).
   function editActiveSet() {
-    const tagk = headers[0]
+    const tagk = tagKey
     let target = rows
     let label = isFiltered ? 'filtrados' : 'del modelo'
     if (awpSel.length && packageTags.length) {
@@ -532,7 +538,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
               onSelectRef.current?.(props.name || String(id))
               // El TAG de la planilla puede estar en cualquier propiedad (no solo
               // el nombre): se busca en todas para vincular el registro a editar.
-              const tag = matchTagInSet(props.name, props.properties, buildTagSet(rowsRef.current, headersRef.current[0]))
+              const tag = matchTagInSet(props.name, props.properties, buildTagSet(rowsRef.current, tagKeyRef.current))
               setObjProps({ name: props.name || `Objeto ${id}`, tag, dbId: id, groups: groupProps(props.properties || []) })
             })
             return
@@ -540,7 +546,7 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
           // Selección múltiple (Ctrl/Cmd+clic o área): panel de edición masiva.
           // Se resuelven los TAG de todos los objetos mirando todas sus props.
           setObjProps(null)
-          resolveMatchedTags(viewer, ids, rowsRef.current, headersRef.current[0], (tags) => setMultiNames(tags))
+          resolveMatchedTags(viewer, ids, rowsRef.current, tagKeyRef.current, (tags) => setMultiNames(tags))
         }
         viewer.addEventListener(window.Autodesk.Viewing.SELECTION_CHANGED_EVENT, onSel)
         ctxRef.current.onSel = onSel
