@@ -975,22 +975,13 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const findCol = (kw, fallback) =>
       columns.find((c) => norm(c.key) === norm(kw))?.key ||
       columns.find((c) => norm(c.key).includes(norm(kw)))?.key || fallback
-    // Completa TODA la fila AWP con lo que trae el CWP del CSV: CWA, CWP, EWP, PWP
-    // (y IWP/SWP si el export los incluye). Solo se escribe lo que tiene valor: no
-    // se pisan columnas para las que el CWP no aporta dato (p. ej. IWP, que hoy no
-    // viene en el export de Aura AWP).
-    // IWP: si el CSV lo trae, se usa; si no, se deriva del CWP. Los IWP son
-    // subconjuntos del CWP (regla AWP): se cambia el prefijo "CWP" por "IWP" y se
-    // agrega "-01" (primer subconjunto). Ej: CWP-01-M-01 → IWP-01-M-01-01.
-    const iwpVal = cwp.iwp || (cwp.codigo
-      ? String(cwp.codigo).replace(/^CWP/i, 'IWP') + '-01'
-      : '')
+    // Campos 1:1 con el CWP (iguales para todos los componentes del paquete): se
+    // escriben siempre. Solo se escribe lo que tiene valor.
     const mapping = [
       [findCol('cwa', 'CWA'), cwp.cwa],
       [findCol('cwp', 'CWP'), cwp.codigo],
       [findCol('ewp', 'EWP'), cwp.ewp],
       [findCol('pwp', 'PWP'), cwp.pwp],
-      [findCol('iwp', 'IWP'), iwpVal],
       [findCol('swp', 'SWP'), cwp.swp],
     ]
     const patch = {}
@@ -999,12 +990,27 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       if (!columns.some((c) => c.key === col)) addColumn(col)
       patch[col] = val
     }
-    if (!Object.keys(patch).length) { flash('El CWP elegido no trae datos para conectar.'); return }
-    updateRecords(ids, patch)
+    // IWP: es 1-a-muchos (subconjuntos del CWP), así que cada componente puede ir
+    // en un IWP distinto (…-01, …-02, …). NO se pisa un IWP ya asignado (dato real
+    // de la planilla); solo se RELLENAN los vacíos con el primer subconjunto -01
+    // (derivado del CWP: CWP-01-M-01 → IWP-01-M-01-01), o con el IWP del CSV si viene.
+    const iwpCol = findCol('iwp', 'IWP')
+    const iwpDefault = cwp.iwp || (cwp.codigo ? String(cwp.codigo).replace(/^CWP/i, 'IWP') + '-01' : '')
+    const emptyIwpIds = iwpDefault
+      ? ids.filter((id) => { const r = rows.find((x) => x._id === id); return r && String(r[iwpCol] ?? '').trim() === '' })
+      : []
+
+    if (!Object.keys(patch).length && !emptyIwpIds.length) { flash('El CWP elegido no trae datos para conectar.'); return }
+    if (Object.keys(patch).length) updateRecords(ids, patch)
+    if (emptyIwpIds.length) {
+      if (!columns.some((c) => c.key === iwpCol)) addColumn(iwpCol)
+      updateRecords(emptyIwpIds, { [iwpCol]: iwpDefault })
+    }
+    const campos = [...Object.keys(patch), ...(emptyIwpIds.length ? [`${iwpCol} (${emptyIwpIds.length} vacío/s)`] : [])]
     flash(`${ids.length} componente(s) conectados a ${cwp.codigo} (${cwp.cwa}).`)
-    logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo} · campos: ${Object.keys(patch).join(', ')}`)
+    logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo} · campos: ${campos.join(', ')}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns])
+  }, [columns, rows])
   function connectToAwp(cwp) {
     connectIdsToAwp([...selected], cwp)
     setShowConnectAwp(false)
