@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.24.0";
+        private const string Version = "1.25.0";
 
         // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
         // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
@@ -55,6 +55,11 @@ namespace AuraBIM
         // scope 'plugin') para que el usuario las vea en el software.
         private static readonly ReleaseNote[] ReleaseNotes = new[]
         {
+            new ReleaseNote("1.25.0", "2026-06-16", new[]
+            {
+                "El cruce con el modelo usa la \"Capa\" nativa (pestaña Elemento), no la pestaña BIM.",
+                "Funciona en modelos sin propiedades previas (la capa viene del DWG).",
+            }),
             new ReleaseNote("1.24.0", "2026-06-16", new[]
             {
                 "Las propiedades se escriben en el MISMO orden de columnas que en la web.",
@@ -1004,6 +1009,15 @@ namespace AuraBIM
         // Si Cfg.LinkCategory está vacío, busca la propiedad en cualquier pestaña.
         private string GetTagValue(ModelItem item)
         {
+            // 1) Llave NATIVA preferida: la "Capa"/"Layer" de la pestaña "Elemento"
+            //    (viene del DWG, NO es editable). Es la llave robusta del cruce: el
+            //    TAG de la planilla matchea contra la capa del modelo, sin depender de
+            //    pre-sembrar la pestaña BIM. Si el elemento no tiene capa, cae a la
+            //    propiedad de vínculo configurada (BIM) más abajo.
+            string nativeLayer = GetNativeLayer(item);
+            if (!string.IsNullOrWhiteSpace(nativeLayer)) return nativeLayer.Trim();
+
+            // 2) Fallback: propiedad de vínculo configurada (por defecto BIM/TAG/Commodity).
             // Camino rápido: si la categoría está configurada (caso normal, BIM),
             // buscamos dentro de esa pestaña SIN distinguir mayús/minús, tanto en el
             // nombre de la pestaña como en el de la propiedad. Esto es clave para que
@@ -1044,6 +1058,34 @@ namespace AuraBIM
                 }
             }
             return fallback;
+        }
+
+        // Nombres (multi-idioma) de la pestaña nativa "Elemento"/"Item" y de su
+        // propiedad "Capa"/"Layer". Navisworks los localiza según el idioma de la UI,
+        // así que se cubren los más comunes para que el cruce funcione en cualquier
+        // instalación. Comparación en minúsculas (ver GetNativeLayer).
+        private static readonly string[] NativeItemCats =
+            { "item", "elemento", "élément", "elemento del modelo", "objeto", "objet", "elemento (item)" };
+        private static readonly string[] NativeLayerProps =
+            { "layer", "capa", "couche", "ebene", "camada", "livello", "laag", "warstwa", "图层", "レイヤ", "レイヤー" };
+
+        // Devuelve la "Capa"/"Layer" de la pestaña nativa "Elemento" del elemento, o
+        // null si no la tiene. Es la llave preferida del cruce (viene del DWG).
+        private string GetNativeLayer(ModelItem item)
+        {
+            foreach (PropertyCategory cat in item.PropertyCategories)
+            {
+                string cn = (cat.DisplayName ?? "").Trim().ToLowerInvariant();
+                if (Array.IndexOf(NativeItemCats, cn) < 0) continue;
+                foreach (DataProperty p in cat.Properties)
+                {
+                    string pn = (p.DisplayName ?? "").Trim().ToLowerInvariant();
+                    if (Array.IndexOf(NativeLayerProps, pn) < 0) continue;
+                    string v = p.Value != null ? p.Value.ToDisplayString() : null;
+                    if (!string.IsNullOrWhiteSpace(v)) return v;
+                }
+            }
+            return null;
         }
 
         // ---- Escribir propiedades custom (COM API) -----------------------

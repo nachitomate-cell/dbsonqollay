@@ -56,6 +56,13 @@ export const releaseNotes = [
 
   // ───────── Plugin de Navisworks ─────────
   {
+    version: '1.25.0', date: '2026-06-16', scope: 'plugin', title: 'Cruce por la Capa nativa del modelo',
+    items: [
+      'El cruce con el modelo usa la "Capa" nativa (pestaña Elemento), no la pestaña BIM.',
+      'Funciona en modelos sin propiedades previas (la capa viene directo del DWG).',
+    ],
+  },
+  {
     version: '1.24.0', date: '2026-06-16', scope: 'plugin', title: 'Orden de columnas en la pestaña BIM',
     items: [
       'Las propiedades se escriben en el mismo orden de columnas que en la web.',

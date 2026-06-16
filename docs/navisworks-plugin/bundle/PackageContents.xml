@@ -7,7 +7,7 @@
      carga, recompilar contra ese API y dejar SeriesMax en Nw24. -->
 <ApplicationPackage
     SchemaVersion="1.0"
-    AppVersion="1.24.0"
+    AppVersion="1.25.0"
     ProductType="Application"
     Name="Aura GIP"
     Description="Aura GIP: asignar propiedades BIM al modelo desde la web"
