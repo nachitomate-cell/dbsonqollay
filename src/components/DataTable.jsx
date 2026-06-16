@@ -289,7 +289,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const start = Date.now()
     publishStartRef.current = start
     setPublishElapsed(0)
-    setPublish({ status: 'publishing', count: rows.length, key: subcategory.dataKey })
+    setPublish({ status: 'publishing', count: rows.length, key: subcategory.dataKey, name: subcategory.name })
     try {
       const pid = activeProjectId()
       const res = await authFetch(`${apiBase}/api/datasets/${encodeURIComponent(subcategory.dataKey)}${pid ? `?project=${pid}` : ''}`, {
@@ -308,11 +308,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       const j = ct.includes('application/json') ? await res.json() : {}
       if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
       const ms = Date.now() - start
-      setPublish({ status: 'done', count: j.count ?? rows.length, key: subcategory.dataKey, ms })
+      setPublish({ status: 'done', count: j.count ?? rows.length, key: subcategory.dataKey, name: subcategory.name, ms })
       logAction(`Publicó la planilla para Navisworks (${j.count ?? rows.length} elementos, ${(ms / 1000).toFixed(1)} s)`)
     } catch (e) {
       const ms = Date.now() - start
-      setPublish({ status: 'error', error: e.message, key: subcategory.dataKey, ms })
+      setPublish({ status: 'error', error: e.message, key: subcategory.dataKey, name: subcategory.name, ms })
     }
   }
 
@@ -1609,7 +1609,6 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         <PublishModal
           state={publish}
           elapsedMs={publishElapsed}
-          apiBase={localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''}
           onRetry={publishForNavisworks}
           onClose={() => setPublish(null)}
         />
@@ -1626,14 +1625,19 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
 }
 
 // Modal de publicación a Navisworks. Muestra el progreso con cronómetro en vivo
-// y, al terminar, un resultado claro (elementos publicados, clave y tiempo) o el
-// error. Reemplaza el toast pequeño para que la acción quede explícita.
-function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
+// y, al terminar, un resumen claro (planilla, elementos, tiempo) + los próximos
+// pasos en Navisworks. Reemplaza el toast pequeño para que la acción quede clara.
+function PublishModal({ state, elapsedMs, onRetry, onClose }) {
   const publishing = state.status === 'publishing'
   const done = state.status === 'done'
   const error = state.status === 'error'
   const secs = ((publishing ? elapsedMs : state.ms || 0) / 1000).toFixed(1)
-  const endpoint = `${apiBase || location.origin}/api/datasets/${state.key}`
+  const count = (state.count ?? 0).toLocaleString('es-CL')
+  const planilla = state.name || state.key
+  const [copied, setCopied] = useState(false)
+  const copyKey = () => {
+    try { navigator.clipboard?.writeText(state.key); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* sin portapapeles */ }
+  }
 
   // Cerrar con Escape (solo cuando ya terminó; durante la publicación no).
   useEffect(() => {
@@ -1650,7 +1654,7 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
         onClick={() => { if (!publishing) onClose() }}
       />
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-modalIn dark:border-white/10 dark:bg-ink-800">
-        {/* Cabecera con icono de estado */}
+        {/* Cabecera con icono de estado + marca del plugin */}
         <div className="flex flex-col items-center gap-3 px-6 pt-7 text-center">
           <div
             className={[
@@ -1665,39 +1669,49 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
             {error && <TriangleAlert className="h-8 w-8" strokeWidth={2.2} />}
           </div>
           <div>
-            <h3 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-              {publishing && 'Publicando para Navisworks…'}
-              {done && '¡Publicado correctamente!'}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-white/5 dark:text-slate-400">
+              <AuraMark className="h-3.5 w-3.5" /> Plugin Aura GIP · Navisworks
+            </span>
+            <h3 className="mt-2 text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
+              {publishing && 'Publicando planilla…'}
+              {done && '¡Planilla publicada!'}
               {error && 'No se pudo publicar'}
             </h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {publishing && `Enviando ${state.count.toLocaleString('es-CL')} elemento(s) al servidor para que el plugin Aura GIP los lea.`}
-              {done && `El plugin de Navisworks (Aura GIP) ya puede leer esta planilla en vivo.`}
+              {publishing && `Enviando ${count} elementos a la nube para que el plugin Aura GIP los lea.`}
+              {done && 'El plugin de Navisworks ya puede leer esta planilla en vivo.'}
               {error && 'Revisa la conexión con el servidor e inténtalo de nuevo.'}
             </p>
           </div>
         </div>
 
-        {/* Cronómetro grande */}
-        <div className="mx-6 mt-5 flex items-center justify-center gap-2 rounded-xl bg-slate-50 py-3 dark:bg-white/5">
-          <Clock className={['h-4 w-4', publishing ? 'text-brand-500 dark:text-accent' : 'text-slate-400'].join(' ')} />
-          <span className="text-sm text-slate-500 dark:text-slate-400">{publishing ? 'Tiempo transcurrido' : 'Tardó'}</span>
-          <span className="tabular-nums text-lg font-bold text-slate-800 dark:text-white">{secs} s</span>
-        </div>
+        {/* Resumen en 3 datos: planilla · elementos · tiempo */}
+        {!error && (
+          <div className="mx-6 mt-5 grid grid-cols-3 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center dark:divide-white/10 dark:bg-white/5">
+            <Stat label="Planilla" value={planilla} title={planilla} />
+            <Stat label="Elementos" value={count} />
+            <Stat label={publishing ? 'Transcurrido' : 'Tiempo'} value={`${secs} s`} accent={publishing} />
+          </div>
+        )}
 
-        {/* Detalle del resultado */}
+        {/* Detalle */}
         <div className="px-6 py-5">
           {publishing && (
-            <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-              Para muchos elementos puede tardar varios segundos. No cierres esta ventana.
+            <p className="flex items-center justify-center gap-1.5 text-center text-xs text-slate-400 dark:text-slate-500">
+              <Clock className="h-3.5 w-3.5" /> Puede tardar unos segundos. No cierres esta ventana.
             </p>
           )}
           {done && (
-            <dl className="space-y-2 text-sm">
-              <Row label="Elementos publicados" value={state.count.toLocaleString('es-CL')} />
-              <Row label="Clave (key)" value={state.key} mono />
-              <Row label="Endpoint" value={endpoint} mono small />
-            </dl>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 dark:border-white/10 dark:bg-white/5">
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <AuraMark className="h-3.5 w-3.5" /> Próximos pasos en Navisworks
+              </p>
+              <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                <Step n={1}>Abre el modelo en Navisworks.</Step>
+                <Step n={2}>Pestaña <b className="text-slate-800 dark:text-white">Aura GIP</b> → <b className="text-slate-800 dark:text-white">Asignar Propiedades</b>.</Step>
+                <Step n={3}>Marca la planilla y pulsa <b className="text-slate-800 dark:text-white">Sincronizar</b>.</Step>
+              </ol>
+            </div>
           )}
           {error && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
@@ -1707,13 +1721,23 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
         </div>
 
         {/* Acciones */}
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-white/10">
+        <div className="flex items-center gap-2 border-t border-slate-200 px-6 py-4 dark:border-white/10">
+          {done && (
+            <button
+              onClick={copyKey}
+              title="Copiar la clave técnica de la planilla (por si la necesitas)"
+              className="mr-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-white/5 dark:hover:text-slate-200"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Clave copiada' : `clave: ${state.key}`}
+            </button>
+          )}
           {publishing ? (
-            <button disabled className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400 dark:bg-white/5">
+            <button disabled className="ml-auto inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-400 dark:bg-white/5">
               <Loader2 className="h-4 w-4 animate-spin" /> Publicando…
             </button>
           ) : (
-            <>
+            <div className="ml-auto flex items-center gap-2">
               {error && (
                 <button onClick={onRetry} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-white/5">
                   <RotateCw className="h-4 w-4" /> Reintentar
@@ -1722,7 +1746,7 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
               <button onClick={onClose} className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 dark:bg-accent dark:text-ink-900">
                 {done ? 'Entendido' : 'Cerrar'}
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -1730,14 +1754,23 @@ function PublishModal({ state, elapsedMs, apiBase, onRetry, onClose }) {
   )
 }
 
-function Row({ label, value, mono, small }) {
+// Un dato del resumen (planilla / elementos / tiempo).
+function Stat({ label, value, title, accent }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt>
-      <dd className={['min-w-0 truncate text-right font-semibold text-slate-800 dark:text-slate-100', mono ? 'font-mono' : '', small ? 'text-xs' : ''].join(' ')} title={String(value)}>
-        {value}
-      </dd>
+    <div className="px-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{label}</p>
+      <p className={['mt-0.5 truncate text-sm font-bold tabular-nums', accent ? 'text-brand-600 dark:text-accent' : 'text-slate-800 dark:text-white'].join(' ')} title={title}>{value}</p>
     </div>
+  )
+}
+
+// Un paso numerado de "Próximos pasos".
+function Step({ n, children }) {
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700 dark:bg-accent/20 dark:text-accent">{n}</span>
+      <span className="min-w-0">{children}</span>
+    </li>
   )
 }
 
