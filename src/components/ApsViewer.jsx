@@ -774,14 +774,19 @@ function ApsViewer({ rows = [], headers = [], selectedTag, onSelect, onEditRecor
         for (const p of props || []) if (wanted.has(normTagStr(p.displayValue))) return true
         return false
       }
-      const keep = []
+      // Lectura por elemento (fiable: es la misma API que llena el panel de
+      // propiedades al hacer clic). Se usa como camino principal si no hay bulk.
       const viaOneByOne = () => Promise.all(ids.map((id) => new Promise((res) => {
         try { viewer.getProperties(id, (p) => res(hit(p?.name, p?.properties) ? id : null), () => res(null)) } catch { res(null) }
       }))).then((arr) => resolve(arr.filter((x) => x != null)))
       const model = viewer?.model
       try {
-        if (model?.getBulkProperties) {
-          model.getBulkProperties(ids, { ignoreHidden: false },
+        // OJO: getBulkProperties (v1) toma un ARRAY de nombres como 2º arg; pasarle
+        // un objeto de opciones hace que devuelva los elementos SIN propiedades.
+        // getBulkProperties2 sí acepta { ignoreHidden } y trae todas las props.
+        if (model?.getBulkProperties2) {
+          const keep = []
+          model.getBulkProperties2(ids, { ignoreHidden: false },
             (res) => { (res || []).forEach((o) => { if (hit(o.name, o.properties)) keep.push(o.dbId) }); resolve(keep) },
             () => viaOneByOne())
           return
