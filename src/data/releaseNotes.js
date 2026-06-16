@@ -56,6 +56,13 @@ export const releaseNotes = [
 
   // ───────── Plugin de Navisworks ─────────
   {
+    version: '1.24.0', date: '2026-06-16', scope: 'plugin', title: 'Orden de columnas en la pestaña BIM',
+    items: [
+      'Las propiedades se escriben en el mismo orden de columnas que en la web.',
+      'Reordenar una columna en la planilla reordena la pestaña BIM en el próximo sync.',
+    ],
+  },
+  {
     version: '1.23.0', date: '2026-06-11', scope: 'plugin', title: 'Estabilidad y conjuntos',
     items: [
       'Creación de conjuntos de selección por TAG desde el modelo.',

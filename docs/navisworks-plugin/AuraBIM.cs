@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.23.0";
+        private const string Version = "1.24.0";
 
         // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
         // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
@@ -55,6 +55,11 @@ namespace AuraBIM
         // scope 'plugin') para que el usuario las vea en el software.
         private static readonly ReleaseNote[] ReleaseNotes = new[]
         {
+            new ReleaseNote("1.24.0", "2026-06-16", new[]
+            {
+                "Las propiedades se escriben en el MISMO orden de columnas que en la web.",
+                "Reordenar una columna en la planilla reordena la pestaña BIM en el próximo sync.",
+            }),
             new ReleaseNote("1.23.0", "2026-06-11", new[]
             {
                 "Creación de conjuntos de selección por TAG desde el modelo.",
@@ -629,7 +634,7 @@ namespace AuraBIM
                 ModelItemCollection changed = null;
                 foreach (ModelItem item in items)
                 {
-                    if (NeedsUpdate(item, row))
+                    if (NeedsUpdate(item, row, data.headers))
                     {
                         if (changed == null) changed = new ModelItemCollection();
                         changed.Add(item);
@@ -638,7 +643,7 @@ namespace AuraBIM
                 }
                 if (changed != null && changed.Count > 0)
                 {
-                    WriteCustomTab(changed, row, tagField);
+                    WriteCustomTab(changed, row, data.headers, tagField);
                     res.applied += changed.Count;
                 }
             }
@@ -648,7 +653,7 @@ namespace AuraBIM
         // ¿El elemento necesita reescritura? true si aún no tiene el tab "Aura GIP"
         // o si algún valor de la fila difiere del que ya está escrito. Comparar
         // contra el tab existente evita el costoso SetUserDefined cuando nada cambió.
-        private bool NeedsUpdate(ModelItem item, Dictionary<string, string> row)
+        private bool NeedsUpdate(ModelItem item, Dictionary<string, string> row, List<string> headers)
         {
             PropertyCategory existing = null;
             foreach (PropertyCategory cat in item.PropertyCategories)
@@ -673,6 +678,17 @@ namespace AuraBIM
             // Alguna columna previa con valor que ya no viene en la fila => reescribir.
             foreach (var kv in cur)
                 if (!string.IsNullOrEmpty(kv.Value) && !RowHasKey(row, kv.Key)) return true;
+
+            // Orden: la secuencia de columnas en la pestaña debe seguir el orden de la
+            // web (headers). Si difiere (p. ej. se reordenó una columna en la
+            // planilla), reescribir para reflejar el nuevo orden en la pestaña BIM.
+            var want = OrderedKeys(row, headers);
+            var have = new List<string>();
+            foreach (DataProperty p in existing.Properties)
+                if (RowHasKey(row, p.DisplayName)) have.Add(p.DisplayName);
+            if (have.Count != want.Count) return true;
+            for (int j = 0; j < want.Count; j++)
+                if (!string.Equals(have[j], want[j], StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
 
@@ -681,6 +697,24 @@ namespace AuraBIM
             foreach (var k in row.Keys)
                 if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) return true;
             return false;
+        }
+
+        // Orden en que se escriben las columnas en la pestaña BIM: primero las de la
+        // web (headers) que existan en la fila, en ESE orden; luego cualquier clave
+        // de la fila que no esté en headers (p. ej. columnas ocultas), para no perder
+        // datos. El conjunto resultante es el mismo que row.Keys, solo reordenado.
+        private static List<string> OrderedKeys(Dictionary<string, string> row, List<string> headers)
+        {
+            var ordered = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (headers != null && row != null)
+                foreach (var h in headers)
+                    if (!string.IsNullOrWhiteSpace(h) && RowHasKey(row, h) && seen.Add(h))
+                        ordered.Add(h);
+            if (row != null)
+                foreach (var k in row.Keys)
+                    if (seen.Add(k)) ordered.Add(k);
+            return ordered;
         }
 
         // ---- HTTP --------------------------------------------------------
@@ -1015,7 +1049,7 @@ namespace AuraBIM
         // ---- Escribir propiedades custom (COM API) -----------------------
         // En el SDK de Navisworks, SetUserDefined va por cada elemento, sobre su
         // nodo de propiedades (InwGUIPropertyNode2), no sobre el estado global.
-        private void WriteCustomTab(ModelItemCollection items, Dictionary<string, string> row, string tagField)
+        private void WriteCustomTab(ModelItemCollection items, Dictionary<string, string> row, List<string> headers, string tagField)
         {
             ComApi.InwOpState10 state = ComApiBridge.State;
             ComApi.InwOpSelection comSel = ComApiBridge.ToInwOpSelection(items);
@@ -1044,16 +1078,19 @@ namespace AuraBIM
                 ComApi.InwOaPropertyVec vec = (ComApi.InwOaPropertyVec)state.ObjectFactory(
                     ComApi.nwEObjectType.eObjectType_nwOaPropertyVec, null, null);
 
-                foreach (var kv in row)
+                // Orden de escritura = el de las columnas en la web (headers). Así la
+                // pestaña BIM refleja el mismo orden que la planilla (p. ej.
+                // MODULARIZACIÓN entre DESCRIPCIÓN_COMPLEMENTARIA y CANTIDAD). Se
+                // escriben TODAS las columnas, incluida la del TAG: la pestaña conserva
+                // TAG/Commodity y el sync sigue siendo repetible.
+                foreach (var key in OrderedKeys(row, headers))
                 {
-                    // Escribimos TODAS las columnas, incluida la del TAG: así la pestaña
-                    // BIM conserva TAG/Commodity y el sync sigue siendo repetible (la
-                    // próxima corrida vuelve a matchear por esa propiedad).
+                    string val; if (!row.TryGetValue(key, out val)) val = "";
                     ComApi.InwOaProperty p = (ComApi.InwOaProperty)state.ObjectFactory(
                         ComApi.nwEObjectType.eObjectType_nwOaProperty, null, null);
-                    p.name = Sanitize(kv.Key);   // nombre interno
-                    p.UserName = kv.Key;          // nombre visible
-                    p.value = kv.Value ?? "";
+                    p.name = Sanitize(key);   // nombre interno
+                    p.UserName = key;          // nombre visible
+                    p.value = val ?? "";
                     vec.Properties().Add(p);
                 }
 
