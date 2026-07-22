@@ -1,15 +1,19 @@
 /**
- * Parseo del CSV de CWPs exportado de Aura AWP. Mientras no haya API, el usuario
- * importa este CSV y la app lee la jerarquía CWA/CWP para conectar componentes.
+ * Parseo del listado de CWPs exportado de Aura AWP (CSV o Excel). Mientras no
+ * haya API, el usuario importa este archivo y la app lee la jerarquía CWA/CWP
+ * para conectar componentes.
  *
  * Columnas esperadas: Código, Nombre, CWA, Disciplina, Estado, HH Estimadas,
  * Fecha Inicio, Fecha Fin, EWP, EWP Estado, PWP, PWP Estado.
  */
 
 // Parser CSV mínimo con soporte de comillas (campos con comas internas, p. ej.
-// "I - Instrumentación, Control y Telecomunicaciones").
+// "I - Instrumentación, Control y Telecomunicaciones"). Autodetecta el
+// separador: Excel en español guarda los CSV con ';' en vez de ','.
 function parseCsvRows(text) {
   const s = String(text).replace(/\r\n?/g, '\n')
+  const first = s.slice(0, s.indexOf('\n') === -1 ? s.length : s.indexOf('\n'))
+  const delim = (first.match(/;/g)?.length || 0) > (first.match(/,/g)?.length || 0) ? ';' : ','
   const rows = []
   let field = '', row = [], inQ = false
   for (let i = 0; i < s.length; i++) {
@@ -18,7 +22,7 @@ function parseCsvRows(text) {
       if (ch === '"') { if (s[i + 1] === '"') { field += '"'; i++ } else inQ = false }
       else field += ch
     } else if (ch === '"') inQ = true
-    else if (ch === ',') { row.push(field); field = '' }
+    else if (ch === delim) { row.push(field); field = '' }
     else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = '' }
     else field += ch
   }
@@ -61,4 +65,20 @@ export function parseAwpCwps(text) {
     })
   }
   return out
+}
+
+/**
+ * Lee el archivo de CWPs y devuelve los CWPs parseados. Acepta CSV y también
+ * Excel (.xlsx/.xls): el mismo archivo que el usuario abrió/edito en Excel se
+ * puede reimportar sin convertirlo a mano. La primera hoja se convierte a CSV
+ * con SheetJS (import dinámico para no inflar el bundle).
+ */
+export async function parseAwpFile(file) {
+  if (/\.(xlsx|xls)$/i.test(file?.name || '')) {
+    const XLSX = await import('xlsx')
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    return parseAwpCwps(ws ? XLSX.utils.sheet_to_csv(ws) : '')
+  }
+  return parseAwpCwps(await file.text())
 }

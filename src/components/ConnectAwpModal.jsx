@@ -40,7 +40,7 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
     setImporting(true); setError('')
     try {
       const n = await onImport(file)
-      if (!n) setError('No se encontraron CWPs en el archivo. Verifica que sea el CSV exportado de Aura AWP.')
+      if (!n) setError('No se encontraron CWPs en el archivo. Verifica que sea el listado exportado de Aura AWP (CSV o Excel).')
     } catch (e) {
       setError(e.message || 'No se pudo leer el archivo.')
     } finally { setImporting(false) }
@@ -79,11 +79,11 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
             </div>
             <p className="text-sm font-semibold text-slate-800 dark:text-white">Importa el listado de CWPs</p>
             <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              Carga el CSV de CWPs exportado de Aura AWP. La app leerá la jerarquía CWA/CWP para conectar tus componentes.
+              Carga el listado de CWPs exportado de Aura AWP (CSV o Excel). La app leerá la jerarquía CWA/CWP para conectar tus componentes.
             </p>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
             <button onClick={() => fileRef.current?.click()} disabled={importing} className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-60 dark:bg-accent dark:text-ink-900">
-              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Seleccionar CSV
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Seleccionar archivo
             </button>
             {error && <p className="mt-3 text-xs font-medium text-rose-500">{error}</p>}
           </div>
@@ -139,10 +139,10 @@ export default function ConnectAwpModal({ cwps = [], count = 0, onImport, onClea
 
             <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs dark:border-white/10">
               <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1.5 font-medium text-slate-400 transition hover:text-brand-600 dark:hover:text-accent">
-                <RefreshCw className="h-3.5 w-3.5" /> Reimportar CSV
+                <RefreshCw className="h-3.5 w-3.5" /> Reimportar listado
               </button>
               <span className="text-slate-400">{cwps.length} CWPs · elige uno para conectar</span>
-              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
             </div>
           </>
         )}

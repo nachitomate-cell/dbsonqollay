@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { parseAwpCwps } from '../utils/awpCsv.js'
+import { parseAwpFile } from '../utils/awpCsv.js'
 import { loadStore, saveStore } from '../utils/cloudStore.js'
 
 /**
- * Listado de CWPs (jerarquía CWA/CWP) importado del CSV de Aura AWP, por proyecto.
+ * Listado de CWPs (jerarquía CWA/CWP) importado del export de Aura AWP (CSV o
+ * Excel), por proyecto.
  *
  * Se guarda EN LA NUBE (almacén /api/store, clave por proyecto) además de en
  * localStorage como caché. Así cualquier usuario del proyecto ve el mismo listado
@@ -41,7 +42,7 @@ export function useAwpCwps(projectId) {
   }, [CKEY])
 
   const importCwps = useCallback(async (file) => {
-    const parsed = parseAwpCwps(await file.text())
+    const parsed = await parseAwpFile(file)
     setCwps(parsed)
     saveStore(CKEY, { cwps: parsed, updatedAt: new Date().toISOString() }, 0) // a la nube, inmediato
     return parsed.length

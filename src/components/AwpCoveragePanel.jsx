@@ -87,11 +87,11 @@ export default function AwpCoveragePanel({ cwps = [], rows = [], cwpCol, avanceC
           <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 text-white shadow-glow"><Link2 className="h-7 w-7" /></div>
           <h2 className="text-base font-bold text-slate-800 dark:text-white">Conecta esta disciplina a AWP</h2>
           <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-            Importa el CSV de CWPs exportado de Aura AWP para ver la cobertura y el avance de paquetización.
+            Importa el listado de CWPs exportado de Aura AWP (CSV o Excel) para ver la cobertura y el avance de paquetización.
           </p>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; pick(f); e.target.value = '' }} />
           <button onClick={() => fileRef.current?.click()} disabled={importing} className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600 disabled:opacity-60 dark:bg-accent dark:text-ink-900">
-            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Importar CSV de CWPs
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Importar CWPs (CSV o Excel)
           </button>
         </div>
       </div>
