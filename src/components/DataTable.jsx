@@ -995,22 +995,32 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       patch[col] = val
     }
     // IWP: es 1-a-muchos (subconjuntos del CWP), así que cada componente puede ir
-    // en un IWP distinto (…-01, …-02, …). NO se pisa un IWP ya asignado (dato real
-    // de la planilla); solo se RELLENAN los vacíos con el primer subconjunto -01
-    // (derivado del CWP: CWP-01-M-01 → IWP-01-M-01-01), o con el IWP del CSV si viene.
+    // en un IWP distinto (…-01, …-02, …). Al conectar se escribe el IWP en las
+    // filas vacías Y en las que tienen un IWP de OTRO CWP (quedó obsoleto al
+    // reasignar el paquete). Solo se CONSERVA el IWP existente si ya es un
+    // subconjunto del CWP elegido (…-02, …-03: dato real de la planilla). El
+    // valor escrito es el IWP del CSV si viene, o el primer subconjunto -01
+    // derivado del CWP (CWP-01-M-01 → IWP-01-M-01-01).
     const iwpCol = findCol('iwp', 'IWP')
-    const iwpDefault = cwp.iwp || (cwp.codigo ? String(cwp.codigo).replace(/^CWP/i, 'IWP') + '-01' : '')
-    const emptyIwpIds = iwpDefault
-      ? ids.filter((id) => { const r = rows.find((x) => x._id === id); return r && String(r[iwpCol] ?? '').trim() === '' })
+    const iwpPrefix = cwp.codigo ? String(cwp.codigo).replace(/^CWP/i, 'IWP') : ''
+    const iwpDefault = cwp.iwp || (iwpPrefix ? iwpPrefix + '-01' : '')
+    const keepIwp = (v) => iwpPrefix && v.toUpperCase().startsWith(iwpPrefix.toUpperCase() + '-')
+    const staleIwpIds = iwpDefault
+      ? ids.filter((id) => {
+          const r = rows.find((x) => x._id === id)
+          if (!r) return false
+          const cur = String(r[iwpCol] ?? '').trim()
+          return cur === '' || !keepIwp(cur)
+        })
       : []
 
-    if (!Object.keys(patch).length && !emptyIwpIds.length) { flash('El CWP elegido no trae datos para conectar.'); return }
+    if (!Object.keys(patch).length && !staleIwpIds.length) { flash('El CWP elegido no trae datos para conectar.'); return }
     if (Object.keys(patch).length) updateRecords(ids, patch)
-    if (emptyIwpIds.length) {
+    if (staleIwpIds.length) {
       if (!columns.some((c) => c.key === iwpCol)) addColumn(iwpCol)
-      updateRecords(emptyIwpIds, { [iwpCol]: iwpDefault })
+      updateRecords(staleIwpIds, { [iwpCol]: iwpDefault })
     }
-    const campos = [...Object.keys(patch), ...(emptyIwpIds.length ? [`${iwpCol} (${emptyIwpIds.length} vacío/s)`] : [])]
+    const campos = [...Object.keys(patch), ...(staleIwpIds.length ? [`${iwpCol} (${staleIwpIds.length} actualizado/s)`] : [])]
     flash(`${ids.length} componente(s) conectados a ${cwp.codigo} (${cwp.cwa}).`)
     logAction(`Conectó ${ids.length} componente(s) a ${cwp.codigo} · campos: ${campos.join(', ')}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
