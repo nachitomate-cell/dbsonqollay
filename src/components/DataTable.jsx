@@ -100,7 +100,7 @@ const isLockedCell = (h, value) => isIdColumn(h) && String(value ?? '').trim() !
 
 export default function DataTable({ dataset, subcategory, onBack, awp = {}, focusQuery, focusNonce, findTagAcross, onOpenSubcategory }) {
   const { cwps: awpCwps = [], importCwps, clearCwps } = awp
-  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo, loading } =
+  const { columns, rows, addColumn, removeColumn, toggleColumn, moveColumn, updateRecord, updateRecords, applyPatches, addRecord, insertRecord, addRecords, replaceAll, deleteRecord, reset, dirty, undo, redo, canUndo, canRedo, loading } =
     useEditableDataset(subcategory.dataKey, dataset)
 
   const visibleCols = columns.filter((c) => c.visible)
@@ -919,7 +919,10 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
     const head = (rowsArr.shift() || []).map((h) => h.trim())
     return rowsArr.filter((r) => r.some((v) => v !== '')).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i] ?? ''])))
   }
-  // Importar CSV o Excel → agrega las filas al dataset (crea columnas que falten).
+  // Importar CSV o Excel. Si la planilla ya tiene filas, pregunta el modo:
+  // REEMPLAZAR todo el contenido con el archivo (flujo exportar → editar en
+  // Excel → reimportar: respeta orden y ediciones) o AGREGAR las filas.
+  const [importAsk, setImportAsk] = useState(null) // { records, headers, fileName }
   async function importFile(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -933,10 +936,25 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
         parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
       }
-      const n = addRecords(parsed)
-      flash(n ? `Importadas ${n} fila(s) desde ${file.name}.` : 'No se encontraron filas en el archivo.')
-      if (n) logAction(`Importó ${n} fila(s) (${file.name})`)
+      if (!parsed.length) { flash('No se encontraron filas en el archivo.'); return }
+      const data = { records: parsed, headers: Object.keys(parsed[0]).filter((k) => k !== '_id'), fileName: file.name }
+      if (rows.length) setImportAsk(data)
+      else applyImport('add', data)
     } catch { flash('No se pudo leer el archivo (formato no válido).') }
+  }
+  function applyImport(mode, data) {
+    const d = data || importAsk
+    setImportAsk(null)
+    if (!d) return
+    if (mode === 'replace') {
+      const n = replaceAll(d.headers, d.records)
+      flash(`Planilla reemplazada: ${n} fila(s) desde ${d.fileName}. (Ctrl+Z deshace)`)
+      logAction(`Reemplazó la planilla con ${n} fila(s) (${d.fileName})`)
+    } else {
+      const n = addRecords(d.records)
+      flash(`Importadas ${n} fila(s) desde ${d.fileName}.`)
+      if (n) logAction(`Importó ${n} fila(s) (${d.fileName})`)
+    }
   }
   // Edición múltiple: asigna un valor a una columna en las filas seleccionadas.
   // El AWP usa una columna CWA/CWP/EWP/IWP; el código de mercancía, una de código.
@@ -1573,6 +1591,18 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         />
       )}
 
+      {/* Modal: elegir modo de importación (reemplazar o agregar) */}
+      {importAsk && (
+        <ImportModeModal
+          fileName={importAsk.fileName}
+          fileRows={importAsk.records.length}
+          currentRows={rows.length}
+          onReplace={() => applyImport('replace')}
+          onAdd={() => applyImport('add')}
+          onClose={() => setImportAsk(null)}
+        />
+      )}
+
       {/* Modal: agrupar elementos seleccionados en un paquete */}
       {showPackage && (
         <PackageModal
@@ -1917,6 +1947,60 @@ function RowContextMenu({ x, y, canPaste, onCopy, onPaste, onDupAbove, onDupBelo
 // Modal para agrupar las filas seleccionadas en un paquete: se escribe un nombre
 // nuevo o se reutiliza uno existente. Confirmar asigna ese valor a la columna
 // del paquete en todas las filas seleccionadas.
+// Elección al importar sobre una planilla con datos: reemplazar TODO el
+// contenido con el archivo (flujo exportar → editar → reimportar) o agregar
+// sus filas a las existentes.
+function ImportModeModal({ fileName, fileRows, currentRows, onReplace, onAdd, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const optCls = 'flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition'
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-[81] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-ink-800">
+        <div className="mb-1 flex items-center gap-2">
+          <Upload className="h-5 w-5 text-brand-500 dark:text-accent" />
+          <h3 className="min-w-0 truncate text-base font-bold text-slate-900 dark:text-white" title={fileName}>Importar {fileName}</h3>
+        </div>
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+          El archivo trae <b className="text-slate-700 dark:text-slate-200">{fileRows.toLocaleString('es-CL')}</b> fila(s) y la planilla ya tiene <b className="text-slate-700 dark:text-slate-200">{currentRows.toLocaleString('es-CL')}</b>.
+        </p>
+
+        <div className="space-y-2">
+          <button onClick={onReplace} className={`${optCls} border-brand-300 bg-brand-50/50 hover:bg-brand-50 dark:border-accent/40 dark:bg-accent/5 dark:hover:bg-accent/10`}>
+            <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-brand-600 dark:text-accent" />
+            <span>
+              <span className="block text-sm font-semibold text-slate-800 dark:text-white">Reemplazar la planilla</span>
+              <span className="block text-xs leading-relaxed text-slate-500 dark:text-slate-400">El contenido actual se cambia por el del archivo: mantiene su orden, ediciones y columnas. Ctrl+Z deshace.</span>
+            </span>
+          </button>
+          <button onClick={onAdd} className={`${optCls} border-slate-200 hover:border-brand-300 hover:bg-slate-50 dark:border-white/10 dark:hover:border-accent/40 dark:hover:bg-white/5`}>
+            <Plus className="mt-0.5 h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300" />
+            <span>
+              <span className="block text-sm font-semibold text-slate-800 dark:text-white">Agregar filas</span>
+              <span className="block text-xs leading-relaxed text-slate-500 dark:text-slate-400">Suma las filas del archivo sobre las existentes (puede duplicar registros).</span>
+            </span>
+          </button>
+        </div>
+
+        {fileRows < currentRows && (
+          <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            El archivo trae menos filas que la planilla. Si exportaste con filtros activos, al reemplazar se pierden las filas que no estaban en el archivo.
+          </p>
+        )}
+
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function PackageModal({ count, existing, onConfirm, onClose }) {
   const [name, setName] = useState('')
   useEffect(() => {

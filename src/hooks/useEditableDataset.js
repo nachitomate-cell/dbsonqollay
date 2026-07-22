@@ -238,6 +238,25 @@ export function useEditableDataset(dataKey, dataset) {
         })
         return list.length
       },
+      // Reemplaza TODO el contenido (columnas y filas) por el del archivo
+      // importado ("el archivo manda": respeta su orden de filas y columnas).
+      // Pasa por el historial, así que es UN paso de deshacer (Ctrl+Z recupera
+      // la planilla anterior). Devuelve la cantidad de filas cargadas.
+      replaceAll(headers, records) {
+        const columns = colsFromHeaders((headers ?? []).filter((h) => h !== '_id'))
+        if (!columns.length) return 0
+        const list = Array.isArray(records) ? records : []
+        mutate((s) => ({
+          ...s,
+          columns,
+          rows: list.map((r) => {
+            const row = { _id: genId() }
+            columns.forEach((c) => (row[c.key] = upper(r[c.key] ?? '')))
+            return row
+          }),
+        }))
+        return list.length
+      },
       // Edición múltiple: aplica el mismo patch a varias filas por _id.
       updateRecords(ids, patch) {
         const set = new Set(ids || [])
