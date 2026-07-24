@@ -30,6 +30,17 @@ export function latestAppVersion() {
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {
+    version: '0.8', date: '2026-07-24', scope: 'app', title: 'Exportar y volver a importar el proyecto completo',
+    items: [
+      'Nuevo botón “Importar” en el encabezado: el Excel del proyecto vuelve entero, cada hoja a su planilla.',
+      'Antes de escribir se muestra qué hoja va a qué planilla y cuántas filas reemplaza.',
+      'Corregido: importar el Excel del proyecto dentro de una planilla tomaba siempre la PRIMERA hoja, así que reemplazaba sus datos con los de otra disciplina. Ahora toma la hoja que corresponde.',
+      'Aviso al importar un archivo cuyas columnas no coinciden con la planilla (puede ser de otra disciplina).',
+      'Corregido: las planillas creadas por el usuario ahora sí se incluyen al exportar el proyecto.',
+      'Los cambios que aún no llegaron a la nube ya no son pisados por la copia más antigua de la base de datos.',
+    ],
+  },
+  {
     version: '0.7', date: '2026-06-16', scope: 'app', title: 'Sincronización al plugin, AWP y mejoras de la planilla',
     items: [
       '“Sincronizar todo”: publica todas las planillas al plugin de Navisworks con un clic.',

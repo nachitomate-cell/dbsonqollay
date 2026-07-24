@@ -54,6 +54,7 @@ import ConnectAwpModal from './ConnectAwpModal.jsx'
 import AuraMark from './AuraMark.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
+import { matchSheetFor } from '../utils/projectImport.js'
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -923,24 +924,56 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
   // REEMPLAZAR todo el contenido con el archivo (flujo exportar → editar en
   // Excel → reimportar: respeta orden y ediciones) o AGREGAR las filas.
   const [importAsk, setImportAsk] = useState(null) // { records, headers, fileName }
+  // Excel con VARIAS hojas (p. ej. el export de TODO el proyecto: una hoja por
+  // subcategoría). Antes se tomaba siempre la primera hoja y se importaba en la
+  // planilla abierta — con "reemplazar" eso borraba los datos y los sustituía por
+  // los de otra disciplina. Ahora se elige la hoja: automáticamente la que
+  // coincide con el código/nombre de esta subcategoría, o se pregunta.
+  const [sheetAsk, setSheetAsk] = useState(null) // { sheets, pick, fileName }
   async function importFile(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     flash('Importando…')
     try {
-      let parsed = []
-      if (/\.csv$/i.test(file.name)) parsed = parseCsv(await file.text())
-      else {
-        const XLSX = await import('xlsx')
-        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-        parsed = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+      if (/\.csv$/i.test(file.name)) {
+        startImport(parseCsv(await file.text()), file.name)
+        return
       }
-      if (!parsed.length) { flash('No se encontraron filas en el archivo.'); return }
-      const data = { records: parsed, headers: Object.keys(parsed[0]).filter((k) => k !== '_id'), fileName: file.name }
-      if (rows.length) setImportAsk(data)
-      else applyImport('add', data)
+      const XLSX = await import('xlsx')
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
+      // Cada hoja se parsea una sola vez (el export del proyecto trae decenas).
+      const byName = new Map()
+      for (const n of wb.SheetNames) {
+        const r = XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: '' })
+        if (r.length) byName.set(n, r)
+      }
+      const names = [...byName.keys()]
+      if (!names.length) { flash('No se encontraron filas en el archivo.'); return }
+      if (names.length === 1) { startImport(byName.get(names[0]), file.name); return }
+
+      // Varias hojas con datos: ¿alguna es la de esta planilla? (mismo criterio
+      // que usa "Importar proyecto", para que ambos caminos coincidan).
+      const match = matchSheetFor(subcategory, names)
+      if (match) { startImport(byName.get(match), file.name, match); return }
+      setSheetAsk({
+        fileName: file.name,
+        sheets: names.map((n) => ({ name: n, rows: byName.get(n).length })),
+        pick: (name) => { setSheetAsk(null); startImport(byName.get(name), file.name, name) },
+      })
     } catch { flash('No se pudo leer el archivo (formato no válido).') }
+  }
+  // Con las filas ya leídas: si la planilla está vacía se agregan directo; si
+  // tiene contenido, se pregunta reemplazar o agregar.
+  function startImport(parsed, fileName, sheet) {
+    if (!parsed?.length) { flash('No se encontraron filas en el archivo.'); return }
+    const data = {
+      records: parsed,
+      headers: Object.keys(parsed[0]).filter((k) => k !== '_id'),
+      fileName: sheet ? `${fileName} › ${sheet}` : fileName,
+    }
+    if (rows.length) setImportAsk(data)
+    else applyImport('add', data)
   }
   function applyImport(mode, data) {
     const d = data || importAsk
@@ -1591,12 +1624,25 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
         />
       )}
 
+      {/* Modal: elegir la hoja cuando el Excel trae varias (export del proyecto) */}
+      {sheetAsk && (
+        <SheetPickModal
+          fileName={sheetAsk.fileName}
+          sheets={sheetAsk.sheets}
+          sheetLabel={subcategory.code || subcategory.name}
+          onPick={sheetAsk.pick}
+          onClose={() => setSheetAsk(null)}
+        />
+      )}
+
       {/* Modal: elegir modo de importación (reemplazar o agregar) */}
       {importAsk && (
         <ImportModeModal
           fileName={importAsk.fileName}
           fileRows={importAsk.records.length}
+          fileHeaders={importAsk.headers}
           currentRows={rows.length}
+          currentHeaders={columns.map((c) => c.key)}
           onReplace={() => applyImport('replace')}
           onAdd={() => applyImport('add')}
           onClose={() => setImportAsk(null)}
@@ -1950,13 +1996,22 @@ function RowContextMenu({ x, y, canPaste, onCopy, onPaste, onDupAbove, onDupBelo
 // Elección al importar sobre una planilla con datos: reemplazar TODO el
 // contenido con el archivo (flujo exportar → editar → reimportar) o agregar
 // sus filas a las existentes.
-function ImportModeModal({ fileName, fileRows, currentRows, onReplace, onAdd, onClose }) {
+function ImportModeModal({ fileName, fileRows, fileHeaders = [], currentRows, currentHeaders = [], onReplace, onAdd, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   const optCls = 'flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition'
+  // ¿El archivo parece de OTRA planilla? Si comparte menos de la mitad de las
+  // columnas, avisamos: reemplazar con datos ajenos borraría los registros.
+  const otherSheet = useMemo(() => {
+    if (!fileHeaders.length || !currentHeaders.length) return false
+    const norm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    const mine = new Set(currentHeaders.map(norm))
+    const shared = fileHeaders.filter((h) => mine.has(norm(h))).length
+    return shared / fileHeaders.length < 0.5
+  }, [fileHeaders, currentHeaders])
   return (
     <>
       <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
@@ -1986,13 +2041,65 @@ function ImportModeModal({ fileName, fileRows, currentRows, onReplace, onAdd, on
           </button>
         </div>
 
-        {fileRows < currentRows && (
+        {otherSheet && (
+          <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-rose-700 dark:text-rose-300">
+            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Las columnas del archivo casi no coinciden con las de esta planilla: puede ser de otra disciplina. Revisa antes de reemplazar.
+          </p>
+        )}
+
+        {!otherSheet && fileRows < currentRows && (
           <p className="mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
             <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             El archivo trae menos filas que la planilla. Si exportaste con filtros activos, al reemplazar se pierden las filas que no estaban en el archivo.
           </p>
         )}
 
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// El Excel trae varias hojas (típicamente el export de TODO el proyecto: una
+// hoja por subcategoría) y ninguna coincide con esta planilla. Se elige cuál
+// importar en vez de tomar la primera a ciegas.
+function SheetPickModal({ fileName, sheets, sheetLabel, onPick, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <>
+      <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 z-[81] flex max-h-[80vh] w-full max-w-md -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-ink-800">
+        <div className="mb-1 flex items-center gap-2">
+          <Upload className="h-5 w-5 text-brand-500 dark:text-accent" />
+          <h3 className="min-w-0 truncate text-base font-bold text-slate-900 dark:text-white" title={fileName}>Importar {fileName}</h3>
+        </div>
+        <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
+          El archivo tiene <b className="text-slate-700 dark:text-slate-200">{sheets.length}</b> hojas y ninguna se llama{' '}
+          <b className="text-slate-700 dark:text-slate-200">{sheetLabel}</b>. Elige cuál importar en esta planilla.
+        </p>
+        <p className="mb-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          ¿Es el Excel de todo el proyecto? Cierra esto y usa <b className="text-slate-700 dark:text-slate-200">Importar</b> en
+          el encabezado: deja cada hoja en su planilla sola.
+        </p>
+        <div className="-mx-1 min-h-0 flex-1 space-y-1.5 overflow-y-auto px-1">
+          {sheets.map((s) => (
+            <button
+              key={s.name}
+              onClick={() => onPick(s.name)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-2.5 text-left transition hover:border-brand-300 hover:bg-slate-50 dark:border-white/10 dark:hover:border-accent/40 dark:hover:bg-white/5"
+            >
+              <span className="min-w-0 truncate text-sm font-semibold text-slate-800 dark:text-white">{s.name}</span>
+              <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{s.rows.toLocaleString('es-CL')} fila(s)</span>
+            </button>
+          ))}
+        </div>
         <div className="mt-5 flex justify-end">
           <button onClick={onClose} className="rounded-lg border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5">Cancelar</button>
         </div>

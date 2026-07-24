@@ -21,10 +21,12 @@ import { useImportedDatasets } from './hooks/useImportedDatasets.js'
 import { useCustomDisciplines } from './hooks/useCustomDisciplines.js'
 import { useAwpCwps } from './hooks/useAwpCwps.js'
 import { exportProjectToExcel } from './utils/projectExport.js'
+import { applyProjectImport, planProjectImport } from './utils/projectImport.js'
 import { globalSearch } from './utils/globalSearch.js'
 import { initSync } from './lib/offline.js'
 import { syncAllToNavisworks } from './utils/datastore.js'
 import OfflineBanner from './components/OfflineBanner.jsx'
+import ImportProjectModal from './components/ImportProjectModal.jsx'
 
 /**
  * Navegación simulada (sin router). El estado vive en App:
@@ -311,12 +313,70 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
   async function exportProject() {
     setNotice('Generando Excel del proyecto…')
     try {
-      const n = await exportProjectToExcel(allDatasets, disciplines)
+      const n = await exportProjectToExcel(allDatasets, disciplines, { createdSheets })
       setNotice(n ? `Proyecto exportado · ${n} hoja(s).` : 'No hay subcategorías con datos para exportar.')
     } catch {
       setNotice('No se pudo exportar el proyecto.')
     }
     setTimeout(() => setNotice(null), 4000)
+  }
+
+  // --- Importar proyecto (el camino de vuelta de "Exportar") --------------------
+  // Cada hoja del Excel vuelve a SU planilla. Primero se arma el plan y se
+  // muestra para confirmar (qué hoja va a qué planilla); recién ahí se escribe.
+  const [importPlan, setImportPlan] = useState(null) // { fileName, plan, unmatched }
+  const [importingProject, setImportingProject] = useState(false)
+  // Se incrementa al terminar una importación: fuerza a las planillas abiertas a
+  // releer lo recién guardado (si no, la pestaña seguiría mostrando lo anterior).
+  const [dataVersion, setDataVersion] = useState(0)
+
+  async function pickProjectFile(file) {
+    if (!file) return
+    setNotice('Leyendo el Excel del proyecto…')
+    try {
+      const { plan, unmatched, sheets } = await planProjectImport(file, disciplines, { datasets: allDatasets, createdSheets })
+      if (!sheets) { setNotice('El archivo no tiene hojas con datos.'); setTimeout(() => setNotice(null), 4000); return }
+      setNotice(null)
+      setImportPlan({ fileName: file.name, plan, unmatched })
+    } catch {
+      setNotice('No se pudo leer el archivo (formato no válido).')
+      setTimeout(() => setNotice(null), 4000)
+    }
+  }
+
+  async function confirmProjectImport() {
+    if (!importPlan || importingProject) return
+    setImportingProject(true)
+    try {
+      const { plan } = importPlan
+      const r = await applyProjectImport(plan, {
+        projectId: project.id,
+        author: user?.email,
+        onProgress: ({ done, total }) => setNotice(`Importando ${done}/${total} planillas…`),
+      })
+      // Las planillas nuevas (subcategorías que aún no tenían datos) quedan
+      // registradas para que aparezcan en el menú y se puedan abrir.
+      const fresh = plan.filter((p) => p.isNew)
+      if (fresh.length) {
+        setCreatedSheets((prev) => {
+          const next = { ...prev }
+          for (const p of fresh) next[p.subId] = p.headers
+          return next
+        })
+      }
+      setImportPlan(null)
+      setDataVersion((v) => v + 1)
+      setNotice(
+        r.pending
+          ? `Importadas ${r.sheets} planilla(s) · ${r.rows.toLocaleString('es-CL')} filas. ${r.pending} pendiente(s) de subir: se sincronizan solas.`
+          : `✓ Importadas ${r.sheets} planilla(s) · ${r.rows.toLocaleString('es-CL')} filas.`,
+      )
+    } catch {
+      setNotice('No se pudo importar el proyecto.')
+    } finally {
+      setImportingProject(false)
+      setTimeout(() => setNotice(null), 6000)
+    }
   }
 
   // Todas las planillas con datos (clave única + nombre) para "Sincronizar todo".
@@ -384,6 +444,7 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           onExportProject={exportProject}
+          onImportProject={pickProjectFile}
           onSyncAll={syncAllNavisworks}
           syncingAll={syncingAll}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -403,6 +464,7 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
           {showGrid ? (
             <GridWorkspace
               tabs={tabs}
+              dataVersion={dataVersion}
               activeSub={activeSub}
               onSwitch={setActiveSub}
               onClose={closeTab}
@@ -488,6 +550,18 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
 
       {showAddDiscipline && (
         <AddDisciplineModal onCreate={createDiscipline} onClose={() => setShowAddDiscipline(false)} />
+      )}
+
+      {/* Importar proyecto: confirma qué hoja va a qué planilla antes de escribir. */}
+      {importPlan && (
+        <ImportProjectModal
+          fileName={importPlan.fileName}
+          plan={importPlan.plan}
+          unmatched={importPlan.unmatched}
+          working={importingProject}
+          onConfirm={confirmProjectImport}
+          onClose={() => { if (!importingProject) setImportPlan(null) }}
+        />
       )}
 
       {showTour && (

@@ -48,6 +48,12 @@ export function isOnline() { return typeof navigator === 'undefined' ? true : na
 export function isFlushing() { return flushing }
 /** Total de planillas con cambios sin subir (pendientes + atascadas). */
 export function unsyncedCount() { return Object.keys(readOutbox()).length }
+/**
+ * ¿Esta planilla tiene cambios locales que todavía no llegaron a la nube?
+ * Sirve para NO dejar que la copia (más vieja) de la base de datos pise lo que
+ * está sin subir al reabrir la planilla.
+ */
+export function hasPending(dataKey) { return !!readOutbox()[dataKey] }
 /** Planillas que fallaron repetidas veces y esperan reintento manual. */
 export function stuckCount() { return Object.values(readOutbox()).filter((e) => e.stuck).length }
 /** Marca de tiempo de la última sincronización exitosa (ms) o null. */

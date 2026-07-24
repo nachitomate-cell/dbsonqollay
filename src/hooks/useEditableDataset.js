@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cloudEnabled, fetchDbDataset, loadWorking, loadWorkingAsync, removeWorking, saveWorking } from '../utils/datastore'
+import { hasPending } from '../lib/offline.js'
 
 /**
  * Capa editable sobre un dataset (headers + rows). Permite editar valores,
@@ -115,9 +116,16 @@ export function useEditableDataset(dataKey, dataset) {
   // fuente de verdad), para que los cambios persistan entre equipos/sesiones y no
   // dependan del localStorage. No pisa ediciones en curso (userEditedRef) ni
   // re-renderiza si la nube coincide con lo que ya se ve (sameData → sin parpadeo).
+  //
+  // Tampoco pisa lo que está EN LA COLA de subida: si un cambio local (una
+  // edición offline, o una importación de proyecto cuyo POST aún no salió) no
+  // llegó a la nube, la copia de la base de datos es MÁS VIEJA y traerla de
+  // vuelta borraría ese trabajo. En ese caso mandan los datos locales, que el
+  // motor de sync terminará de subir.
   useEffect(() => {
     let cancelled = false
     if (!cloudEnabled()) { setLoading(false); return }
+    if (hasPending(dataKey)) { setLoading(false); return }
     fetchDbDataset(dataKey).then((db) => {
       if (cancelled || !db) return
       const present = {

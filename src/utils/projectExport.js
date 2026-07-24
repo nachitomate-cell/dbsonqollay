@@ -16,15 +16,6 @@ async function resolveWorking(dataKey, base) {
   return base ? { headers: base.headers, rows: base.rows } : null
 }
 
-// Ids de subcategorías con planilla nueva creada por el usuario (persistido).
-function createdSheetIds() {
-  try {
-    return Object.keys(JSON.parse(localStorage.getItem('sqy-created-sheets-v2')) || {})
-  } catch {
-    return []
-  }
-}
-
 // Nombre de hoja válido para Excel: ≤31 chars, sin : \ / ? * [ ], único.
 function sheetName(raw, used) {
   let name = String(raw || 'Hoja').replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 28) || 'Hoja'
@@ -36,9 +27,14 @@ function sheetName(raw, used) {
 }
 
 /**
+ * `createdSheets` ({ subId: columns[] }) viene de App: son las planillas nuevas
+ * del proyecto abierto. Antes se leía de una clave fija de localStorage que ya
+ * no existe (la real lleva el id del proyecto), así que esas planillas nunca se
+ * exportaban.
+ *
  * @returns {Promise<number>} cantidad de hojas exportadas (0 = sin datos).
  */
-export async function exportProjectToExcel(datasets, disciplines) {
+export async function exportProjectToExcel(datasets, disciplines, { createdSheets = {} } = {}) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   const used = new Set()
@@ -49,7 +45,7 @@ export async function exportProjectToExcel(datasets, disciplines) {
       // Subcategorías con datos base/importados.
       let dataKey = sc.dataKey
       // Planillas nuevas creadas por el usuario (sin datos base): dataKey sintético.
-      if (!dataKey && createdSheetIds().includes(sc.id)) dataKey = `new-${sc.id}`
+      if (!dataKey && createdSheets[sc.id]) dataKey = `new-${sc.id}`
       if (!dataKey) continue
       const working = await resolveWorking(dataKey, datasets[sc.dataKey])
       if (!working || !working.rows.length) continue

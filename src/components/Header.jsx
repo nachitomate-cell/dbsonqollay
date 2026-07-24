@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, Loader2, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, Wifi, WifiOff, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeftRight, Bell, Building2, ChevronRight, Download, FlaskConical, HelpCircle, LayoutDashboard, Loader2, LogOut, Menu, Moon, Settings, SlidersHorizontal, Sparkles, Sun, Upload, Wifi, WifiOff, X } from 'lucide-react'
 import InstallButton from './InstallButton.jsx'
 import AuraMark from './AuraMark.jsx'
 import GlobalSearch from './GlobalSearch.jsx'
@@ -24,13 +24,14 @@ function initials(user) {
  *
  * props:
  *  - crumbs: [{ label, onClick? }]
- *  - theme, onToggleTheme(), onExportProject(), onOpenSettings()
+ *  - theme, onToggleTheme(), onExportProject(), onImportProject(file), onOpenSettings()
  *  - user: { name?, email?, role? } · isDemo · onSignOut() · onChangeProject()
  */
-export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onSyncAll, syncingAll, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, onOpenMobileNav, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
+export default function Header({ crumbs = [], theme, onToggleTheme, onExportProject, onImportProject, onSyncAll, syncingAll, onOpenSettings, onOpenProjectConfig, onOpenWorkspace, onOpenMobileNav, user, isDemo, onSignOut, onChangeProject, onChangeOrg, orgName, search, onSearchResult }) {
   const iconBtn =
     'grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-400 dark:hover:text-accent'
   const iconBtnActive = 'border-brand-400 text-brand-600 dark:border-accent/40 dark:text-accent'
+  const projectFileRef = useRef(null)
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
@@ -140,6 +141,28 @@ export default function Header({ crumbs = [], theme, onToggleTheme, onExportProj
           <Download className="h-4 w-4" />
           <span className="hidden lg:inline">Exportar</span>
         </button>
+
+        {/* Camino de vuelta de "Exportar": el mismo Excel, con cada hoja de
+            regreso en su planilla. */}
+        {onImportProject && (
+          <>
+            <input
+              ref={projectFileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onImportProject(f) }}
+            />
+            <button
+              onClick={() => projectFileRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-white/10 dark:bg-ink-800 dark:text-slate-300 dark:hover:border-accent/40 dark:hover:text-accent"
+              title="Importar el Excel del proyecto: cada hoja vuelve a su planilla"
+            >
+              <Upload className="h-4 w-4" />
+              <span className="hidden lg:inline">Importar</span>
+            </button>
+          </>
+        )}
 
         <button onClick={onToggleTheme} className={iconBtn} aria-label="Cambiar tema" title="Cambiar tema">
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
