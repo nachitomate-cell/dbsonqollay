@@ -114,8 +114,18 @@ const pickTagField = (headers) => headers.find((h) => /tag|commodity/i.test(h)) 
 /**
  * Publica TODAS las planillas dadas al bucket que lee el plugin de Navisworks
  * (mismo endpoint POST /api/datasets/:key que el botón "Publicar para Navisworks"
- * por hoja). Para cada una usa la copia editable LOCAL (con las ediciones) si
- * existe; si no, los datos provistos. Es idempotente.
+ * por hoja). Es idempotente.
+ *
+ * Orden de preferencia de la fuente de cada planilla:
+ *   1. La copia editable LOCAL (este equipo la abrió y la editó).
+ *   2. La copia de la NUBE (la editaron en otro equipo o en otra sesión).
+ *   3. El dataset base que viene con la app (planilla nunca tocada).
+ *
+ * El paso 2 es crítico: sin él, una planilla que ESTE navegador nunca abrió se
+ * publicaba con los datos de fábrica y PISABA en la nube lo editado desde otro
+ * equipo. De ahí el síntoma que reportó el cliente ("solo funciona si tienes
+ * abierta la planilla que estás cargando"): había que abrir cada planilla para
+ * que bajara la copia buena antes de sincronizar.
  *
  * entries: [{ key, name, headers, rows }] · opts: { author, onProgress({done,total,ok,fail}) }
  * Devuelve { ok, fail, total }.
@@ -129,10 +139,13 @@ export async function syncAllToNavisworks(entries, { author, onProgress } = {}) 
     const e = list[i]
     try {
       const working = await loadWorkingAsync(e.key)
-      const columns = working?.columns?.length
-        ? working.columns
-        : (e.headers || []).map((h) => ({ key: h, visible: true }))
-      const rows = working?.rows?.length ? working.rows : (e.rows || [])
+      // Solo se consulta la nube cuando no hay copia local (la local es más
+      // nueva por definición: son las ediciones todavía sin subir).
+      const src = working?.rows?.length ? working : (await fetchDbDataset(e.key)) || null
+      const columns = src?.columns?.length
+        ? src.columns
+        : (src?.headers?.length ? src.headers : (e.headers || [])).map((h) => ({ key: h, visible: true }))
+      const rows = src?.rows?.length ? src.rows : (e.rows || [])
       const headers = columns.filter((c) => c.visible !== false).map((c) => c.key)
       const res = await authFetch(
         `${getAPI()}/api/datasets/${encodeURIComponent(e.key)}${projectId ? `?project=${projectId}` : ''}`,

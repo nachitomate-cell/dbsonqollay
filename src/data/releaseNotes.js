@@ -30,6 +30,13 @@ export function latestAppVersion() {
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {
+    version: '0.8.1', date: '2026-07-30', scope: 'app', title: '“Sincronizar todo” ya no necesita abrir cada planilla',
+    items: [
+      'Corregido: “Sincronizar todo” publicaba con los datos de fábrica las planillas que este equipo nunca había abierto, y pisaba en la nube lo editado desde otro equipo.',
+      'Ahora, si no hay copia local, toma la copia de la nube antes de publicar. Ya no hace falta abrir planilla por planilla antes de sincronizar.',
+    ],
+  },
+  {
     version: '0.8', date: '2026-07-24', scope: 'app', title: 'Exportar y volver a importar el proyecto completo',
     items: [
       'Nuevo botón “Importar” en el encabezado: el Excel del proyecto vuelve entero, cada hoja a su planilla.',
