@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.25.0";
+        private const string Version = "1.26.0";
 
         // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
         // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
@@ -55,6 +55,13 @@ namespace AuraBIM
         // scope 'plugin') para que el usuario las vea en el software.
         private static readonly ReleaseNote[] ReleaseNotes = new[]
         {
+            new ReleaseNote("1.26.0", "2026-07-30", new[]
+            {
+                "Corregido: la ventana quedaba \"pegada\" (No responde) al escribir propiedades.",
+                "El progreso ahora avanza por elemento y \"Cancelar\" responde al instante.",
+                "Escritura más rápida en capas con mucha geometría.",
+                "No se puede lanzar una segunda sincronización mientras hay una en curso.",
+            }),
             new ReleaseNote("1.25.0", "2026-06-16", new[]
             {
                 "El cruce con el modelo usa la \"Capa\" nativa (pestaña Elemento), no la pestaña BIM.",
@@ -97,9 +104,24 @@ namespace AuraBIM
         private const string InstallerUrl = "https://github.com/nachitomate-cell/dbsonqollay/releases/latest/download/AuraBIM-instalador.zip";
         private static bool _updateNotified = false;
 
+        // ¿Hay un comando largo (sync / conjuntos / publicar) en curso? La ventana de
+        // progreso bombea la cola de mensajes (DoEvents) para que Windows no marque
+        // Navisworks como "No responde", pero eso deja la cinta clickeable: sin este
+        // cerrojo, volver a pulsar el botón mientras se escriben propiedades arranca
+        // una SEGUNDA pasada anidada sobre el mismo documento (cuelgue o crash).
+        private static bool _busy;
+
         // El ribbon invoca este método con el id del botón pulsado.
         public override int ExecuteCommand(string commandId, params string[] parameters)
         {
+            if (_busy)
+            {
+                MessageBox.Show("Aura GIP ya está trabajando en el modelo.\n\n" +
+                                "Espera a que termine, o pulsa \"Cancelar\" en la ventana de progreso.",
+                                "Aura GIP");
+                return 0;
+            }
+            _busy = true;
             try
             {
                 switch (commandId)
@@ -117,6 +139,7 @@ namespace AuraBIM
                 MessageBox.Show("Aura GIP: " + ex.Message);
                 return 0;
             }
+            finally { _busy = false; }
         }
 
         // El botón "Solo selección" solo se habilita si hay algo seleccionado; el
@@ -368,7 +391,7 @@ namespace AuraBIM
                 foreach (Model m in doc.Models)
                     foreach (ModelItem item in m.RootItem.DescendantsAndSelf)
                     {
-                        if ((++n % 1000) == 0)
+                        if ((++n % 250) == 0)
                         {
                             progress.Report(0.6 * (n / (double)(n + 20000)), "Analizando modelo: " + n.ToString("N0") + " elementos…");
                             if (progress.Canceled) return;
@@ -616,12 +639,16 @@ namespace AuraBIM
             int i = 0, total = data.rows.Count;
             foreach (var row in data.rows)
             {
-                if ((++i % 25) == 0)
-                {
-                    progress.Report(0.80 + 0.20 * (i / (double)Math.Max(1, total)),
-                                    "Escribiendo propiedades… (" + i + "/" + total + ")");
-                    if (progress.Canceled) return res;
-                }
+                // Progreso por FILA: barato (no toca el modelo), así que se reporta en
+                // todas. El pulso fino va DENTRO de WriteCustomTab, porque una sola
+                // fila puede tocar miles de elementos y ahí es donde se percibía el
+                // cuelgue. La fracción se interpola entre esta fila y la siguiente.
+                double fracFrom = 0.80 + 0.20 * (i / (double)Math.Max(1, total));
+                double fracTo = 0.80 + 0.20 * ((i + 1) / (double)Math.Max(1, total));
+                i++;
+                string rowLabel = "Escribiendo propiedades… (" + i + "/" + total + ")";
+                progress.Report(fracFrom, rowLabel);
+                if (progress.Canceled) return res;
 
                 string tag;
                 if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag))
@@ -648,8 +675,9 @@ namespace AuraBIM
                 }
                 if (changed != null && changed.Count > 0)
                 {
-                    WriteCustomTab(changed, row, data.headers, tagField);
-                    res.applied += changed.Count;
+                    res.applied += WriteCustomTab(changed, row, data.headers, progress,
+                                                  rowLabel, fracFrom, fracTo);
+                    if (progress.Canceled) return res; // cancelado a mitad de la fila
                 }
             }
             return res;
@@ -984,10 +1012,12 @@ namespace AuraBIM
             {
                 foreach (ModelItem item in root.DescendantsAndSelf)
                 {
-                    // Refresca la ventana cada 1000 elementos: bombea la UI (evita
+                    // Refresca la ventana cada 250 elementos: bombea la UI (evita
                     // "no responde") y permite cancelar. Fracción asintótica 0..0.8
-                    // porque no sabemos el total de antemano.
-                    if ((++n % 1000) == 0)
+                    // porque no sabemos el total de antemano. Leer las propiedades es
+                    // lazy (Navisworks las trae del disco), así que 1000 elementos
+                    // entre refrescos podían ser varios segundos sin repintar.
+                    if ((++n % 250) == 0)
                     {
                         progress.Report(0.80 * (n / (double)(n + 20000)),
                                         "Indexando modelo: " + n.ToString("N0") + " elementos…");
@@ -1091,13 +1121,46 @@ namespace AuraBIM
         // ---- Escribir propiedades custom (COM API) -----------------------
         // En el SDK de Navisworks, SetUserDefined va por cada elemento, sobre su
         // nodo de propiedades (InwGUIPropertyNode2), no sobre el estado global.
-        private void WriteCustomTab(ModelItemCollection items, Dictionary<string, string> row, List<string> headers, string tagField)
+        // Devuelve cuántos elementos se escribieron: puede ser MENOS que items.Count si
+        // el usuario cancela a mitad de una fila (así el resumen no miente).
+        private int WriteCustomTab(ModelItemCollection items, Dictionary<string, string> row, List<string> headers,
+                                   ProgressForm progress, string rowLabel, double fracFrom, double fracTo)
         {
             ComApi.InwOpState10 state = ComApiBridge.State;
             ComApi.InwOpSelection comSel = ComApiBridge.ToInwOpSelection(items);
 
+            // Se calcula UNA vez por fila: el orden de las columnas, su nombre interno
+            // y su valor son idénticos para todos los elementos de la fila. Antes se
+            // recalculaba por elemento (OrderedKeys + un Sanitize por columna), o sea
+            // decenas de miles de veces en una capa con mucha geometría.
+            var keys = OrderedKeys(row, headers);
+            var names = new string[keys.Count];
+            var values = new string[keys.Count];
+            for (int k = 0; k < keys.Count; k++)
+            {
+                names[k] = Sanitize(keys[k]);
+                string v; values[k] = row.TryGetValue(keys[k], out v) ? (v ?? "") : "";
+            }
+            string tabInternal = Sanitize(Cfg.TabName);
+
+            int done = 0, count = items.Count;
             foreach (ComApi.InwOaPath path in comSel.Paths())
             {
+                // Refresca la ventana cada 20 elementos. La llave del cruce es la
+                // "Capa", que agrupa mucha geometría: UNA fila puede matchear miles de
+                // elementos, y cada SetUserDefined es una llamada COM lenta. Sin bombear
+                // la UI acá, Windows marcaba la ventana como "No responde" (parecía
+                // colgada) y "Cancelar" no reaccionaba hasta terminar la fila entera.
+                if ((done % 20) == 0)
+                {
+                    double f = fracFrom + (fracTo - fracFrom) * (done / (double)Math.Max(1, count));
+                    progress.Report(f, count >= 50
+                        ? rowLabel + "  ·  " + done.ToString("N0") + "/" + count.ToString("N0") + " elementos"
+                        : rowLabel);
+                    if (progress.Canceled) return done;
+                }
+                done++;
+
                 // Nodo de propiedades del elemento (true = crear si no existe).
                 ComApi.InwGUIPropertyNode2 node =
                     (ComApi.InwGUIPropertyNode2)state.GetGUIPropertyNode(path, true);
@@ -1125,20 +1188,20 @@ namespace AuraBIM
                 // MODULARIZACIÓN entre DESCRIPCIÓN_COMPLEMENTARIA y CANTIDAD). Se
                 // escriben TODAS las columnas, incluida la del TAG: la pestaña conserva
                 // TAG/Commodity y el sync sigue siendo repetible.
-                foreach (var key in OrderedKeys(row, headers))
+                for (int k = 0; k < keys.Count; k++)
                 {
-                    string val; if (!row.TryGetValue(key, out val)) val = "";
                     ComApi.InwOaProperty p = (ComApi.InwOaProperty)state.ObjectFactory(
                         ComApi.nwEObjectType.eObjectType_nwOaProperty, null, null);
-                    p.name = Sanitize(key);   // nombre interno
-                    p.UserName = key;          // nombre visible
-                    p.value = val ?? "";
+                    p.name = names[k];      // nombre interno
+                    p.UserName = keys[k];   // nombre visible
+                    p.value = values[k];
                     vec.Properties().Add(p);
                 }
 
                 // Crea la pestaña custom fresca en ESTE elemento (0 = nueva).
-                node.SetUserDefined(0, Cfg.TabName, Sanitize(Cfg.TabName), vec);
+                node.SetUserDefined(0, Cfg.TabName, tabInternal, vec);
             }
+            return done;
         }
 
         private static string Sanitize(string s)

@@ -88,6 +88,16 @@ export const releaseNotes = [
 
   // ───────── Plugin de Navisworks ─────────
   {
+    version: '1.26.0', date: '2026-07-30', scope: 'plugin', title: 'Se acabaron los cuelgues al escribir propiedades',
+    items: [
+      'Corregido: la ventana quedaba “pegada” (No responde) al escribir propiedades en capas con mucha geometría.',
+      'La barra ahora avanza por elemento, no de a saltos, y muestra cuántos elementos lleva la fila.',
+      '“Cancelar” responde al instante, sin esperar a que termine la fila entera.',
+      'Escritura más rápida: el orden y los nombres de las columnas se calculan una vez por fila.',
+      'Ya no se puede lanzar una segunda sincronización mientras hay una en curso.',
+    ],
+  },
+  {
     version: '1.25.0', date: '2026-06-16', scope: 'plugin', title: 'Cruce por la Capa nativa del modelo',
     items: [
       'El cruce con el modelo usa la "Capa" nativa (pestaña Elemento), no la pestaña BIM.',
