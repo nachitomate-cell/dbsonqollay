@@ -95,6 +95,15 @@ export const releaseNotes = [
 
   // ───────── Plugin de Navisworks ─────────
   {
+    version: '1.27.0', date: '2026-09-28', scope: 'plugin', title: 'El porcentaje del avance ahora se entiende',
+    items: [
+      'El % de la barra es el avance de la planilla: filas escritas sobre el total (98 de 294 = 33%).',
+      'Textos claros: “Fila 98 de 294 · 40 de 129 elementos en esta fila”.',
+      'Mientras lee el modelo, la barra se anima sin porcentaje, en vez de mostrar uno que no significaba nada.',
+      'El tiempo restante se calcula solo con la escritura, así que ya no promete minutos de menos.',
+    ],
+  },
+  {
     version: '1.26.0', date: '2026-07-30', scope: 'plugin', title: 'Se acabaron los cuelgues al escribir propiedades',
     items: [
       'Corregido: la ventana quedaba “pegada” (No responde) al escribir propiedades en capas con mucha geometría.',

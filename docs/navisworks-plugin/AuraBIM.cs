@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.26.0";
+        private const string Version = "1.27.0";
 
         // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
         // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
@@ -55,6 +55,13 @@ namespace AuraBIM
         // scope 'plugin') para que el usuario las vea en el software.
         private static readonly ReleaseNote[] ReleaseNotes = new[]
         {
+            new ReleaseNote("1.27.0", "2026-09-28", new[]
+            {
+                "El % de la barra es el avance de la planilla: filas escritas / total.",
+                "Textos claros: \"Fila 98 de 294 · 40 de 129 elementos en esta fila\".",
+                "Mientras lee el modelo, la barra se anima sin un % inventado.",
+                "El tiempo restante se calcula solo con la escritura.",
+            }),
             new ReleaseNote("1.26.0", "2026-07-30", new[]
             {
                 "Corregido: la ventana quedaba \"pegada\" (No responde) al escribir propiedades.",
@@ -234,17 +241,34 @@ namespace AuraBIM
             {
                 Dictionary<string, ModelItemCollection> tagIndex = BuildTagIndex(roots, progress);
 
+                // Primero se bajan TODAS las planillas: el % de la barra es filas
+                // escritas / filas totales (lo que el usuario lee como avance), y el
+                // total recién se conoce con todas descargadas.
+                var datasets = new List<KeyValuePair<DatasetInfo, Dataset>>();
+                for (int k = 0; k < chosen.Count && !progress.Canceled; k++)
+                {
+                    var info = chosen[k];
+                    progress.Planilla = info.name + "  (" + (k + 1) + "/" + chosen.Count + ")";
+                    progress.ReportBusy("Descargando planilla…");
+                    try { datasets.Add(new KeyValuePair<DatasetInfo, Dataset>(info, FetchDataset(info.key))); }
+                    catch (Exception ex) { errores.Add(info.name + ": " + ex.Message); }
+                }
+
                 if (!progress.Canceled)
                 {
-                    int done = 0;
-                    foreach (var info in chosen)
+                    int grandTotal = datasets.Sum(d => d.Value.rows.Count);
+                    int rowsBefore = 0;
+                    // El tiempo restante se mide solo sobre la escritura: la lectura del
+                    // modelo y la descarga van a otro ritmo y lo desfiguraban.
+                    progress.RestartClock();
+                    foreach (var pair in datasets)
                     {
+                        var info = pair.Key;
+                        Dataset data = pair.Value;
                         try
                         {
-                            progress.Planilla = info.name + "  (" + (done + 1) + "/" + chosen.Count + ")";
-                            progress.Report(0.80, "Sincronizando: " + info.name);
-                            Dataset data = FetchDataset(info.key);
-                            var res = ApplyDataset(tagIndex, data, progress);
+                            progress.Planilla = info.name + "  (" + (chosen.IndexOf(info) + 1) + "/" + chosen.Count + ")";
+                            var res = ApplyDataset(tagIndex, data, progress, rowsBefore, grandTotal);
                             totalRows += data.rows.Count;
                             totalMatched += res.matched;
                             totalApplied += res.applied;
@@ -256,7 +280,7 @@ namespace AuraBIM
                         {
                             errores.Add(info.name + ": " + ex.Message);
                         }
-                        done++;
+                        rowsBefore += data.rows.Count;
                         if (progress.Canceled) break;
                     }
                 }
@@ -628,7 +652,7 @@ namespace AuraBIM
         private struct ApplyResult { public int matched, applied, missing, skipped; }
 
         private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data,
-                                         ProgressForm progress)
+                                         ProgressForm progress, int rowsBefore, int grandTotal)
         {
             string tagField = !string.IsNullOrEmpty(data.tagField)
                 ? data.tagField
@@ -643,10 +667,12 @@ namespace AuraBIM
                 // todas. El pulso fino va DENTRO de WriteCustomTab, porque una sola
                 // fila puede tocar miles de elementos y ahí es donde se percibía el
                 // cuelgue. La fracción se interpola entre esta fila y la siguiente.
-                double fracFrom = 0.80 + 0.20 * (i / (double)Math.Max(1, total));
-                double fracTo = 0.80 + 0.20 * ((i + 1) / (double)Math.Max(1, total));
+                // El % es filas escritas / filas de todas las planillas: es lo que el
+                // usuario lee como avance (98 de 294 = 33%, no el 40/129 de la fila).
+                double fracFrom = (rowsBefore + i) / (double)Math.Max(1, grandTotal);
+                double fracTo = (rowsBefore + i + 1) / (double)Math.Max(1, grandTotal);
                 i++;
-                string rowLabel = "Escribiendo propiedades… (" + i + "/" + total + ")";
+                string rowLabel = "Fila " + i.ToString("N0") + " de " + total.ToString("N0");
                 progress.Report(fracFrom, rowLabel);
                 if (progress.Canceled) return res;
 
@@ -1008,19 +1034,20 @@ namespace AuraBIM
         {
             var map = new Dictionary<string, ModelItemCollection>(StringComparer.OrdinalIgnoreCase);
             int n = 0;
+            progress.ReportBusy("Leyendo modelo…");
             foreach (ModelItem root in roots)
             {
                 foreach (ModelItem item in root.DescendantsAndSelf)
                 {
                     // Refresca la ventana cada 250 elementos: bombea la UI (evita
-                    // "no responde") y permite cancelar. Fracción asintótica 0..0.8
-                    // porque no sabemos el total de antemano. Leer las propiedades es
-                    // lazy (Navisworks las trae del disco), así que 1000 elementos
-                    // entre refrescos podían ser varios segundos sin repintar.
+                    // "no responde") y permite cancelar. Sin % ni tiempo restante: no
+                    // sabemos el total de antemano, y un % inventado acá se comía la
+                    // barra de la escritura. Leer las propiedades es lazy (Navisworks
+                    // las trae del disco), así que 1000 elementos entre refrescos
+                    // podían ser varios segundos sin repintar.
                     if ((++n % 250) == 0)
                     {
-                        progress.Report(0.80 * (n / (double)(n + 20000)),
-                                        "Indexando modelo: " + n.ToString("N0") + " elementos…");
+                        progress.ReportBusy("Leyendo modelo: " + n.ToString("N0") + " elementos…");
                         if (progress.Canceled) return map;
                     }
 
@@ -1155,7 +1182,7 @@ namespace AuraBIM
                 {
                     double f = fracFrom + (fracTo - fracFrom) * (done / (double)Math.Max(1, count));
                     progress.Report(f, count >= 50
-                        ? rowLabel + "  ·  " + done.ToString("N0") + "/" + count.ToString("N0") + " elementos"
+                        ? rowLabel + "  ·  " + done.ToString("N0") + " de " + count.ToString("N0") + " elementos en esta fila"
                         : rowLabel);
                     if (progress.Canceled) return done;
                 }
@@ -1277,6 +1304,7 @@ namespace AuraBIM
             // Actualiza barra + texto, calcula % y tiempo restante, y bombea la UI.
             public void Report(double fraction, string text)
             {
+                if (_bar.Style != ProgressBarStyle.Continuous) _bar.Style = ProgressBarStyle.Continuous;
                 double f = Math.Max(0, Math.Min(1, fraction));
                 int v = (int)(f * 100);
                 if (_bar.Value != v) _bar.Value = v;
@@ -1294,6 +1322,24 @@ namespace AuraBIM
 
                 System.Windows.Forms.Application.DoEvents();
             }
+
+            // Fase sin total conocido (leer el modelo, descargar): barra animada, sin
+            // % ni tiempo restante, en vez de un porcentaje que no significa nada.
+            public void ReportBusy(string text)
+            {
+                if (_bar.Style != ProgressBarStyle.Marquee)
+                {
+                    _bar.Style = ProgressBarStyle.Marquee;
+                    _bar.MarqueeAnimationSpeed = 30;
+                }
+                if (text != null) _status.Text = text;
+                _detail.Text = Planilla ?? "";
+                System.Windows.Forms.Application.DoEvents();
+            }
+
+            // El tiempo restante se extrapola desde aquí: llamarlo al empezar la fase
+            // cuyo % se muestra, para que lo anterior no lo desfigure.
+            public void RestartClock() { _sw.Restart(); }
 
             private static string FormatSecs(double s)
             {
