@@ -30,6 +30,14 @@ export function latestAppVersion() {
 export const releaseNotes = [
   // ───────── Plataforma web (app) ─────────
   {
+    version: '0.8.2', date: '2026-10-07', scope: 'app', title: 'Lo guardado en la nube ya no se pisa con una copia vieja',
+    items: [
+      'Corregido: las planillas editadas quedaban como “pendientes de subir” aunque ya estaban guardadas, y una copia vieja de este equipo podía volver a pisar la nube.',
+      '“Sincronizar todo” publica la versión de la nube, salvo que este equipo tenga cambios sin subir.',
+      'Importar Excel conserva los ceros a la izquierda de los códigos (WBS 06940 ya no queda como 6940).',
+    ],
+  },
+  {
     version: '0.8.1', date: '2026-07-30', scope: 'app', title: '“Sincronizar todo” ya no necesita abrir cada planilla',
     items: [
       'Corregido: “Sincronizar todo” publicaba con los datos de fábrica las planillas que este equipo nunca había abierto, y pisaba en la nube lo editado desde otro equipo.',

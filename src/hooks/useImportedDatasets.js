@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { sheetRecords } from '../utils/sheetRecords.js'
 
 /**
  * Hook de ingesta de datos: permite cargar archivos Excel (.xlsx/.xls) o CSV
@@ -108,7 +109,7 @@ export function useImportedDatasets(projectId) {
         const XLSX = await import('xlsx')
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        dataset = aoaToDataset(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }))
+        dataset = aoaToDataset(sheetRecords(XLSX, ws, { header: 1 }))
       }
       if (!dataset.headers.length) throw new Error('No se detectaron columnas en el archivo.')
 

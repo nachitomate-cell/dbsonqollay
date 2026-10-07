@@ -11,6 +11,9 @@
 
 import { accessToken, activeProjectId, authFetch } from '../lib/auth.js'
 import { idbDel, idbGet, idbSet } from '../lib/idbStore.js'
+// Import circular con offline.js (que usa loadWorkingAsync): es seguro porque
+// ninguno de los dos llama al otro al cargar el módulo, solo dentro de funciones.
+import { hasPending } from '../lib/offline.js'
 
 const KEY = (dataKey) => `sqy-ds-${dataKey}`
 // Tope para el "hot cache" en localStorage. Las planillas más grandes que esto se
@@ -117,9 +120,11 @@ const pickTagField = (headers) => headers.find((h) => /tag|commodity/i.test(h)) 
  * por hoja). Es idempotente.
  *
  * Orden de preferencia de la fuente de cada planilla:
- *   1. La copia editable LOCAL (este equipo la abrió y la editó).
- *   2. La copia de la NUBE (la editaron en otro equipo o en otra sesión).
- *   3. El dataset base que viene con la app (planilla nunca tocada).
+ *   1. La copia LOCAL, solo si tiene cambios sin subir (está en la cola offline).
+ *   2. La copia de la NUBE (la editaron en otro equipo, en otra sesión, o se
+ *      corrigió en el servidor).
+ *   3. La copia local aunque no tenga pendientes (sin nube disponible).
+ *   4. El dataset base que viene con la app (planilla nunca tocada).
  *
  * El paso 2 es crítico: sin él, una planilla que ESTE navegador nunca abrió se
  * publicaba con los datos de fábrica y PISABA en la nube lo editado desde otro
@@ -138,10 +143,13 @@ export async function syncAllToNavisworks(entries, { author, onProgress } = {}) 
   for (let i = 0; i < list.length; i++) {
     const e = list[i]
     try {
-      const working = await loadWorkingAsync(e.key)
-      // Solo se consulta la nube cuando no hay copia local (la local es más
-      // nueva por definición: son las ediciones todavía sin subir).
-      const src = working?.rows?.length ? working : (await fetchDbDataset(e.key)) || null
+      // La copia local solo manda si tiene cambios SIN SUBIR (está en la cola).
+      // Si no, es un caché que puede estar viejo: la nube es la fuente de verdad
+      // (p. ej. una corrección de datos hecha en el servidor o desde otro equipo).
+      // Antes la local ganaba siempre, y "Sincronizar todo" re-publicaba lo viejo.
+      const working = hasPending(e.key) ? await loadWorkingAsync(e.key) : null
+      const local = working?.rows?.length ? working : null
+      const src = local || (await fetchDbDataset(e.key)) || (await loadWorkingAsync(e.key)) || null
       const columns = src?.columns?.length
         ? src.columns
         : (src?.headers?.length ? src.headers : (e.headers || [])).map((h) => ({ key: h, visible: true }))

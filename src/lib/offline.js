@@ -99,17 +99,39 @@ function bumpAttempt(dataKey) {
 }
 
 /**
+ * Saca de la cola (incluidas las atascadas) las planillas cuya copia en la nube
+ * es MÁS NUEVA que el cambio local encolado: o ya se subió (el POST llegó pero
+ * se contó como fallo) o alguien guardó después desde otro equipo / un arreglo
+ * de datos. Re-subir la copia local ahí pisaría lo más nuevo con lo viejo
+ * (última-escritura-gana, pero por HORA del cambio, no por orden de llegada).
+ */
+async function reconcileWithCloud() {
+  const o = readOutbox()
+  for (const k of Object.keys(o)) {
+    const e = o[k]
+    const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${e.projectId ? `?project=${e.projectId}` : ''}`, { cache: 'no-store' })
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('application/json')) continue
+    const cloud = await res.json()
+    const cloudAt = Date.parse(cloud?.updatedAt || '')
+    if (Number.isFinite(cloudAt) && e.at && cloudAt >= e.at) dequeue(k)
+  }
+}
+
+/**
  * Vacía la cola: sube cada planilla pendiente. Las que fallan suman un intento;
  * tras MAX_ATTEMPTS quedan "atascadas" (se omiten hasta un reintento manual con
  * { retryStuck: true }). Devuelve { ok, fail }.
  */
 export async function flush({ retryStuck = false } = {}) {
   if (flushing || !isOnline()) return { ok: 0, fail: 0 }
+  flushing = true; notify()
+  // Antes de subir nada: descarta lo que la nube ya superó (incluidas las
+  // atascadas). Ver reconcileWithCloud.
+  try { await reconcileWithCloud() } catch { /* sin red: se sube igual abajo */ }
   const o = readOutbox()
   const keys = Object.keys(o).filter((k) => retryStuck || !o[k].stuck)
-  if (!keys.length) return { ok: 0, fail: 0 }
+  if (!keys.length) { flushing = false; notify(); return { ok: 0, fail: 0 } }
   if (retryStuck) { for (const k of keys) { o[k].stuck = false; o[k].attempts = 0 } writeOutbox(o) }
-  flushing = true; notify()
   let ok = 0, fail = 0
   try {
     for (const k of keys) {
@@ -134,7 +156,12 @@ export async function flush({ retryStuck = false } = {}) {
         const ct = res.headers.get('content-type') || ''
         const j = ct.includes('application/json') ? await res.json() : {}
         if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
-        if (j.db && (j.db.error || j.db.skipped)) throw new Error('db-no-config')
+        // Llegó al bucket, que es lo que leen la web (GET /api/datasets) y el
+        // plugin. La réplica a Postgres (j.db) es aditiva: si falla NO deja la
+        // planilla pendiente. Antes sí lo hacía, y con la base caída TODA edición
+        // quedaba en la cola para siempre: la planilla dejaba de refrescarse desde
+        // la nube y la cola re-subía la copia local, pisando lo corregido en otro lado.
+        if (j.db?.error) console.warn('[sync] réplica a la base de datos falló:', j.db.error)
         dequeue(k); ok++; markSynced()
       } catch { bumpAttempt(k); fail++ } // queda en la cola para reintentar
     }

@@ -14,6 +14,7 @@
  */
 import { loadWorkingAsync, saveWorking } from './datastore.js'
 import { enqueue, flush, isOnline } from '../lib/offline.js'
+import { sheetRecords } from './sheetRecords.js'
 
 /** Normaliza un nombre para comparar (sin acentos/espacios/símbolos). */
 export const normKey = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -73,7 +74,7 @@ export async function planProjectImport(file, disciplines, { datasets = {}, crea
   // Hojas con datos: { nombre → { headers, records } }.
   const sheets = new Map()
   for (const name of wb.SheetNames) {
-    const records = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' })
+    const records = sheetRecords(XLSX, wb.Sheets[name])
     if (!records.length) continue
     const headers = Object.keys(records[0]).filter((k) => k !== '_id')
     if (headers.length) sheets.set(name, { headers, records })

@@ -55,6 +55,7 @@ import AuraMark from './AuraMark.jsx'
 import AwpCoveragePanel from './AwpCoveragePanel.jsx'
 import ViewerErrorBoundary from './ViewerErrorBoundary.jsx'
 import { matchSheetFor } from '../utils/projectImport.js'
+import { sheetRecords } from '../utils/sheetRecords.js'
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -341,12 +342,11 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       const ct = res.headers.get('content-type') || ''
       const j = ct.includes('application/json') ? await res.json() : {}
       if (!res.ok) throw new Error(j.error || `Error ${res.status}`)
-      // El publish nunca falla por la DB (es aditivo): si Postgres no está
-      // configurado o falló, lo informa en j.db. No mentimos: lo marcamos error.
-      if (j.db && (j.db.error || j.db.skipped)) {
-        setAutosave({ status: 'error', at: Date.now(), error: j.db.error || 'La base de datos no está configurada en el servidor.' })
-        return // queda pendiente (no tocamos pendingRef)
-      }
+      // Quedó guardado en el bucket, que es lo que leen la web y el plugin. La
+      // réplica a Postgres (j.db) es aditiva: si falla no deja la planilla
+      // pendiente (ver offline.js → flush: con la base caída, todo quedaba en la
+      // cola y la copia local terminaba pisando la nube).
+      if (j.db?.error) console.warn('[autosave] réplica a la base de datos falló:', j.db.error)
       savedVersionRef.current = version
       offlineDequeue(dataKey) // por si había quedado encolada de una edición offline
       setAutosave({ status: 'saved', at: Date.now() })
@@ -945,7 +945,7 @@ export default function DataTable({ dataset, subcategory, onBack, awp = {}, focu
       // Cada hoja se parsea una sola vez (el export del proyecto trae decenas).
       const byName = new Map()
       for (const n of wb.SheetNames) {
-        const r = XLSX.utils.sheet_to_json(wb.Sheets[n], { defval: '' })
+        const r = sheetRecords(XLSX, wb.Sheets[n])
         if (r.length) byName.set(n, r)
       }
       const names = [...byName.keys()]
