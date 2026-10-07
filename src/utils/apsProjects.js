@@ -7,6 +7,8 @@
  * forma global, para que el usuario pueda reabrir cualquier modelo sin volver a
  * subir el archivo aunque cierre y abra la aplicación.
  */
+import { authFetch } from '../lib/auth.js'
+
 const KEY = 'sqy-aps-projects'
 
 export function listProjects() {
@@ -135,7 +137,8 @@ export async function deleteProjectRemote(project) {
   const keys = (project?.versions?.length ? project.versions.map((v) => v.objectKey) : [project?.objectKey]).filter(Boolean)
   for (const k of keys) {
     try {
-      await fetch(`${apiBase()}/api/aps/models?objectKey=${encodeURIComponent(k)}`, { method: 'DELETE' })
+      // Con la sesión: el servidor ya no borra sin token (ver api/aps/models.js).
+      await authFetch(`${apiBase()}/api/aps/models?objectKey=${encodeURIComponent(k)}`, { method: 'DELETE' })
     } catch {
       /* ignora errores de red; igual se quita de la lista local */
     }
