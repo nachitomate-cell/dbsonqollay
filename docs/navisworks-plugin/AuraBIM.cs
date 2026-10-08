@@ -667,7 +667,7 @@ namespace AuraBIM
         }
 
         // ---- Aplicar un dataset al modelo --------------------------------
-        private struct ApplyResult { public int matched, applied, missing, skipped; }
+        private struct ApplyResult { public int applied, skipped; }
 
         // Fila final de un TAG después de juntar todas las planillas elegidas.
         private sealed class TagRow
