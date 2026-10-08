@@ -103,6 +103,15 @@ export const releaseNotes = [
 
   // ───────── Plugin de Navisworks ─────────
   {
+    version: '1.28.0', date: '2026-10-08', scope: 'plugin', title: 'Sincronizar ya no tarda horas',
+    items: [
+      'Cada TAG se escribe una sola vez por pasada, aunque esté repetido en varias planillas.',
+      'Una pasada sin cambios ya no reescribe el modelo (antes los TAG repetidos se reescribían siempre).',
+      '“Solo selección” ya no pregunta por planillas: escribe solo los elementos seleccionados.',
+      'El resumen avisa qué TAG están repetidos con datos distintos y cuál quedó.',
+    ],
+  },
+  {
     version: '1.27.0', date: '2026-09-28', scope: 'plugin', title: 'El porcentaje del avance ahora se entiende',
     items: [
       'El % de la barra es el avance de la planilla: filas escritas sobre el total (98 de 294 = 33%).',

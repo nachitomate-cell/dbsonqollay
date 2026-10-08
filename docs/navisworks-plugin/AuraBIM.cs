@@ -47,7 +47,7 @@ namespace AuraBIM
     {
         // Versión del plugin (para el log de sincronización y soporte). Mantener
         // en sync con AppVersion de bundle/PackageContents.xml.
-        private const string Version = "1.27.0";
+        private const string Version = "1.28.0";
 
         // Notas de versión del plugin. Se muestran dentro de "Acerca de" → "Notas
         // de versión". El más reciente primero. IMPORTANTE: al publicar una versión
@@ -55,6 +55,13 @@ namespace AuraBIM
         // scope 'plugin') para que el usuario las vea en el software.
         private static readonly ReleaseNote[] ReleaseNotes = new[]
         {
+            new ReleaseNote("1.28.0", "2026-10-08", new[]
+            {
+                "Mucho más rápido: cada TAG se escribe una sola vez por pasada, aunque esté repetido en varias planillas.",
+                "Una pasada sin cambios ya no reescribe el modelo (antes los TAG repetidos se reescribían siempre).",
+                "\"Solo selección\" ya no pregunta por planillas: escribe solo los elementos seleccionados.",
+                "El resumen avisa qué TAG están repetidos con datos distintos y cuál quedó.",
+            }),
             new ReleaseNote("1.27.0", "2026-09-28", new[]
             {
                 "El % de la barra es el avance de la planilla: filas escritas / total.",
@@ -224,13 +231,16 @@ namespace AuraBIM
                 return 0;
             }
 
-            // 2) Elegir cuáles sincronizar.
-            List<DatasetInfo> chosen = ShowPicker(index);
+            // 2) Elegir cuáles sincronizar. En "Solo selección" no se pregunta: se
+            //    usan todas y solo se escriben los TAG de lo seleccionado (el
+            //    selector con todo marcado hacía creer que iba a cargar el modelo
+            //    entero, que tarda horas).
+            List<DatasetInfo> chosen = selectionOnly ? index : ShowPicker(index);
             if (chosen.Count == 0) return 0; // canceló o no marcó ninguna
 
             // 3-4) Índice + aplicar, con ventana de progreso propia (logos + barra +
             // cancelar): mantiene la UI viva (sin "no responde") en modelos grandes.
-            int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0, totalSkipped = 0;
+            int totalRows = 0, totalMatched = 0, totalApplied = 0, totalMissing = 0, totalSkipped = 0, totalConflicts = 0;
             var errores = new List<string>();
             var porPlanilla = new List<PlanillaResult>();
             var progress = new ProgressForm();
@@ -256,33 +266,41 @@ namespace AuraBIM
 
                 if (!progress.Canceled)
                 {
-                    int grandTotal = datasets.Sum(d => d.Value.rows.Count);
-                    int rowsBefore = 0;
+                    // Una sola fila final por TAG (ver MergeByTag): cada elemento se
+                    // escribe UNA vez por pasada, y una pasada sin cambios no reescribe nada.
+                    var entries = MergeByTag(datasets);
+                    totalRows = datasets.Sum(d => d.Value.rows.Count);
+                    var conflictos = entries.Where(e => e.Conflict && (!selectionOnly || tagIndex.ContainsKey(e.Tag))).ToList();
+                    totalConflicts = conflictos.Count;
+                    if (conflictos.Count > 0)
+                        errores.Add(conflictos.Count + " TAG están en más de una fila con datos distintos; quedó la última: " +
+                                    string.Join(", ", conflictos.Take(6).Select(e => e.Tag + " (" + e.Planilla + ")")) +
+                                    (conflictos.Count > 6 ? "…" : "") + ". Corrígelos en la planilla para elegir cuál vale.");
+
+                    var byPlanilla = new Dictionary<string, PlanillaResult>();
+                    foreach (var pair in datasets)
+                        byPlanilla[pair.Key.name] = new PlanillaResult { Name = pair.Key.name, Rows = pair.Value.rows.Count };
+
                     // El tiempo restante se mide solo sobre la escritura: la lectura del
                     // modelo y la descarga van a otro ritmo y lo desfiguraban.
                     progress.RestartClock();
-                    foreach (var pair in datasets)
+                    progress.Planilla = null;
+                    try
                     {
-                        var info = pair.Key;
-                        Dataset data = pair.Value;
-                        try
-                        {
-                            progress.Planilla = info.name + "  (" + (chosen.IndexOf(info) + 1) + "/" + chosen.Count + ")";
-                            var res = ApplyDataset(tagIndex, data, progress, rowsBefore, grandTotal);
-                            totalRows += data.rows.Count;
-                            totalMatched += res.matched;
-                            totalApplied += res.applied;
-                            totalMissing += res.missing;
-                            totalSkipped += res.skipped;
-                            porPlanilla.Add(new PlanillaResult { Name = info.name, Rows = data.rows.Count, Matched = res.matched, Applied = res.applied, Skipped = res.skipped, Missing = res.missing });
-                        }
-                        catch (Exception ex)
-                        {
-                            errores.Add(info.name + ": " + ex.Message);
-                        }
-                        rowsBefore += data.rows.Count;
-                        if (progress.Canceled) break;
+                        ApplyMerged(tagIndex, entries, progress, selectionOnly, byPlanilla);
                     }
+                    catch (Exception ex)
+                    {
+                        errores.Add(ex.Message);
+                    }
+                    foreach (var pr in byPlanilla.Values)
+                    {
+                        totalMatched += pr.Matched;
+                        totalApplied += pr.Applied;
+                        totalMissing += pr.Missing;
+                        totalSkipped += pr.Skipped;
+                    }
+                    porPlanilla.AddRange(datasets.Select(d => byPlanilla[d.Key.name]));
                 }
             }
             finally
@@ -293,10 +311,10 @@ namespace AuraBIM
 
             // Log para soporte (en %LOCALAPPDATA%\AuraBIM\AuraBIM.log).
             WriteLog(string.Format(
-                "sync v{0} | modo={9} planillas={1} filas={2} matched={3} aplicados={4} sinCambios={8} sinGeom={5} cancelado={6}{7}",
+                "sync v{0} | modo={9} planillas={1} filas={2} matched={3} aplicados={4} sinCambios={8} sinGeom={5} conflictos={10} cancelado={6}{7}",
                 Version, chosen.Count, totalRows, totalMatched, totalApplied, totalMissing, progress.Canceled,
                 errores.Count > 0 ? " | errores: " + string.Join(" ; ", errores) : "",
-                totalSkipped, selectionOnly ? "seleccion" : "completo"));
+                totalSkipped, selectionOnly ? "seleccion" : "completo", totalConflicts));
 
             using (var rf = new ResultForm(Version, selectionOnly, chosen.Count, totalRows, totalMatched,
                                            totalApplied, totalSkipped, totalMissing, errores, progress.Canceled, porPlanilla))
@@ -651,61 +669,122 @@ namespace AuraBIM
         // ---- Aplicar un dataset al modelo --------------------------------
         private struct ApplyResult { public int matched, applied, missing, skipped; }
 
-        private ApplyResult ApplyDataset(Dictionary<string, ModelItemCollection> tagIndex, Dataset data,
-                                         ProgressForm progress, int rowsBefore, int grandTotal)
+        // Fila final de un TAG después de juntar todas las planillas elegidas.
+        private sealed class TagRow
         {
-            string tagField = !string.IsNullOrEmpty(data.tagField)
-                ? data.tagField
-                : (data.headers.Count > 0 ? data.headers[0] : null);
-            var res = new ApplyResult();
-            if (string.IsNullOrEmpty(tagField)) return res;
+            public string Tag, Planilla;
+            public Dictionary<string, string> Row;
+            public List<string> Headers;
+            public bool Conflict; // el TAG aparece en otra fila con datos distintos
+        }
 
-            int i = 0, total = data.rows.Count;
-            foreach (var row in data.rows)
+        // Junta las filas de todas las planillas en UNA fila por TAG: la última en
+        // el orden de sincronización (la misma que quedaba escrita antes). Antes se
+        // aplicaba fila por fila: un TAG repetido con datos distintos (p. ej. la
+        // unión EEL-01/02/03 en ELE, o EST-013 en Acero y en MEC) se escribía DOS
+        // veces en cada pasada, y como la segunda fila "difería" de la primera,
+        // nunca quedaba "sin cambios". Con capas de 14 mil elementos, una pasada
+        // completa tardaba horas aunque no hubiera nada nuevo.
+        private static List<TagRow> MergeByTag(List<KeyValuePair<DatasetInfo, Dataset>> datasets)
+        {
+            var map = new Dictionary<string, TagRow>(StringComparer.OrdinalIgnoreCase);
+            var order = new List<TagRow>();
+            foreach (var pair in datasets)
             {
-                // Progreso por FILA: barato (no toca el modelo), así que se reporta en
-                // todas. El pulso fino va DENTRO de WriteCustomTab, porque una sola
-                // fila puede tocar miles de elementos y ahí es donde se percibía el
-                // cuelgue. La fracción se interpola entre esta fila y la siguiente.
-                // El % es filas escritas / filas de todas las planillas: es lo que el
-                // usuario lee como avance (98 de 294 = 33%, no el 40/129 de la fila).
-                double fracFrom = (rowsBefore + i) / (double)Math.Max(1, grandTotal);
-                double fracTo = (rowsBefore + i + 1) / (double)Math.Max(1, grandTotal);
-                i++;
-                string rowLabel = "Fila " + i.ToString("N0") + " de " + total.ToString("N0");
-                progress.Report(fracFrom, rowLabel);
-                if (progress.Canceled) return res;
-
-                string tag;
-                if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag))
-                    continue;
-                tag = tag.Trim();
-
-                ModelItemCollection items;
-                if (!tagIndex.TryGetValue(tag, out items) || items.Count == 0) { res.missing++; continue; }
-                res.matched++;
-
-                // Solo reescribir los elementos cuyo tab "Aura GIP" difiere de la
-                // fila. Leer las propiedades actuales es barato; reescribirlas con
-                // SetUserDefined (COM) es lo caro. Así un re-sync tras un cambio
-                // chico toca apenas unos elementos en vez de TODO el modelo.
-                ModelItemCollection changed = null;
-                foreach (ModelItem item in items)
+                Dataset data = pair.Value;
+                string tagField = !string.IsNullOrEmpty(data.tagField)
+                    ? data.tagField
+                    : (data.headers.Count > 0 ? data.headers[0] : null);
+                if (string.IsNullOrEmpty(tagField)) continue;
+                foreach (var row in data.rows)
                 {
-                    if (NeedsUpdate(item, row, data.headers))
+                    string tag;
+                    if (!row.TryGetValue(tagField, out tag) || string.IsNullOrWhiteSpace(tag)) continue;
+                    tag = tag.Trim();
+                    TagRow tr;
+                    if (map.TryGetValue(tag, out tr))
                     {
-                        if (changed == null) changed = new ModelItemCollection();
-                        changed.Add(item);
+                        if (!SameRow(tr.Row, row)) tr.Conflict = true;
+                        tr.Row = row; tr.Headers = data.headers; tr.Planilla = pair.Key.name;
                     }
-                    else res.skipped++;
-                }
-                if (changed != null && changed.Count > 0)
-                {
-                    res.applied += WriteCustomTab(changed, row, data.headers, progress,
-                                                  rowLabel, fracFrom, fracTo);
-                    if (progress.Canceled) return res; // cancelado a mitad de la fila
+                    else
+                    {
+                        tr = new TagRow { Tag = tag, Row = row, Headers = data.headers, Planilla = pair.Key.name };
+                        map[tag] = tr;
+                        order.Add(tr);
+                    }
                 }
             }
+            return order;
+        }
+
+        private static bool SameRow(Dictionary<string, string> a, Dictionary<string, string> b)
+        {
+            if (a.Count != b.Count) return false;
+            foreach (var kv in a)
+            {
+                string v;
+                if (!b.TryGetValue(kv.Key, out v) || !string.Equals(kv.Value ?? "", v ?? "", StringComparison.Ordinal))
+                    return false;
+            }
+            return true;
+        }
+
+        // Aplica las filas finales al modelo. Los conteos se suman a la planilla de
+        // la fila que quedó (byPlanilla). En "Solo selección" un TAG que no está en
+        // lo seleccionado no es "sin geometría": simplemente no se eligió.
+        private void ApplyMerged(Dictionary<string, ModelItemCollection> tagIndex, List<TagRow> entries,
+                                 ProgressForm progress, bool selectionOnly, Dictionary<string, PlanillaResult> byPlanilla)
+        {
+            var work = selectionOnly ? entries.Where(e => tagIndex.ContainsKey(e.Tag)).ToList() : entries;
+            int i = 0, total = work.Count;
+            foreach (var e in work)
+            {
+                // Progreso por TAG: barato (no toca el modelo), así que se reporta en
+                // todos. El pulso fino va DENTRO de WriteCustomTab, porque un solo TAG
+                // puede tocar miles de elementos y ahí es donde se percibía el cuelgue.
+                double fracFrom = i / (double)Math.Max(1, total);
+                double fracTo = (i + 1) / (double)Math.Max(1, total);
+                i++;
+                string rowLabel = "TAG " + i.ToString("N0") + " de " + total.ToString("N0");
+                progress.Planilla = e.Planilla;
+                progress.Report(fracFrom, rowLabel);
+                if (progress.Canceled) return;
+
+                PlanillaResult pr = byPlanilla[e.Planilla];
+                ModelItemCollection items;
+                if (!tagIndex.TryGetValue(e.Tag, out items) || items.Count == 0) { pr.Missing++; continue; }
+                pr.Matched++;
+
+                var res = ApplyRow(items, e.Row, e.Headers, progress, rowLabel, fracFrom, fracTo);
+                pr.Applied += res.applied;
+                pr.Skipped += res.skipped;
+                if (progress.Canceled) return;
+            }
+        }
+
+        // Escribe una fila en los elementos de su TAG (solo los que difieren).
+        private ApplyResult ApplyRow(ModelItemCollection items, Dictionary<string, string> row, List<string> headers,
+                                     ProgressForm progress, string rowLabel, double fracFrom, double fracTo)
+        {
+            var res = new ApplyResult();
+            // Solo reescribir los elementos cuyo tab "Aura GIP" difiere de la
+            // fila. Leer las propiedades actuales es barato; reescribirlas con
+            // SetUserDefined (COM) es lo caro. Así un re-sync tras un cambio
+            // chico toca apenas unos elementos en vez de TODO el modelo.
+            ModelItemCollection changed = null;
+            foreach (ModelItem item in items)
+            {
+                if (NeedsUpdate(item, row, headers))
+                {
+                    if (changed == null) changed = new ModelItemCollection();
+                    changed.Add(item);
+                }
+                else res.skipped++;
+            }
+            if (changed != null && changed.Count > 0)
+                res.applied += WriteCustomTab(changed, row, headers, progress,
+                                              rowLabel, fracFrom, fracTo);
             return res;
         }
 
