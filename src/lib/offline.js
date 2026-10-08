@@ -109,6 +109,11 @@ async function reconcileWithCloud() {
   const o = readOutbox()
   for (const k of Object.keys(o)) {
     const e = o[k]
+    // Un cambio que todavía NO se intentó subir (una edición o una importación
+    // recién hecha) se sube siempre: comparar horas entre el reloj del PC y el
+    // del servidor podría descartarlo si el PC anda atrasado. Solo se revisan
+    // los que ya fallaron (los que quedaron colgados con la base caída).
+    if (!e.attempts && !e.stuck) continue
     const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${e.projectId ? `?project=${e.projectId}` : ''}`, { cache: 'no-store' })
     if (!res.ok || !(res.headers.get('content-type') || '').includes('application/json')) continue
     const cloud = await res.json()
