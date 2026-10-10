@@ -24,6 +24,7 @@ import { exportProjectToExcel } from './utils/projectExport.js'
 import { applyProjectImport, planProjectImport } from './utils/projectImport.js'
 import { globalSearch } from './utils/globalSearch.js'
 import { initSync } from './lib/offline.js'
+import { activeProjectId } from './lib/auth.js'
 import { syncAllToNavisworks } from './utils/datastore.js'
 import OfflineBanner from './components/OfflineBanner.jsx'
 import ImportProjectModal from './components/ImportProjectModal.jsx'
@@ -350,7 +351,10 @@ export default function App({ project, onChangeProject, org, onChangeOrg }) {
     try {
       const { plan } = importPlan
       const r = await applyProjectImport(plan, {
-        projectId: project.id,
+        // El MISMO espacio de datos que usan la grilla, "Sincronizar todo" y el
+        // plugin. Con project.id, el proyecto de prueba ('demo-full') mandaba la
+        // importación a un espacio que el plugin no lee: no llegaba a Navisworks.
+        projectId: activeProjectId(),
         author: user?.email,
         onProgress: ({ done, total }) => setNotice(`Importando ${done}/${total} planillas…`),
       })

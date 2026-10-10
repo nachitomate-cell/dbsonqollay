@@ -32,6 +32,11 @@ let flushing = false
 let started = false
 
 const apiBase = () => localStorage.getItem('sqy-api-url') || import.meta.env.VITE_APS_API || ''
+// Espacio de datos de una entrada: solo los proyectos reales (uuid) tienen el
+// suyo; el resto va al global, igual que activeProjectId(). Entradas viejas
+// guardadas con 'demo-full' subían a un espacio que el plugin no lee.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const spaceQuery = (pid) => (UUID.test(pid || '') ? `?project=${pid}` : '')
 
 function readOutbox() {
   try { return JSON.parse(localStorage.getItem(OUTBOX) || '{}') } catch { return {} }
@@ -114,7 +119,7 @@ async function reconcileWithCloud() {
     // del servidor podría descartarlo si el PC anda atrasado. Solo se revisan
     // los que ya fallaron (los que quedaron colgados con la base caída).
     if (!e.attempts && !e.stuck) continue
-    const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${e.projectId ? `?project=${e.projectId}` : ''}`, { cache: 'no-store' })
+    const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${spaceQuery(e.projectId)}`, { cache: 'no-store' })
     if (!res.ok || !(res.headers.get('content-type') || '').includes('application/json')) continue
     const cloud = await res.json()
     const cloudAt = Date.parse(cloud?.updatedAt || '')
@@ -153,7 +158,7 @@ export async function flush({ retryStuck = false } = {}) {
         author: e.author,
       }
       try {
-        const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${e.projectId ? `?project=${e.projectId}` : ''}`, {
+        const res = await authFetch(`${apiBase()}/api/datasets/${encodeURIComponent(k)}${spaceQuery(e.projectId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
